@@ -1,0 +1,47 @@
+{
+  "$schema": "https://railway.app/schema.json",
+  "name": "tendoriq-api",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "pip install uv && uv sync",
+    "startCommand": "uvicorn src.main:app --host 0.0.0.0 --port $PORT"
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "DATABASE_URL": "$DATABASE_URL",
+        "REDIS_URL": "$REDIS_URL",
+        "NODE_ENV": "production",
+        "LOG_LEVEL": "info"
+      },
+      "numInstances": 1,
+      "autoscaling": {
+        "enabled": true,
+        "minInstances": 1,
+        "maxInstances": 3,
+        "targetCpuPercent": 70
+      }
+    },
+    "staging": {
+      "variables": {
+        "DATABASE_URL": "$DATABASE_URL",
+        "REDIS_URL": "$REDIS_URL",
+        "NODE_ENV": "staging",
+        "LOG_LEVEL": "info"
+      },
+      "numInstances": 1
+    }
+  },
+  "deploy": {
+    "healthCheckPath": "/health",
+    "healthCheckTimeout": 30,
+    "restartDelay": 60,
+    "restartThreshold": 3
+  },
+  "domains": [
+    {
+      "name": "api.tendoriq.com",
+      "environment": "production"
+    }
+  ]
+}
