@@ -37,6 +37,14 @@ from .api.router.risk import router as risk_router
 from .api.router.checklist import router as checklist_router
 from .api.router.proposal import router as proposal_router
 from .api.router.export import router as export_router
+from .api.router.review import router as review_router
+from .api.router.email import router as email_router
+from .api.router.audit import router as audit_router
+from .api.router.observability import router as observability_router
+from .api.router.billing import router as billing_router
+from .api.router.sso import router as sso_router
+from .api.router.admin_auth import router as admin_auth_router
+from .api.router.super_admin import router as super_admin_router
 
 configure_logging()
 logger = get_logger(__name__)
@@ -160,6 +168,14 @@ app.include_router(risk_router, prefix='/api/v1')
 app.include_router(checklist_router, prefix='/api/v1')
 app.include_router(proposal_router, prefix='/api/v1')
 app.include_router(export_router, prefix='/api/v1')
+app.include_router(review_router, prefix='/api/v1')
+app.include_router(email_router, prefix='/api/v1')
+app.include_router(audit_router, prefix='/api/v1')
+app.include_router(observability_router, prefix='/api/v1')
+app.include_router(billing_router, prefix='/api/v1')
+app.include_router(sso_router, prefix='/api/v1')
+app.include_router(admin_auth_router, prefix='/api/v1')
+app.include_router(super_admin_router, prefix='/api/v1')
 
 
 if __name__ == '__main__':

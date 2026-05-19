@@ -22,8 +22,10 @@ class AuditLogger:
         tenant_id: UUID,
         user_id: UUID,
         action: str,
+        action_type: str,
         resource_type: str,
         resource_id: Optional[UUID] = None,
+        resource_name: Optional[str] = None,
         changes: Optional[dict] = None,
         old_values: Optional[dict] = None,
         new_values: Optional[dict] = None,
@@ -43,8 +45,10 @@ class AuditLogger:
             tenant_id=tenant_id,
             user_id=user_id,
             action=action,
+            action_type=action_type,
             resource_type=resource_type,
             resource_id=resource_id,
+            resource_name=resource_name,
             changes=changes or {},
             old_values=old_values or {},
             new_values=new_values or {},
@@ -119,7 +123,9 @@ class TenantAuditMixin:
         user_id: UUID,
         resource_type: str,
         resource_id: UUID,
-        values: dict,
+        action_type: str = 'document',
+        resource_name: Optional[str] = None,
+        values: dict = None,
         request: Optional[Request] = None,
     ):
         await AuditLogger.log_action(
@@ -127,8 +133,10 @@ class TenantAuditMixin:
             tenant_id,
             user_id,
             action='create',
+            action_type=action_type,
             resource_type=resource_type,
             resource_id=resource_id,
+            resource_name=resource_name,
             new_values=values,
             request=request,
         )
@@ -140,10 +148,14 @@ class TenantAuditMixin:
         user_id: UUID,
         resource_type: str,
         resource_id: UUID,
-        old_values: dict,
-        new_values: dict,
+        action_type: str = 'document',
+        resource_name: Optional[str] = None,
+        old_values: dict = None,
+        new_values: dict = None,
         request: Optional[Request] = None,
     ):
+        old_values = old_values or {}
+        new_values = new_values or {}
         changes = {
             k: {'old': old_values.get(k), 'new': new_values.get(k)}
             for k in set(old_values.keys()) | set(new_values.keys())
@@ -155,8 +167,10 @@ class TenantAuditMixin:
             tenant_id,
             user_id,
             action='update',
+            action_type=action_type,
             resource_type=resource_type,
             resource_id=resource_id,
+            resource_name=resource_name,
             changes=changes,
             old_values=old_values,
             new_values=new_values,
@@ -170,7 +184,9 @@ class TenantAuditMixin:
         user_id: UUID,
         resource_type: str,
         resource_id: UUID,
-        old_values: dict,
+        action_type: str = 'delete',
+        resource_name: Optional[str] = None,
+        old_values: dict = None,
         request: Optional[Request] = None,
     ):
         await AuditLogger.log_action(
@@ -178,8 +194,10 @@ class TenantAuditMixin:
             tenant_id,
             user_id,
             action='delete',
+            action_type=action_type,
             resource_type=resource_type,
             resource_id=resource_id,
+            resource_name=resource_name,
             old_values=old_values,
             request=request,
         )
@@ -191,6 +209,7 @@ class TenantAuditMixin:
         user_id: UUID,
         resource_type: str,
         resource_id: Optional[UUID] = None,
+        action_type: str = 'document',
         request: Optional[Request] = None,
     ):
         await AuditLogger.log_action(
@@ -198,6 +217,7 @@ class TenantAuditMixin:
             tenant_id,
             user_id,
             action='access',
+            action_type=action_type,
             resource_type=resource_type,
             resource_id=resource_id,
             request=request,

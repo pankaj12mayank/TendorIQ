@@ -600,8 +600,10 @@ class AuditLog(Base, TenantMixin, TimestampMixin):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True, index=True)
 
     action = Column(String(100), nullable=False, index=True)
+    action_type = Column(String(50), nullable=False, index=True)
     resource_type = Column(String(50), nullable=False, index=True)
     resource_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    resource_name = Column(String(255), nullable=True)
 
     changes = Column(JSONB, default={})
     old_values = Column(JSONB, default={})
@@ -617,6 +619,7 @@ class AuditLog(Base, TenantMixin, TimestampMixin):
     __table_args__ = (
         Index('idx_audit_tenant_created', 'tenant_id', 'created_at'),
         Index('idx_audit_user_created', 'user_id', 'created_at'),
+        Index('idx_audit_action_type', 'action_type', 'created_at'),
         Index('idx_audit_resource', 'resource_type', 'resource_id', 'created_at'),
     )
 

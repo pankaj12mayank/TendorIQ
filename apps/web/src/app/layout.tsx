@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryProvider } from '@/lib/query-client';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { AuthProvider } from '@/hooks/use-auth';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 import './globals.css';
 import { cn } from '@/lib/utils';
@@ -56,7 +57,9 @@ export default function RootLayout({
           >
             <AuthProvider>
               <TooltipProvider>
-                <QueryProvider>{children}</QueryProvider>
+                <ErrorBoundary>
+                  <QueryProvider>{children}</QueryProvider>
+                </ErrorBoundary>
               </TooltipProvider>
             </AuthProvider>
           </ThemeProvider>

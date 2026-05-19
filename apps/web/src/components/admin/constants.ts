@@ -52,11 +52,14 @@ export const MOCK_QUEUE_JOBS: QueueJob[] = [
 ];
 
 export const MOCK_AUDIT_LOGS: AuditLogEntry[] = [
-  { id: 'audit-1', userId: '1', userName: 'John Smith', userRole: 'admin', action: 'USER_CREATED', resource: 'users', resourceId: 'user-5', details: 'Created new user: emily@example.com', ipAddress: '192.168.1.1', userAgent: 'Chrome/120', timestamp: '2026-05-18T14:30:00Z' },
-  { id: 'audit-2', userId: '5', userName: 'David Wilson', userRole: 'super_admin', action: 'SETTINGS_UPDATED', resource: 'settings', details: 'Updated AI provider configuration', ipAddress: '192.168.1.5', userAgent: 'Firefox/121', timestamp: '2026-05-18T13:00:00Z' },
-  { id: 'audit-3', userId: '2', userName: 'Sarah Johnson', userRole: 'manager', action: 'PROMPT_UPDATED', resource: 'prompts', resourceId: 'prompt-1', details: 'Modified prompt template: Document Extraction', ipAddress: '192.168.1.2', userAgent: 'Chrome/120', timestamp: '2026-05-18T11:30:00Z' },
-  { id: 'audit-4', userId: '1', userName: 'John Smith', userRole: 'admin', action: 'USER_ROLE_CHANGED', resource: 'users', resourceId: 'user-3', details: 'Changed user role from viewer to analyst', ipAddress: '192.168.1.1', userAgent: 'Chrome/120', timestamp: '2026-05-18T10:00:00Z' },
-  { id: 'audit-5', userId: '5', userName: 'David Wilson', userRole: 'super_admin', action: 'BILLING_UPDATED', resource: 'billing', details: 'Updated subscription to Enterprise plan', ipAddress: '192.168.1.5', userAgent: 'Safari/17', timestamp: '2026-05-15T09:00:00Z' },
+  { id: 'audit-1', userId: '1', userName: 'John Smith', userRole: 'admin', action: 'FILE_UPLOADED', resource: 'document', resourceId: 'doc-123', details: 'Uploaded tender_document.pdf (2.5 MB)', ipAddress: '192.168.1.100', userAgent: 'Chrome/120', timestamp: '2026-05-19T10:30:00Z', actionType: 'upload' },
+  { id: 'audit-2', userId: '5', userName: 'David Wilson', userRole: 'super_admin', action: 'SETTINGS_UPDATED', resource: 'settings', details: 'Updated AI provider configuration', ipAddress: '192.168.1.5', userAgent: 'Firefox/121', timestamp: '2026-05-19T09:00:00Z', actionType: 'admin_action' },
+  { id: 'audit-3', userId: '2', userName: 'Sarah Johnson', userRole: 'manager', action: 'TENDER_EXPORTED', resource: 'tender', resourceId: 'tend-456', details: 'Exported IT Infrastructure Tender as PDF', ipAddress: '192.168.1.101', userAgent: 'Chrome/120', timestamp: '2026-05-19T08:30:00Z', actionType: 'export' },
+  { id: 'audit-4', userId: '1', userName: 'John Smith', userRole: 'admin', action: 'AI_ANALYSIS_COMPLETED', resource: 'analysis', resourceId: 'analysis-789', details: 'AI analysis completed for Tender #456 - 85% confidence', ipAddress: '192.168.1.100', userAgent: 'Chrome/120', timestamp: '2026-05-19T08:00:00Z', actionType: 'ai_generation' },
+  { id: 'audit-5', userId: '5', userName: 'David Wilson', userRole: 'super_admin', action: 'SUBSCRIPTION_UPGRADED', resource: 'billing', details: 'Upgraded to Enterprise plan ($299/mo)', ipAddress: '192.168.1.5', userAgent: 'Safari/17', timestamp: '2026-05-18T15:00:00Z', actionType: 'billing' },
+  { id: 'audit-6', userId: '2', userName: 'Sarah Johnson', userRole: 'manager', action: 'DOCUMENT_DELETED', resource: 'document', resourceId: 'doc-999', details: 'Deleted old_tender.pdf', ipAddress: '192.168.1.101', userAgent: 'Chrome/120', timestamp: '2026-05-18T14:00:00Z', actionType: 'delete' },
+  { id: 'audit-7', userId: '1', userName: 'John Smith', userRole: 'admin', action: 'USER_CREATED', resource: 'users', resourceId: 'user-5', details: 'Created new user: emily@example.com', ipAddress: '192.168.1.1', userAgent: 'Chrome/120', timestamp: '2026-05-18T13:30:00Z', actionType: 'user' },
+  { id: 'audit-8', userId: '5', userName: 'David Wilson', userRole: 'super_admin', action: 'USER_ROLE_CHANGED', resource: 'users', resourceId: 'user-3', details: 'Changed user role from viewer to analyst', ipAddress: '192.168.1.5', userAgent: 'Firefox/121', timestamp: '2026-05-18T12:00:00Z', actionType: 'admin_action' },
 ];
 
 export const MOCK_USAGE_METRICS: UsageMetric[] = [
@@ -124,4 +127,19 @@ export const PRIORITY_COLORS = {
   normal: 'bg-blue-100 text-blue-800',
   high: 'bg-orange-100 text-orange-800',
   urgent: 'bg-red-100 text-red-800',
+};
+
+export const AUDIT_ACTION_TYPE_COLORS: Record<string, string> = {
+  upload: 'bg-blue-100 text-blue-800',
+  delete: 'bg-red-100 text-red-800',
+  export: 'bg-green-100 text-green-800',
+  admin_action: 'bg-purple-100 text-purple-800',
+  ai_generation: 'bg-cyan-100 text-cyan-800',
+  billing: 'bg-yellow-100 text-yellow-800',
+  user: 'bg-indigo-100 text-indigo-800',
+  document: 'bg-orange-100 text-orange-800',
+  tender: 'bg-teal-100 text-teal-800',
+  bid: 'bg-pink-100 text-pink-800',
+  settings: 'bg-gray-100 text-gray-800',
+  auth: 'bg-amber-100 text-amber-800',
 };

@@ -151,6 +151,7 @@ export interface AuditLogEntry {
   userName: string;
   userRole: UserRole;
   action: string;
+  actionType?: 'upload' | 'delete' | 'export' | 'admin_action' | 'ai_generation' | 'billing' | 'user' | 'document' | 'tender' | 'bid' | 'settings' | 'auth';
   resource: string;
   resourceId?: string;
   details: string;
