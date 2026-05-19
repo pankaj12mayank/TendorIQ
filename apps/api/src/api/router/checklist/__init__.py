@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from ...core.checklist import (
+from ....core.checklist import (
     ChecklistEngine,
     ChecklistExportConfig,
     ChecklistExportFormat,
@@ -106,7 +106,7 @@ async def export_checklist(
 
         checklist = await engine.get_full_checklist(document_text)
 
-        from ...core.checklist.service import ChecklistExporter
+        from ....core.checklist.service import ChecklistExporter
         exporter = ChecklistExporter(checklist)
 
         format_map = {

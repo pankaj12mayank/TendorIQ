@@ -36,9 +36,9 @@ class OrganizationResponse(BaseModel):
 
 @router.get('', response_model=PaginatedResponse)
 async def list_organizations(
+    current_user: CurrentUser,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: CurrentUser = Depends(),
 ) -> dict:
     return create_response(
         [
@@ -58,7 +58,7 @@ async def list_organizations(
 @router.get('/{organization_id}', response_model=dict)
 async def get_organization(
     organization_id: str,
-    current_user: CurrentUser = Depends(),
+    current_user: CurrentUser,
 ) -> dict:
     return create_response({
         'id': organization_id,
@@ -73,7 +73,7 @@ async def get_organization(
 @router.post('', response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_organization(
     org_data: OrganizationCreate,
-    current_user: CurrentUser = Depends(),
+    current_user: CurrentUser,
 ) -> dict:
     return create_response({
         'id': 'org-new',
@@ -86,7 +86,7 @@ async def create_organization(
 async def update_organization(
     organization_id: str,
     org_data: OrganizationUpdate,
-    current_user: CurrentUser = Depends(),
+    current_user: CurrentUser,
 ) -> dict:
     return create_response({
         'id': organization_id,
@@ -101,6 +101,6 @@ async def update_organization(
 @router.delete('/{organization_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_organization(
     organization_id: str,
-    current_user: CurrentUser = Depends(),
+    current_user: CurrentUser,
 ) -> None:
     pass

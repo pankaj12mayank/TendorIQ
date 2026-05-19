@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....dependencies.auth import get_current_user
-from ....dependencies.audit import audit_logger
-from ....core.models import User
-from ....core.database import get_db
+from ..dependencies.auth import get_current_user
+from ..dependencies.audit import audit_logger
+from ...core.models import User
+from ...core.database import get_db
 
 router = APIRouter(prefix='/review', tags=['Review'])
 

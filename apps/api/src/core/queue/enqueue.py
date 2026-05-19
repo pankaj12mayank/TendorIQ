@@ -1,44 +1,24 @@
-"""Job Enqueue Functions"""
+"""Enqueue background work via in-process asyncio tasks."""
 
-import json
 import logging
-from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
-import redis.asyncio as redis
-from arq.connections import RedisPool
-from arq.crontab import CronTab
-
+from ..tasks.inline import schedule_job
 from .config import (
-    QueueConfig,
-    REDIS_POOL_QUEUE,
+    QUEUE_ANALYSIS,
+    QUEUE_EMAIL,
+    QUEUE_NOTIFICATIONS,
     QUEUE_OCR,
     QUEUE_PARSING,
-    QUEUE_EMAIL,
-    QUEUE_ANALYSIS,
-    QUEUE_NOTIFICATIONS,
-    DEAD_LETTER_QUEUE,
+    JobPriority,
+    QueueConfig,
 )
-from .jobs import JOB_FUNCTIONS
-
 
 logger = logging.getLogger(__name__)
 
 
 class Enqueue:
-    def __init__(self, pool: Optional[RedisPool] = None):
-        self._pool = pool
-
-    async def get_pool(self) -> RedisPool:
-        if self._pool:
-            return self._pool
-        return await redis.create_pool(REDIS_POOL_QUEUE)
-
-    async def close(self) -> None:
-        if self._pool:
-            await self._pool.aclose()
-
     async def enqueue(
         self,
         function: str,
@@ -52,55 +32,9 @@ class Enqueue:
         _dedup: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
-        pool = await self.get_pool()
         job_id = _job_id or str(uuid4())
-
-        if _dedup:
-            dedup_key = f'{QueueConfig.PREFIX}:dedup:{_dedup}'
-            if await pool.exists(dedup_key):
-                existing = await pool.get(dedup_key)
-                if existing:
-                    return existing.decode() if isinstance(existing, bytes) else existing
-
-        job_data = {
-            'job_id': job_id,
-            'function': function,
-            'args': [],
-            'kwargs': kwargs,
-            'queue': _queue,
-            'timeout': _timeout or QueueConfig.DEFAULT_TIMEOUT,
-            'max_tries': _max_tries or QueueConfig.MAX_RETRIES,
-            'retry_delay': _retry_delay,
-            'priority': _priority,
-            'keep_result': _keep_result,
-            'enqueued_at': datetime.now(timezone.utc).isoformat(),
-        }
-
-        status_key = f'{QueueConfig.PREFIX}:job_status:{job_id}'
-        await pool.set(
-            status_key,
-            json.dumps({
-                'job_id': job_id,
-                'job_name': function,
-                'status': 'pending',
-                'queue': _queue,
-                'kwargs': kwargs,
-                'enqueued_at': job_data['enqueued_at'],
-            }),
-            ex=QueueConfig.JOB_TTL,
-        )
-
-        serialized = json.dumps(job_data)
-        if _priority != JobPriority.NORMAL:
-            score = -_priority
-            await pool.zadd(_queue, {serialized: score})
-        else:
-            await pool.lpush(_queue, serialized)
-
-        if _dedup:
-            await pool.set(dedup_key, job_id, ex=86400)
-
-        logger.info(f'Enqueued job {job_id} to {_queue}: {function}')
+        schedule_job(function, _job_id=job_id, **kwargs)
+        logger.info('Scheduled in-process job %s: %s', job_id, function)
         return job_id
 
     async def enqueue_ocr(
@@ -291,4 +225,3 @@ class Enqueue:
 
 
 enqueue = Enqueue()
-JobPriority = QueueConfig.PRIORITY_NORMAL

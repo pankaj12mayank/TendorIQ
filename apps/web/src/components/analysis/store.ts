@@ -159,3 +159,48 @@ export const getStatusColor = (status: 'met' | 'not_met' | 'unknown'): string =>
     default: return 'bg-gray-100 text-gray-800';
   }
 };
+
+const ANALYSIS_SECTIONS: { id: AnalysisSection; label: string }[] = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'eligibility', label: 'Eligibility' },
+  { id: 'technical', label: 'Technical' },
+  { id: 'financial', label: 'Financial' },
+  { id: 'risks', label: 'Risks' },
+  { id: 'deadlines', label: 'Deadlines' },
+  { id: 'mandatory_docs', label: 'Documents' },
+];
+
+export function useAnalysisSections() {
+  const activeSection = useAnalysisStore((s) => s.activeSection);
+  const setActiveSection = useAnalysisStore((s) => s.setActiveSection);
+  const analysis = useAnalysisStore((s) => s.analysis);
+
+  const getSectionProgress = (section: AnalysisSection): number => {
+    if (!analysis) return 0;
+    switch (section) {
+      case 'summary':
+        return analysis.summary.confidence.value;
+      case 'eligibility':
+        return analysis.eligibility.overallScore;
+      case 'technical':
+        return analysis.technical.complianceRate;
+      case 'financial':
+        return 85;
+      case 'risks':
+        return 100 - analysis.risks.overallRiskScore;
+      case 'deadlines':
+        return analysis.deadlines.deadlines.length > 0 ? 90 : 0;
+      case 'mandatory_docs':
+        return analysis.mandatoryDocs.overallCompletion;
+      default:
+        return 0;
+    }
+  };
+
+  return {
+    activeSection,
+    setActiveSection,
+    sections: ANALYSIS_SECTIONS,
+    getSectionProgress,
+  };
+}

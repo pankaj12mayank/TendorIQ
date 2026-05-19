@@ -85,9 +85,6 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class DocumentListItem(BaseModel):
     id: str

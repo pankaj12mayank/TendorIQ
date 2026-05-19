@@ -8,7 +8,7 @@ from sqlalchemy import (
     Column, String, Text, Float, Integer, Boolean, DateTime,
     ForeignKey, Index, JSON, func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from ..db_types import UuidCol
 from sqlalchemy.orm import relationship
 
 from .models import Base, TenantMixin, TimestampMixin
@@ -23,8 +23,8 @@ class OCRResult(Base, TenantMixin):
 
     __tablename__ = 'ocr_results'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
 
     extracted_text = Column(Text, nullable=True)
     confidence_score = Column(Float, default=0.0)
@@ -44,7 +44,7 @@ class OCRResult(Base, TenantMixin):
 
     retry_count = Column(Integer, default=0)
 
-    metadata = Column(JSON, default=dict)
+    metadata_json = Column('metadata', JSON, default=dict)
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -67,8 +67,8 @@ class OCRJob(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'ocr_jobs'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
 
     arq_job_id = Column(String(255), nullable=True, unique=True, index=True)
     status = Column(String(20), default='pending', index=True)

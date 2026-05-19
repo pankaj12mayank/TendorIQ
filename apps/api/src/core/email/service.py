@@ -4,8 +4,14 @@ import logging
 from typing import Optional, Any
 from datetime import datetime, timedelta
 from enum import Enum
-import resend
-from resend.exceptions import ResendError
+try:
+    import resend
+    from resend.exceptions import ResendError
+except ImportError:
+    resend = None
+
+    class ResendError(Exception):
+        pass
 
 from .templates import EmailTemplate, get_template, TEMPLATES
 from .schemas import EmailRequest, EmailResponse, EmailStatus, EmailType
@@ -27,6 +33,9 @@ class EmailService:
 
     def _initialize_client(self):
         if self.provider == EmailProvider.RESEND:
+            if resend is None:
+                logger.warning('resend package not installed, email service will run in mock mode')
+                return
             api_key = getattr(__import__('os').environ, 'RESEND_API_KEY', None)
             if api_key:
                 resend.api_key = api_key

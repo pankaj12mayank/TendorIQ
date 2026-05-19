@@ -1,5 +1,5 @@
 from .paddle_ocr import paddle_ocr_service, PaddleOCRService, OCRResult
-from .worker import process_ocr_job, queue_ocr_job, OCRWorkerSettings
+from .worker import process_ocr_job, queue_ocr_job
 
 __all__ = [
     'paddle_ocr_service',
@@ -7,5 +7,4 @@ __all__ = [
     'OCRResult',
     'process_ocr_job',
     'queue_ocr_job',
-    'OCRWorkerSettings',
 ]

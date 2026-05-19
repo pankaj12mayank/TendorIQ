@@ -59,8 +59,7 @@ $allPassed = (Test-File "Requirements" "$PSScriptRoot\..\apps\api\requirements.t
 
 Write-Host ""
 Write-Host "=== Services (Optional) ===" -ForegroundColor Yellow
-Test-Port "PostgreSQL" 5432 | Out-Null
-Test-Port "Redis" 6379 | Out-Null
+Test-Port "MySQL" 3306 | Out-Null
 
 Write-Host ""
 Write-Host "=== Running Services ===" -ForegroundColor Yellow

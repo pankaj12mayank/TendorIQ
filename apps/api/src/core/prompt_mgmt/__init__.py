@@ -11,14 +11,14 @@ Production-grade prompt management system with:
 
 from .models import (
     PromptTemplate,
-    PromptVersion,
+    PromptTemplateVersion,
     PromptAnalytics,
     PromptAuditLog,
     AuditAction,
 )
 from .repository import (
     PromptRepository,
-    PromptVersionRepository,
+    PromptTemplateVersionRepository,
     PromptAnalyticsRepository,
     PromptAuditRepository,
 )
@@ -36,12 +36,12 @@ from .service import (
 
 __all__ = [
     'PromptTemplate',
-    'PromptVersion',
+    'PromptTemplateVersion',
     'PromptAnalytics',
     'PromptAuditLog',
     'AuditAction',
     'PromptRepository',
-    'PromptVersionRepository',
+    'PromptTemplateVersionRepository',
     'PromptAnalyticsRepository',
     'PromptAuditRepository',
     'VersionInfo',

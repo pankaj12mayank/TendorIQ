@@ -6,12 +6,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from .dependencies.auth import CurrentUser
-from .services.document_service import document_service
+from ..dependencies.auth import CurrentUser
+from ..services.document_service import document_service
 from ...core.storage import storage_service
 from ...core.ocr.paddle_ocr import paddle_ocr_service
 from ...core.logging import get_logger
-from .schemas.ocr import (
+from ..schemas.ocr import (
     OCRJobCreate,
     OCRJobResponse,
     OCRResultResponse,
@@ -136,7 +136,7 @@ async def get_ocr_status(
             status=ocr_result_row.status,
             error_message=ocr_result_row.error_message,
             retry_count=ocr_result_row.retry_count,
-            metadata=ocr_result_row.metadata or {},
+            metadata=ocr_result_row.metadata_json or {},
             started_at=ocr_result_row.started_at,
             completed_at=ocr_result_row.completed_at,
             created_at=ocr_result_row.created_at,
@@ -338,8 +338,8 @@ async def assess_document_quality(
 
 @router.get('/batch-status')
 async def get_batch_ocr_status(
-    document_ids: str = Query(...),
     current_user: CurrentUser,
+    document_ids: str = Query(...),
     db=None,
 ):
     """Get OCR status for multiple documents"""

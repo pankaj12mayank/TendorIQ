@@ -8,8 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field
 
-from ....core.email.service import EmailService, get_email_service, EmailTriggerHandler, get_trigger_handler
-from ....core.email.schemas import (
+from ...core.email.service import EmailService, get_email_service, EmailTriggerHandler, get_trigger_handler
+from ...core.email.schemas import (
     EmailRequest, 
     EmailResponse, 
     EmailType, 
@@ -244,7 +244,7 @@ async def get_email_stats(
 @router.get('/templates')
 async def list_templates():
     """List available email templates"""
-    from ....core.email.templates import get_all_templates
+    from ...core.email.templates import get_all_templates
     templates = get_all_templates()
     return [
         {

@@ -6,10 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .dependencies.auth import CurrentUser
-from .services.onboarding_service import onboarding_service
-from .services.tenant_service import tenant_service
-from .schemas.onboarding import (
+from ..dependencies.auth import CurrentUser
+from ..services.onboarding_service import onboarding_service
+from ..services.tenant_service import tenant_service
+from ..schemas.onboarding import (
     Step1OrganizationCreate,
     Step2ProfileSetup,
     Step3ExpertiseSetup,
@@ -24,7 +24,7 @@ from .schemas.onboarding import (
     ExpertiseCategoryResponse,
     AVAILABLE_PLANS,
 )
-from ..core.database import get_db
+from ...core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix='/onboarding', tags=['onboarding'])
@@ -335,7 +335,7 @@ async def step5_dashboard_setup(
         )
 
     if state.tenant_id:
-        from ..core.models import User
+        from ...core.models import User
         result = await db.execute(
             select(User).where(User.id == UUID(current_user.user_id))
         )

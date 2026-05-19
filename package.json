@@ -2,10 +2,6 @@
   "name": "tendermonorepo",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev": "turbo dev",
     "dev:web": "turbo dev --filter=web",
@@ -22,7 +18,7 @@
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:studio": "turbo run db:studio",
-    "postinstall": "node scripts/postinstall.js"
+    "postinstall": "echo Skipping postinstall..."
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",

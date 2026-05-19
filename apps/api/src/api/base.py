@@ -2,8 +2,9 @@
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
-from tendoriq.shared import env, isDev
+from ..core.config import settings
 
 router = APIRouter()
 
@@ -14,8 +15,8 @@ async def health_check() -> JSONResponse:
         status_code=200,
         content={
             'status': 'healthy',
-            'environment': env.NODE_ENV,
-            'version': '1.0.0',
+            'environment': settings.NODE_ENV,
+            'version': settings.VERSION,
         },
     )
 
@@ -23,33 +24,22 @@ async def health_check() -> JSONResponse:
 @router.get('/health/ready')
 async def readiness_check(request: Request) -> JSONResponse:
     from ..core.database import engine
-    from ..core.redis import get_redis
 
-    checks = {'database': False, 'redis': False}
-
+    db_ok = False
     try:
         async with engine.connect() as conn:
-            await conn.execute('SELECT 1')
-        checks['database'] = True
+            await conn.execute(text('SELECT 1'))
+        db_ok = True
     except Exception:
         pass
 
-    try:
-        redis = get_redis()
-        await redis.ping()
-        checks['redis'] = True
-    except Exception:
-        pass
-
-    all_healthy = all(checks.values())
-    status_code = 200 if all_healthy else 503
-
+    status_code = 200 if db_ok else 503
     return JSONResponse(
         status_code=status_code,
         content={
-            'status': 'ready' if all_healthy else 'not ready',
-            'checks': checks,
-            'environment': env.NODE_ENV,
+            'status': 'ready' if db_ok else 'not ready',
+            'checks': {'database': db_ok},
+            'environment': settings.NODE_ENV,
         },
     )
 
@@ -61,7 +51,7 @@ async def root() -> JSONResponse:
         content={
             'name': 'TenderIQ API',
             'version': '1.0.0',
-            'docs': '/docs' if isDev else 'API documentation disabled in production',
+            'docs': '/docs' if settings.is_development else 'API documentation disabled in production',
             'health': '/health',
         },
     )

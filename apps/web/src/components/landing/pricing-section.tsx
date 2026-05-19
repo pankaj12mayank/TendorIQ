@@ -94,7 +94,7 @@ export function PricingSection() {
   };
 
   return (
-    <section id="pricing" className="py-32 bg-gradient-to-b from-background via-muted/10 to-background">
+    <section id="pricing" className="scroll-mt-24 py-32 bg-gradient-to-b from-background via-muted/10 to-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div

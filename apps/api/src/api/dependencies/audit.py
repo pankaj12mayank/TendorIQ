@@ -7,8 +7,8 @@ from datetime import datetime
 from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.models import AuditLog, User, Tenant
-from ..core.logging import get_logger
+from ...core.models import AuditLog, User, Tenant
+from ...core.logging import get_logger
 
 logger = get_logger('audit_safe')
 

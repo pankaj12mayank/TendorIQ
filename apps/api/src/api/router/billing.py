@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from ...core.models import Tenant
 from ...core.database import get_db
-from ...dependencies.auth import get_current_user
+from ..dependencies.auth import get_current_user
 from ...core.auth import AuthContext
 from ...core.billing import BillingService, PlanLimits
 

@@ -75,7 +75,7 @@ export function FeaturesSection() {
   }, []);
 
   return (
-    <section id="features" className="py-32 relative overflow-hidden">
+    <section id="features" className="scroll-mt-24 py-32 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-background via-muted/20 to-background" />
       

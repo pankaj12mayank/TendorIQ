@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ...core.prompt_mgmt import (
+from ....core.prompt_mgmt import (
     PromptManagementService,
     CreatePromptRequest,
     UpdatePromptRequest,
@@ -14,7 +14,7 @@ from ...core.prompt_mgmt import (
     RollbackRequest,
     PromptConfig,
 )
-from ...core.database import AsyncSession, get_db
+from ....core.database import AsyncSession, get_db
 
 
 router = APIRouter(prefix='/prompts', tags=['prompt_management'])

@@ -80,7 +80,7 @@ export function DemoPreviewSection() {
   const [activeDemo, setActiveDemo] = useState(demos[0]);
 
   return (
-    <section id="demo" className="py-32 relative">
+    <section id="demo" className="scroll-mt-24 py-32 relative">
       {/* Background */}
       <div className="absolute inset-0 bg-muted/20" />
       

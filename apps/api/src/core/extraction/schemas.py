@@ -78,9 +78,9 @@ class FinancialRequirementsCollection(BaseModel):
 
 class Deadline(BaseModel):
     type: str = Field(..., description="Deadline type (submission, pre-bid, etc.)")
-    date: Optional[date] = Field(None, description="Deadline date")
-    time: Optional[str] = Field(None, description="Deadline time")
-    datetime: Optional[datetime] = Field(None, description="Combined datetime")
+    due_date: Optional[date] = Field(None, description="Deadline date")
+    due_time: Optional[str] = Field(None, description="Deadline time")
+    due_datetime: Optional[datetime] = Field(None, description="Combined datetime")
     description: Optional[str] = Field(None, description="Deadline description")
     is_hard_deadline: bool = Field(default=False, description="Whether deadline is firm")
     days_remaining: Optional[int] = Field(None, description="Days until deadline")

@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from .models import (
     PromptTemplate,
-    PromptVersion,
+    PromptTemplateVersion,
     PromptAnalytics,
     PromptAuditLog,
     AuditAction,
@@ -88,51 +88,51 @@ class PromptRepository:
         return result.scalar() or 0
 
 
-class PromptVersionRepository:
+class PromptTemplateVersionRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def create(self, data: dict) -> PromptVersion:
-        version = PromptVersion(**data)
+    async def create(self, data: dict) -> PromptTemplateVersion:
+        version = PromptTemplateVersion(**data)
         self._session.add(version)
         await self._session.flush()
         return version
 
-    async def get_by_id(self, version_id: UUID) -> Optional[PromptVersion]:
-        query = select(PromptVersion).where(PromptVersion.id == version_id)
+    async def get_by_id(self, version_id: UUID) -> Optional[PromptTemplateVersion]:
+        query = select(PromptTemplateVersion).where(PromptTemplateVersion.id == version_id)
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_active_version(self, prompt_id: UUID) -> Optional[PromptVersion]:
-        query = select(PromptVersion).where(
-            and_(PromptVersion.prompt_id == prompt_id, PromptVersion.is_active == True)
+    async def get_active_version(self, prompt_id: UUID) -> Optional[PromptTemplateVersion]:
+        query = select(PromptTemplateVersion).where(
+            and_(PromptTemplateVersion.prompt_id == prompt_id, PromptTemplateVersion.is_active == True)
         )
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_prompt(self, prompt_id: UUID, limit: int = 100) -> list[PromptVersion]:
-        query = select(PromptVersion).where(PromptVersion.prompt_id == prompt_id).order_by(PromptVersion.created_at.desc()).limit(limit)
+    async def get_by_prompt(self, prompt_id: UUID, limit: int = 100) -> list[PromptTemplateVersion]:
+        query = select(PromptTemplateVersion).where(PromptTemplateVersion.prompt_id == prompt_id).order_by(PromptTemplateVersion.created_at.desc()).limit(limit)
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
-    async def get_by_version(self, prompt_id: UUID, version: str) -> Optional[PromptVersion]:
-        query = select(PromptVersion).where(
-            and_(PromptVersion.prompt_id == prompt_id, PromptVersion.version == version)
+    async def get_by_version(self, prompt_id: UUID, version: str) -> Optional[PromptTemplateVersion]:
+        query = select(PromptTemplateVersion).where(
+            and_(PromptTemplateVersion.prompt_id == prompt_id, PromptTemplateVersion.version == version)
         )
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
     async def deactivate_all(self, prompt_id: UUID) -> None:
-        stmt = update(PromptVersion).where(
-            and_(PromptVersion.prompt_id == prompt_id, PromptVersion.is_active == True)
+        stmt = update(PromptTemplateVersion).where(
+            and_(PromptTemplateVersion.prompt_id == prompt_id, PromptTemplateVersion.is_active == True)
         ).values(is_active=False)
         await self._session.execute(stmt)
 
-    async def activate_version(self, version_id: UUID) -> Optional[PromptVersion]:
+    async def activate_version(self, version_id: UUID) -> Optional[PromptTemplateVersion]:
         version = await self.get_by_id(version_id)
         if version:
             await self.deactivate_all(version.prompt_id)
-            stmt = update(PromptVersion).where(PromptVersion.id == version_id).values(is_active=True)
+            stmt = update(PromptTemplateVersion).where(PromptTemplateVersion.id == version_id).values(is_active=True)
             await self._session.execute(stmt)
             await self._session.flush()
         return await self.get_by_id(version_id)
@@ -141,12 +141,12 @@ class PromptVersionRepository:
         version = await self.get_by_id(version_id)
         if version:
             await self.deactivate_all(version.prompt_id)
-            stmt = update(PromptVersion).where(PromptVersion.id == version_id).values(is_active=True)
+            stmt = update(PromptTemplateVersion).where(PromptTemplateVersion.id == version_id).values(is_active=True)
             await self._session.execute(stmt)
             await self._session.flush()
 
-    async def get_latest_version(self, prompt_id: UUID) -> Optional[PromptVersion]:
-        query = select(PromptVersion).where(PromptVersion.prompt_id == prompt_id).order_by(PromptVersion.created_at.desc()).limit(1)
+    async def get_latest_version(self, prompt_id: UUID) -> Optional[PromptTemplateVersion]:
+        query = select(PromptTemplateVersion).where(PromptTemplateVersion.prompt_id == prompt_id).order_by(PromptTemplateVersion.created_at.desc()).limit(1)
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
@@ -174,7 +174,7 @@ class PromptVersionRepository:
             'differences': self._find_differences(v1, v2),
         }
 
-    def _find_differences(self, v1: PromptVersion, v2: PromptVersion) -> list[dict]:
+    def _find_differences(self, v1: PromptTemplateVersion, v2: PromptTemplateVersion) -> list[dict]:
         diffs = []
         if v1.content != v2.content:
             diffs.append({'field': 'content', 'type': 'modified'})

@@ -8,13 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile
 from fastapi.responses import StreamingResponse
 import io
 
-from .dependencies.auth import CurrentUser
-from .services.file_service import file_service
-from .services.tenant_service import tenant_service
+from ..dependencies.auth import CurrentUser
+from ..services.file_service import file_service
+from ..services.tenant_service import tenant_service
 from ...core.storage import storage_service
 from ...core.config import settings
 from ...core.logging import get_logger
-from .schemas.storage import (
+from ..schemas.storage import (
     FileUploadRequest,
     FileUploadResponse,
     FileDownloadResponse,
@@ -50,7 +50,7 @@ def _doc_to_response(doc) -> DocumentResponse:
         expires_at=doc.expires_at,
         is_archived=doc.is_archived,
         access_count=doc.access_count,
-        metadata=doc.metadata or {},
+        metadata=doc.metadata_json or {},
         created_at=doc.created_at,
         updated_at=doc.updated_at,
     )

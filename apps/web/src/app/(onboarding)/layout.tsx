@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth, SignedIn } from '@clerk/nextjs';
+import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -35,5 +35,5 @@ export default function OnboardingLayout({
     return null;
   }
 
-  return <SignedIn>{children}</SignedIn>;
+  return <>{children}</>;
 }

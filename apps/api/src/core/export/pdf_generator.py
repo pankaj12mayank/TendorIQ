@@ -87,7 +87,7 @@ class PDFGenerator:
         ))
 
         self._styles.add(ParagraphStyle(
-            name='BodyText',
+            name='TenderBodyText',
             parent=self._styles['Normal'],
             fontSize=self.template.font_size,
             textColor=colors.HexColor('#2d3748'),
@@ -231,7 +231,7 @@ class PDFGenerator:
                 for para in paragraphs:
                     para = para.strip()
                     if para:
-                        story.append(Paragraph(para, self._styles['BodyText']))
+                        story.append(Paragraph(para, self._styles['TenderBodyText']))
 
             if section.get('word_count'):
                 story.append(Paragraph(
@@ -244,7 +244,7 @@ class PDFGenerator:
         if data.get('summary'):
             story.append(Spacer(1, 1 * cm))
             story.append(Paragraph('Executive Summary', self._styles['SectionHeader']))
-            story.append(Paragraph(data['summary'], self._styles['BodyText']))
+            story.append(Paragraph(data['summary'], self._styles['TenderBodyText']))
 
         doc.build(
             story,
@@ -272,7 +272,7 @@ class PDFGenerator:
         story.append(Paragraph(data.get('name', 'Compliance Checklist'), self._styles['DocTitle']))
 
         if data.get('description'):
-            story.append(Paragraph(data['description'], self._styles['BodyText']))
+            story.append(Paragraph(data['description'], self._styles['TenderBodyText']))
 
         progress = data.get('completion_percentage', 0)
         score = data.get('score', {})
@@ -333,7 +333,7 @@ class PDFGenerator:
                 duration = f" ({step.get('estimated_duration_minutes', 0)} min)" if step.get('estimated_duration_minutes') else ''
                 story.append(Paragraph(
                     f"{i}. {status} <b>{step.get('name', '')}</b>{duration}",
-                    self._styles['BodyText']
+                    self._styles['TenderBodyText']
                 ))
 
         doc.build(
@@ -384,7 +384,7 @@ class PDFGenerator:
 
         if data.get('summary'):
             story.append(Paragraph('Executive Summary', self._styles['SectionHeader']))
-            story.append(Paragraph(data['summary'], self._styles['BodyText']))
+            story.append(Paragraph(data['summary'], self._styles['TenderBodyText']))
             story.append(Spacer(1, 0.5 * cm))
 
         risk_colors = {
@@ -486,7 +486,7 @@ class PDFGenerator:
                 if isinstance(content, str):
                     for para in content.split('\n\n'):
                         if para.strip():
-                            story.append(Paragraph(para, self._styles['BodyText']))
+                            story.append(Paragraph(para, self._styles['TenderBodyText']))
                 story.append(Spacer(1, 0.3 * cm))
 
         doc.build(

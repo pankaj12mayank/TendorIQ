@@ -24,12 +24,12 @@ router = APIRouter(prefix='/tenders', tags=['Tenders'])
 
 @router.get('', response_model=PaginatedResponse)
 async def list_tenders(
+    current_user: CurrentUser,
+    tenant_id: TenantID,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    current_user: CurrentUser = Depends(),
-    tenant_id: TenantID = None,
 ) -> dict:
     service = TenderService(tenant_id=tenant_id)
 
@@ -56,8 +56,8 @@ async def list_tenders(
 @router.get('/{tender_id}', response_model=dict)
 async def get_tender(
     tender_id: str,
-    current_user: CurrentUser = Depends(),
-    tenant_id: TenantID = None,
+    current_user: CurrentUser,
+    tenant_id: TenantID,
 ) -> dict:
     service = TenderService(tenant_id=tenant_id)
     tender = await service.get_tender(tender_id)
@@ -74,8 +74,8 @@ async def get_tender(
 @router.post('', response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_tender(
     tender_data: TenderCreate,
-    current_user: CurrentUser = Depends(),
-    tenant_id: TenantID = None,
+    current_user: CurrentUser,
+    tenant_id: TenantID,
 ) -> dict:
     service = TenderService(tenant_id=tenant_id, user_id=current_user['id'])
 
@@ -87,8 +87,8 @@ async def create_tender(
 async def update_tender(
     tender_id: str,
     tender_data: TenderUpdate,
-    current_user: CurrentUser = Depends(),
-    tenant_id: TenantID = None,
+    current_user: CurrentUser,
+    tenant_id: TenantID,
 ) -> dict:
     service = TenderService(tenant_id=tenant_id, user_id=current_user['id'])
 
@@ -106,8 +106,8 @@ async def update_tender(
 @router.delete('/{tender_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tender(
     tender_id: str,
-    current_user: CurrentUser = Depends(),
-    tenant_id: TenantID = None,
+    current_user: CurrentUser,
+    tenant_id: TenantID,
 ) -> None:
     service = TenderService(tenant_id=tenant_id, user_id=current_user['id'])
 

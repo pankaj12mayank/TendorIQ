@@ -94,6 +94,7 @@ export const ADMIN_MODULES = [
   { id: 'audit', label: 'Audit Logs', icon: 'file-text', description: 'System audit trail' },
   { id: 'analytics', label: 'Analytics', icon: 'bar-chart-2', description: 'Usage analytics' },
   { id: 'failed_jobs', label: 'Failed Jobs', icon: 'alert-circle', description: 'Failed job management' },
+  { id: 'email_system', label: 'Email System', icon: 'mail', description: 'Transactional email automation' },
 ] as const;
 
 export const ROLE_COLORS = {

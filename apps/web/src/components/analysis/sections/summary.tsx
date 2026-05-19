@@ -17,7 +17,7 @@ import {
   X
 } from 'lucide-react';
 import { SummaryData } from './types';
-import { useAnalysisStore, getConfidenceColor } from './store';
+import { useAnalysisStore, getConfidenceColor } from '../store';
 import { cn } from '@/lib/utils';
 
 interface SummarySectionProps {

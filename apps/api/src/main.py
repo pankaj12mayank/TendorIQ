@@ -10,7 +10,6 @@ from fastapi.exceptions import RequestValidationError
 
 from .core.config import settings
 from .core.database import init_db, close_db
-from .core.redis import init_redis, close_redis
 from .core.logging import configure_logging, get_logger
 from .core.middleware import (
     RequestIDMiddleware,
@@ -45,6 +44,7 @@ from .api.router.billing import router as billing_router
 from .api.router.sso import router as sso_router
 from .api.router.admin_auth import router as admin_auth_router
 from .api.router.super_admin import router as super_admin_router
+from .api.router.email_system import router as email_system_router
 
 configure_logging()
 logger = get_logger(__name__)
@@ -54,16 +54,18 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.info(f'Starting TenderIQ API in {settings.NODE_ENV} mode')
 
-    await init_redis()
-    logger.info('Redis initialized')
-
     await init_db()
-    logger.info('Database initialized')
+
+    try:
+        from .core.database import async_session_maker
+        from .core.email.seed import seed_email_system
+
+        async with async_session_maker() as db:
+            await seed_email_system(db)
+    except Exception as exc:
+        logger.warning('Email system seed skipped: %s', exc)
 
     yield
-
-    await close_redis()
-    logger.info('Redis closed')
 
     await close_db()
     logger.info('Database closed')
@@ -176,6 +178,7 @@ app.include_router(billing_router, prefix='/api/v1')
 app.include_router(sso_router, prefix='/api/v1')
 app.include_router(admin_auth_router, prefix='/api/v1')
 app.include_router(super_admin_router, prefix='/api/v1')
+app.include_router(email_system_router, prefix='/api/v1')
 
 
 if __name__ == '__main__':

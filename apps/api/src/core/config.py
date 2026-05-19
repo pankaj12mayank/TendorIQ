@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal, Optional
 
-from pydantic import PostgresDsn, field_validator, model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,24 +36,16 @@ class Settings(BaseSettings):
     # ===========================================
     # DATABASE
     # ===========================================
-    DATABASE_URL: PostgresDsn = 'postgresql+asyncpg://postgres:postgres@localhost:5432/tendoriq'
+    DATABASE_URL: str = (
+        'mysql+aiomysql://root:root@localhost:3306/tenderiq?charset=utf8mb4'
+    )
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_ECHO: bool = False
     DATABASE_POOL_PRE_PING: bool = True
     DATABASE_POOL_RECYCLE: int = 3600
 
-    # ===========================================
-    # REDIS
-    # ===========================================
-    REDIS_HOST: str = 'localhost'
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
-    REDIS_PASSWORD: str = ''
-    REDIS_URL: Optional[str] = None
-    REDIS_MAX_CONNECTIONS: int = 50
-
-    # Queue settings
+    # Queue settings (in-process; no Redis)
     QUEUE_NAME_PREFIX: str = 'tendoriq'
     QUEUE_DEFAULT_TIMEOUT: int = 300
     QUEUE_MAX_RETRIES: int = 3
@@ -108,6 +100,9 @@ class Settings(BaseSettings):
     EMAIL_API_KEY: str = ''
     EMAIL_FROM: str = 'noreply@tendoriq.com'
     EMAIL_FROM_NAME: str = 'TenderIQ'
+    FRONTEND_URL: str = 'http://localhost:3000'
+    SUPER_ADMIN_EMAIL: str = 'admin@tenderiq.com'
+    SUPER_ADMIN_PASSWORD: str = 'changeme'
 
     # SMTP
     SMTP_HOST: str = ''
@@ -169,14 +164,6 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ''
 
     @property
-    def redis_url(self) -> str:
-        if self.REDIS_URL:
-            return self.REDIS_URL
-        if self.REDIS_PASSWORD:
-            return f'redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}'
-        return f'redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}'
-
-    @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(',')]
 
@@ -218,17 +205,32 @@ class Settings(BaseSettings):
 
     @field_validator('JWT_SECRET')
     @classmethod
-    def validate_jwt_secret(cls, v: str) -> str:
+    def validate_jwt_secret(cls, v):
+        if hasattr(v, '__str__'):
+            v = str(v)
         if len(v) < 32:
             raise ValueError('JWT_SECRET must be at least 32 characters')
         return v
 
     @field_validator('DATABASE_URL')
     @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        if not v.startswith('postgresql'):
-            raise ValueError('DATABASE_URL must be a PostgreSQL connection string')
+    def validate_database_url(cls, v):
+        if hasattr(v, 'scheme'):
+            v = str(v)
+        if not v.startswith(('mysql', 'mariadb')):
+            raise ValueError(
+                'DATABASE_URL must be MySQL '
+                '(e.g. mysql+aiomysql://user:pass@host:3306/db?charset=utf8mb4)'
+            )
         return v
+
+    @property
+    def database_url_sync(self) -> str:
+        """Sync driver URL for Alembic (pymysql)."""
+        url = self.DATABASE_URL
+        if '+aiomysql' in url:
+            return url.replace('+aiomysql', '+pymysql')
+        return url
 
 
 @lru_cache

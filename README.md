@@ -33,40 +33,45 @@ TenderIQ is an enterprise-grade SaaS platform for managing tender documents, bid
 |-------|-------------|
 | Frontend | React 18, Next.js 14, TypeScript, Tailwind |
 | Backend | FastAPI, Python 3.12, Pydantic |
-| Database | PostgreSQL 15 (Neon, Supabase) |
-| Queue | Redis 7 + ARQ |
+| Database | MySQL 8+ |
+| Background jobs | In-process (asyncio) |
 | Auth | Clerk + JWT |
 | AI | OpenAI, Anthropic, Azure OpenAI, Ollama |
 | Monitoring | Sentry, Custom Metrics |
-| Deploy | Railway, Vercel, Docker |
+| Deploy | Railway, Vercel |
 
 ---
 
 ## Quick Start
 
-### Prerequisites
+### Windows (one click, no Docker)
 
-- Node.js 20+
-- Python 3.12+
-- PostgreSQL 15+
-- Redis 7+
-- pnpm 9+
+Requirements: **Python 3.11+**, **Node.js 20+** (pnpm via corepack).
 
-### Setup
-
-```bash
-# Clone repository
+```bat
 git clone https://github.com/yourorg/tenderiq.git
 cd tenderiq
+run.bat
+```
 
-# Install dependencies
+`run.bat` installs/verifies Python + Node deps, starts API (`:8000`) and web (`:3000`), and opens the browser. Stop with `stop.bat`.
+
+**Auth:** Super Admin → `/admin/login` (set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` in `.env`). Tenants → Clerk keys in `apps/web/.env.local`, then `/sign-up` → onboarding → dashboard.
+
+Logs: `.tenderiq/startup.log`, `api.log`, `web.log`.
+
+### Manual / Linux / macOS
+
+- Node.js 20+, Python 3.11+, pnpm 9+
+- MySQL required for persistence (see `docs/MYSQL_SETUP.md`)
+
+```bash
+git clone https://github.com/yourorg/tenderiq.git
+cd tenderiq
 pnpm install
-
-# Setup environment
-cp .env.example .env
-
-# Start development
-pnpm dev
+cd apps/api && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+pnpm --filter @tendoriq/web run dev   # terminal 1
+uvicorn src.main:app --reload --port 8000   # terminal 2, from apps/api
 ```
 
 ### Environment Variables
@@ -150,10 +155,6 @@ See [Deployment Guide](docs/deployment.md) for production deployment.
 ```bash
 # Railway (recommended)
 pnpm railway:deploy
-
-# Docker
-docker build -t tenderiq .
-docker run tenderiq
 ```
 
 ---

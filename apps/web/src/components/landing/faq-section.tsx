@@ -45,7 +45,7 @@ export function FAQSection() {
   };
 
   return (
-    <section id="faq" className="py-32 bg-gradient-to-b from-background to-muted/20">
+    <section id="faq" className="scroll-mt-24 py-32 bg-gradient-to-b from-background to-muted/20">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div

@@ -1,37 +1,22 @@
-"""Queue module exports"""
+"""In-process background job module."""
 
 from .config import (
-    QueueConfig,
-    REDIS_POOL_MAIN,
-    REDIS_POOL_QUEUE,
-    REDIS_POOL_RESULTS,
-    QUEUE_OCR,
-    QUEUE_PARSING,
-    QUEUE_EMAIL,
-    QUEUE_ANALYSIS,
-    QUEUE_NOTIFICATIONS,
     DEAD_LETTER_QUEUE,
     FAILED_QUEUE,
-)
-from .base_job import (
-    BaseJob,
-    JobState,
+    QUEUE_ANALYSIS,
+    QUEUE_EMAIL,
+    QUEUE_NOTIFICATIONS,
+    QUEUE_OCR,
+    QUEUE_PARSING,
     JobPriority,
-    RetryHandler,
-    JobTracker,
+    QueueConfig,
 )
-from .worker_settings import WorkerSettings
+from .base_job import BaseJob, JobState, JobTracker, RetryHandler
 from .enqueue import Enqueue, enqueue
-from .dead_letter import DeadLetterHandler, FailedJobsHandler
-from .monitoring import QueueMonitor, AlertHandler
-from .recovery import FailureRecovery, AutomaticRecovery, MaintenanceScheduler
-
 
 __all__ = [
     'QueueConfig',
-    'REDIS_POOL_MAIN',
-    'REDIS_POOL_QUEUE',
-    'REDIS_POOL_RESULTS',
+    'JobPriority',
     'QUEUE_OCR',
     'QUEUE_PARSING',
     'QUEUE_EMAIL',
@@ -41,17 +26,8 @@ __all__ = [
     'FAILED_QUEUE',
     'BaseJob',
     'JobState',
-    'JobPriority',
     'RetryHandler',
     'JobTracker',
-    'WorkerSettings',
     'Enqueue',
     'enqueue',
-    'DeadLetterHandler',
-    'FailedJobsHandler',
-    'QueueMonitor',
-    'AlertHandler',
-    'FailureRecovery',
-    'AutomaticRecovery',
-    'MaintenanceScheduler',
 ]

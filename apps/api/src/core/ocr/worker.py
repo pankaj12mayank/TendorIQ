@@ -1,13 +1,10 @@
-"""OCR Queue Worker - ARQ Job Handlers"""
+"""OCR background job handler (in-process)."""
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from arq import cron
-from arq.connections import RedisSettings
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,7 +118,7 @@ async def process_ocr_job(ctx: dict) -> dict:
             .values(
                 processing_status=new_status,
                 metadata={
-                    **document.metadata,
+                    **(document.metadata_json or {}),
                     'ocr_completed': True,
                     'ocr_confidence': avg_confidence,
                     'ocr_word_count': word_count,
@@ -167,7 +164,7 @@ async def process_ocr_job(ctx: dict) -> dict:
             .values(
                 processing_status='failed',
                 metadata={
-                    **document.metadata,
+                    **(document.metadata_json or {}),
                     'ocr_error': str(e),
                     'ocr_failed_at': datetime.now(timezone.utc).isoformat(),
                 },
@@ -198,48 +195,19 @@ async def process_ocr_job(ctx: dict) -> dict:
         }
 
 
-class OCRWorkerSettings:
-    max_jobs = 10
-    job_timeout = 300
-    keep_result = 3600
-    allow_abort = True
-
-    redis_settings = RedisSettings(
-        host='localhost',
-        port=6379,
-        database=1,
-        password=None,
-    )
-
-    functions = [process_ocr_job]
-
-    async def on_job_end(self, ctx: dict, job_result: dict) -> None:
-        if job_result and not job_result.get('success'):
-            doc_id = ctx.get('document_id')
-            retry = job_result.get('retry_count', 0)
-            if job_result.get('should_retry', False):
-                logger.info(f'Scheduling OCR retry for {doc_id}, attempt {retry}')
-            else:
-                logger.error(f'OCR job permanently failed for {doc_id}')
-
-
 async def queue_ocr_job(
     db: AsyncSession,
     document_id: str,
     tenant_id: str,
     retry_count: int = 0,
 ) -> str:
-    from arq import ArqRedis
-    from ..database import get_redis
+    from ..tasks.inline import schedule_job
 
-    redis = await get_redis()
-
-    job = await redis.enqueue_job(
+    job_id = schedule_job(
         'process_ocr_job',
         document_id=document_id,
-        tenant_id=tenant_id,
+        tenant_id=str(tenant_id),
         retry_count=retry_count,
     )
-
-    logger.info(f'Queued OCR job {job.job_id} for document {document_id}')
-    return str(job.job_id)
+    logger.info('Scheduled in-process OCR job %s for document %s', job_id, document_id)
+    return job_id

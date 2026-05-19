@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ...core.extraction import (
+from ....core.extraction import (
     ExtractionService,
     ExtractionRequest,
     ExtractionResponse,
@@ -138,7 +138,7 @@ async def batch_extract(requests: list[ExtractRequest], service: ExtractionServi
 
 @router.get('/fields')
 async def list_extraction_fields():
-    from ...core.extraction.prompts import ExtractionConfig
+    from ....core.extraction.prompts import ExtractionConfig
     return {
         'fields': ExtractionConfig.EXTRACTION_ORDER,
         'critical_fields': ExtractionConfig.CRITICAL_EXTRACTIONS,

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from ...core.proposal import (
+from ....core.proposal import (
     ProposalEngine,
     SectionType,
     ProposalDraft,
@@ -191,7 +191,7 @@ async def export_proposal(proposal_id: str, format: str = 'markdown', engine: Pr
     if not proposal:
         raise HTTPException(status_code=404, detail='Proposal not found')
 
-    from ...core.proposal.service import ProposalExporter
+    from ....core.proposal.service import ProposalExporter
     exporter = ProposalExporter(proposal)
 
     if format == 'markdown':
@@ -206,7 +206,7 @@ async def export_proposal(proposal_id: str, format: str = 'markdown', engine: Pr
 
 @router.get('/intelligence/{intelligence_id}')
 async def get_intelligence(intelligence_id: str):
-    from ...core.proposal.service import get_company_intelligence_manager
+    from ....core.proposal.service import get_company_intelligence_manager
     manager = get_company_intelligence_manager()
     intelligence = manager.get_profile(intelligence_id)
     if not intelligence:
@@ -216,8 +216,8 @@ async def get_intelligence(intelligence_id: str):
 
 @router.post('/intelligence')
 async def create_intelligence(request: CreateIntelligenceRequest):
-    from ...core.proposal.schemas import CompanyProfile
-    from ...core.proposal.service import get_company_intelligence_manager
+    from ....core.proposal.schemas import CompanyProfile
+    from ....core.proposal.service import get_company_intelligence_manager
 
     manager = get_company_intelligence_manager()
     profile = CompanyProfile(

@@ -1,109 +1,162 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import {
+  FileText,
+  Users,
+  TrendingUp,
+  DollarSign,
+  ArrowRight,
+  Sparkles,
+  Upload,
+} from 'lucide-react';
+
+import { PageHeader, Breadcrumbs } from '@/components/design-system/page-header';
+import { KpiCard } from '@/components/design-system/kpi-card';
+import { AiProcessingPipeline } from '@/components/design-system/ai-pipeline';
+import {
+  DataTableShell,
+  DataTable,
+  DataTableHeader,
+  DataTableHead,
+  DataTableBody,
+  DataTableRow,
+  DataTableCell,
+} from '@/components/design-system/data-table';
+import { StatusBadge } from '@/components/design-system/status-badge';
+import { Button } from '@/components/ui/button';
 import { useTenders } from '@/hooks/use-api';
 import { LoadingState } from '@/components/ui/loading-state';
-import { ErrorState } from '@/components/ui/error-state';
-import { FileText, Users, TrendingUp, DollarSign } from 'lucide-react';
+import { PremiumErrorState } from '@/components/design-system/empty-state';
+import { staggerContainer } from '@/design-system/motion';
+
+const pipelineSteps = [
+  { id: '1', label: 'Document upload', status: 'completed' as const },
+  { id: '2', label: 'OCR extraction', status: 'completed' as const },
+  { id: '3', label: 'AI analysis', status: 'active' as const, description: 'Extracting requirements...' },
+  { id: '4', label: 'Risk scoring', status: 'pending' as const },
+  { id: '5', label: 'Checklist generation', status: 'pending' as const },
+];
 
 export default function DashboardPage() {
-  const { data, isLoading, isError, refetch } = useTenders({ limit: 5 });
-
-  const stats = [
-    { title: 'Total Tenders', value: '24', icon: FileText, trend: '+12%' },
-    { title: 'Active Bids', value: '18', icon: TrendingUp, trend: '+5%' },
-    { title: 'Organizations', value: '3', icon: Users, trend: '0%' },
-    { title: 'Total Value', value: '$2.4M', icon: DollarSign, trend: '+18%' },
-  ];
+  const { data, isLoading, isError, refetch } = useTenders({ limit: 8 });
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Overview of your tender management activities.</p>
-      </div>
+      <PageHeader
+        title="Procurement command center"
+        description="Monitor tenders, AI pipelines, and team activity in one operational view."
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Home', href: '/dashboard' }, { label: 'Dashboard' }]} />
+        }
+        actions={
+          <Button asChild>
+            <Link href="/dashboard/upload">
+              <Upload className="h-4 w-4" />
+              Upload tender
+            </Link>
+          </Button>
+        }
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground">
-                <span className="text-green-600">{stat.trend}</span> from last month
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <motion.div
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        <KpiCard title="Active tenders" value="24" trend="+12%" trendUp icon={FileText} delay={0} />
+        <KpiCard title="Bids in progress" value="18" trend="+5%" trendUp icon={TrendingUp} delay={0.05} />
+        <KpiCard title="Organizations" value="3" trend="0%" icon={Users} delay={0.1} />
+        <KpiCard title="Pipeline value" value="$2.4M" trend="+18%" trendUp icon={DollarSign} delay={0.15} />
+      </motion.div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Tenders</CardTitle>
-            <CardDescription>Your latest tender activities.</CardDescription>
-          </CardHeader>
-          <CardContent>
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <DataTableShell
+            title="Recent tenders"
+            description="Latest procurement activity across your workspace"
+            toolbar={
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/dashboard/tenders">View all</Link>
+              </Button>
+            }
+          >
             {isLoading ? (
-              <LoadingState message="Loading tenders..." />
-            ) : isError ? (
-              <ErrorState onRetry={() => refetch()} />
-            ) : (
-              <div className="space-y-4">
-                {data?.data.map((tender) => (
-                  <div
-                    key={tender.id}
-                    className="flex items-center justify-between border-b pb-3 last:border-0"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium leading-none">{tender.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(tender.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        tender.status === 'published'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                          : tender.status === 'draft'
-                          ? 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
-                          : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                      }`}
-                    >
-                      {tender.status}
-                    </span>
-                  </div>
-                ))}
+              <div className="p-8">
+                <LoadingState message="Loading tenders..." />
               </div>
+            ) : isError ? (
+              <div className="p-4">
+                <PremiumErrorState onRetry={() => refetch()} />
+              </div>
+            ) : (
+              <DataTable>
+                <DataTableHeader>
+                  <tr>
+                    <DataTableHead>Title</DataTableHead>
+                    <DataTableHead>Status</DataTableHead>
+                    <DataTableHead>Created</DataTableHead>
+                  </tr>
+                </DataTableHeader>
+                <DataTableBody>
+                  {data?.data.map((tender) => (
+                    <DataTableRow key={tender.id}>
+                      <DataTableCell className="font-medium">{tender.title}</DataTableCell>
+                      <DataTableCell>
+                        <StatusBadge
+                          status={
+                            tender.status === 'published'
+                              ? 'published'
+                              : tender.status === 'draft'
+                                ? 'draft'
+                                : 'processing'
+                          }
+                        />
+                      </DataTableCell>
+                      <DataTableCell className="text-muted-foreground">
+                        {new Date(tender.createdAt).toLocaleDateString()}
+                      </DataTableCell>
+                    </DataTableRow>
+                  ))}
+                </DataTableBody>
+              </DataTable>
             )}
-          </CardContent>
-        </Card>
+          </DataTableShell>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks at your fingertips.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <a
-              href="/dashboard/tenders/new"
-              className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-            >
-              <FileText className="h-5 w-5" />
-              <span className="text-sm font-medium">Create New Tender</span>
-            </a>
-            <a
-              href="/dashboard/bids"
-              className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted"
-            >
-              <TrendingUp className="h-5 w-5" />
-              <span className="text-sm font-medium">View Active Bids</span>
-            </a>
-          </CardContent>
-        </Card>
+        <div className="lg:col-span-2 space-y-4">
+          <AiProcessingPipeline title="Live AI pipeline" steps={pipelineSteps} />
+          <div className="surface-card p-5">
+            <div className="flex items-center gap-2 text-primary mb-4">
+              <Sparkles className="h-4 w-4" />
+              <span className="text-sm font-semibold">Quick actions</span>
+            </div>
+            <div className="grid gap-2">
+              <Link
+                href="/dashboard/tenders/new"
+                className="flex items-center justify-between rounded-lg border border-border/60 p-3 text-sm font-medium transition-all hover:border-primary/30 hover:bg-primary/5"
+              >
+                <span className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Create tender
+                </span>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </Link>
+              <Link
+                href="/dashboard/bids"
+                className="flex items-center justify-between rounded-lg border border-border/60 p-3 text-sm font-medium transition-all hover:border-primary/30 hover:bg-primary/5"
+              >
+                <span className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                  Review bids
+                </span>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

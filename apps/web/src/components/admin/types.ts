@@ -210,7 +210,8 @@ export type AdminModule =
   | 'queue' 
   | 'audit' 
   | 'analytics' 
-  | 'failed_jobs';
+  | 'failed_jobs'
+  | 'email_system';
 
 export interface PaginationState {
   page: number;

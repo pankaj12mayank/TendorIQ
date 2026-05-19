@@ -16,7 +16,6 @@ from sentry_sdk import (
     Span,
 )
 from sentry_sdk.integrations.fastapi import FastAPIIntegration
-from sentry_sdk.integrations.redis import RedisIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from ..config import settings
@@ -49,7 +48,6 @@ class SentryService:
             profiles_sample_rate=SentryConfig.PROFILES_SAMPLE_RATE,
             integrations=[
                 FastAPIIntegration(),
-                RedisIntegration(),
                 SqlalchemyIntegration(),
             ],
             send_default_pii=False,

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { SignUpButton, useUser } from '@clerk/nextjs';
+import { AuthSignUpButton } from '@/components/auth/auth-buttons';
+import { useCurrentUser } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { 
   ArrowRight, 
@@ -17,7 +18,7 @@ import {
 
 export function HeroSection() {
   const router = useRouter();
-  const { user } = useUser();
+  const user = useCurrentUser();
   const [isLoaded, setIsLoaded] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
@@ -35,14 +36,17 @@ export function HeroSection() {
 
   const handleGetStarted = () => {
     if (user) {
-      router.push('/dashboard');
-    } else {
-      router.push('/onboarding');
+      router.push(user.role === 'super_admin' ? '/dashboard/admin' : '/dashboard');
+      return;
     }
+    router.push('/sign-up');
   };
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+    <section
+      id="home"
+      className="relative scroll-mt-24 min-h-screen flex items-center justify-center overflow-hidden pt-20"
+    >
       {/* Animated Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-background-dark">
         {/* Grid Pattern */}

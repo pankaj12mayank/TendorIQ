@@ -25,11 +25,13 @@ class ApiClient {
   }
 
   private getAuthHeaders(): HeadersInit {
-    const token = document.cookie
+    const cookieToken = document.cookie
       .split('; ')
       .find((row) => row.startsWith('__session='))
       ?.split('=')[1];
-
+    const storedToken =
+      typeof window !== 'undefined' ? localStorage.getItem('tenderiq_auth_token') : null;
+    const token = cookieToken || storedToken;
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 

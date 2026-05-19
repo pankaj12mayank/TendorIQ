@@ -4,14 +4,8 @@ import logging
 import sys
 from typing import Any
 
+import structlog
 from pythonjsonlogger import jsonlogger
-from structlog import (
-    EventDictionary,
-    LoggerFactory,
-    make_filtering_bound_logger,
-    processors,
-    stdlib,
-)
 
 from .config import settings
 
@@ -42,25 +36,25 @@ def configure_logging() -> None:
     )
 
     processors_list = [
-        stdlib.add_log_level,
-        stdlib.add_logger_name,
-        processors.TimeStamper(fmt='iso'),
-        processors.StackInfoRenderer(),
-        processors.format_exc_info,
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt='iso'),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
     ]
 
     if settings.LOG_FORMAT == 'json':
         processors_list.append(CustomJsonFormatter)
     else:
-        processors_list.append(processors.JSONRenderer())
-
-    LoggerFactory.set_processor(processors.CallLoggerFactory(make_filtering_bound_logger(log_level)))
+        processors_list.append(structlog.processors.JSONRenderer())
 
     structlog.configure(
         processors=processors_list,
-        wrapper_class=stdlib.BoundLogger,
+        wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
-        logger_factory=LoggerFactory(),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

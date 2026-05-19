@@ -6,9 +6,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ...core.ai.config import ProviderType, ModelCapability
-from ...core.ai.service import AIService, get_ai_service
-from ...core.ai.base import AIResponse
+from ....core.ai.config import ProviderType, ModelCapability
+from ....core.ai.service import AIService, get_ai_service
+from ....core.ai.base import AIResponse
 
 
 router = APIRouter(prefix='/ai', tags=['ai'])
@@ -185,7 +185,7 @@ async def check_spending_limit(
 
 @router.get('/models')
 async def list_models():
-    from ...core.ai.config import ProviderDefaults
+    from ....core.ai.config import ProviderDefaults
     models = {
         'openai': list(ProviderDefaults.OPENAI_MODELS.keys()),
         'gemini': list(ProviderDefaults.GEMINI_MODELS.keys()),
@@ -200,7 +200,7 @@ async def compare_costs(
     input_tokens: int,
     output_tokens: int,
 ):
-    from ...core.ai.accounting import CostCalculator
+    from ....core.ai.accounting import CostCalculator
 
     model_list = [m.strip() for m in models.split(',')]
     comparison = CostCalculator.compare_models(model_list, input_tokens, output_tokens)

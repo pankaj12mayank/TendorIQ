@@ -1,6 +1,10 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import Link from 'next/link';
+import { Moon, Sun } from 'lucide-react';
+import { useTheme } from 'next-themes';
+
+import { useCurrentUser, useSignOut } from '@/hooks/use-auth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,30 +18,32 @@ import { useTenantStore } from '@/stores/tenant-store';
 import { useCallback, useMemo } from 'react';
 
 export function Header() {
-  const { user, signOut } = useUser();
+  const user = useCurrentUser();
+  const signOut = useSignOut();
+  const { theme, setTheme } = useTheme();
   const { currentOrganization, setCurrentOrganization, organizations } = useTenantStore();
 
   const initials = useMemo(() => {
-    if (!user?.fullName) return 'U';
-    return user.fullName
+    if (!user?.name) return 'U';
+    return user.name
       .split(' ')
       .map((n) => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  }, [user?.fullName]);
+  }, [user?.name]);
 
   const handleSignOut = useCallback(() => {
     signOut();
   }, [signOut]);
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background px-6">
+    <header className="sticky-header-shadow flex h-16 items-center justify-between px-6">
       <div className="flex items-center gap-4">
         {organizations.length > 1 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-48">
+              <Button variant="outline" className="h-9 w-48 justify-between font-normal">
                 {currentOrganization?.name || 'Select Organization'}
               </Button>
             </DropdownMenuTrigger>
@@ -56,32 +62,45 @@ export function Header() {
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-9 w-9"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          aria-label="Toggle theme"
+        >
+          <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+        </Button>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={user?.imageUrl} alt={user?.fullName ?? 'User'} />
-                <AvatarFallback>{initials}</AvatarFallback>
+            <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+              <Avatar className="h-9 w-9 ring-2 ring-border/60">
+                <AvatarImage src={user?.imageUrl} alt={user?.name ?? 'User'} />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                  {initials}
+                </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <div className="flex items-center gap-2 p-2">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium">{user?.fullName}</p>
-                <p className="text-xs text-muted-foreground">{user?.emailAddresses[0]?.emailAddress}</p>
+                <p className="text-sm font-medium">{user?.name}</p>
+                <p className="text-xs text-muted-foreground">{user?.email}</p>
               </div>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <a href="/dashboard/settings">Settings</a>
+              <Link href="/dashboard/settings">Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <a href="/dashboard/settings/profile">Profile</a>
+              <Link href="/dashboard/settings/profile">Profile</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+            <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

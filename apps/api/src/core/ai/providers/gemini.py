@@ -5,7 +5,7 @@ from typing import AsyncIterator, Optional
 
 import httpx
 
-from ..config import ProviderDefaults
+from ..config import ProviderDefaults, ProviderType
 from ..base import (
     BaseAIProvider,
     AIResponse,

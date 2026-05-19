@@ -1,13 +1,13 @@
 'use client';
 
-import { useAuth, SignedIn } from '@clerk/nextjs';
+import { useAuth, useCurrentUser } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/layout/mobile-nav';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster } from '@/components/ui/sonner';
 import { useOnboardingStore } from '@/stores/onboarding-store';
 import { useOnboardingApi } from '@/hooks/use-onboarding';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -18,6 +18,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { isLoaded, userId } = useAuth();
+  const user = useCurrentUser();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [checkedOnboarding, setCheckedOnboarding] = useState(false);
@@ -37,6 +38,10 @@ export default function DashboardLayout({
   useEffect(() => {
     async function checkOnboarding() {
       if (!isLoaded || !userId) return;
+      if (user?.role === 'super_admin') {
+        setCheckedOnboarding(true);
+        return;
+      }
       try {
         const status = await fetchStatus();
         if (!status.is_completed) {
@@ -49,7 +54,7 @@ export default function DashboardLayout({
       setCheckedOnboarding(true);
     }
     checkOnboarding();
-  }, [isLoaded, userId, fetchStatus, router]);
+  }, [isLoaded, userId, user?.role, fetchStatus, router]);
 
   if (!mounted || !isLoaded || !checkedOnboarding) {
     return (
@@ -64,18 +69,18 @@ export default function DashboardLayout({
   }
 
   return (
-    <SignedIn>
+    <>
       <div className="flex min-h-screen">
         <Sidebar />
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <MobileNav />
           <Header />
-          <main className="flex-1 overflow-y-auto bg-background p-6">
-            {children}
+          <main className="flex-1 overflow-y-auto scroll-premium p-6 md:p-8">
+            <div className="mx-auto max-w-7xl animate-fade-in">{children}</div>
           </main>
         </div>
       </div>
       <Toaster />
-    </SignedIn>
+    </>
   );
 }

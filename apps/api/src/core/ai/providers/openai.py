@@ -7,7 +7,7 @@ import httpx
 from openai import AsyncOpenAI, Stream
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
-from ..config import ProviderDefaults, TokenConfig
+from ..config import ProviderDefaults, ProviderType, TokenConfig
 from ..base import (
     BaseAIProvider,
     AIResponse,

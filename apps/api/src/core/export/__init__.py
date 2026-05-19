@@ -36,7 +36,6 @@ from .engine import (
 from .pdf_generator import PDFGenerator, get_pdf_generator, pdf_generator
 from .docx_generator import DOCXGenerator, get_docx_generator, docx_generator
 from .service import ExportService, export_service, get_export_service
-from .router import export_router
 
 __all__ = [
     'ExportFormat',
@@ -66,5 +65,4 @@ __all__ = [
     'ExportService',
     'export_service',
     'get_export_service',
-    'export_router',
 ]

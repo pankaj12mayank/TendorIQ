@@ -70,7 +70,7 @@ try {
 }
 
 Write-Host "`n[6/6] Starting services..." -ForegroundColor Yellow
-Write-Host "  Make sure PostgreSQL and Redis are running" -ForegroundColor Yellow
+Write-Host "  Make sure MySQL is running (see docs/MYSQL_SETUP.md)" -ForegroundColor Yellow
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "Setup complete!" -ForegroundColor Green

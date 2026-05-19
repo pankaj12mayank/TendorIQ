@@ -7,13 +7,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from .dependencies.auth import CurrentUser
-from .services.document_service import document_service
-from .services.file_service import file_service
+from ..dependencies.auth import CurrentUser
+from ..services.document_service import document_service
+from ..services.file_service import file_service
 from ...core.storage import storage_service
 from ...core.config import settings
 from ...core.logging import get_logger
-from .schemas.document import (
+from ..schemas.document import (
     DocumentCreate,
     DocumentUpdate,
     ProcessingStatusUpdate,
@@ -52,7 +52,7 @@ def _doc_to_response(doc) -> DocumentResponse:
         processing_error=doc.processing_error,
         retry_count=doc.retry_count,
         max_retries=doc.max_retries,
-        metadata=doc.metadata or {},
+        metadata=doc.metadata_json or {},
         tags=doc.tags or [],
         folder=doc.folder,
         is_public=doc.is_public,

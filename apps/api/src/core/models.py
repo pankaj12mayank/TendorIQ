@@ -20,8 +20,9 @@ from sqlalchemy import (
     Enum,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import relationship, declarative_base
+
+from .db_types import JsonCol, UuidCol
 
 Base = declarative_base()
 
@@ -37,7 +38,7 @@ def utc_now() -> datetime:
 class TenantMixin:
     """Mixin for multi-tenant support"""
 
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False, index=True)
+    tenant_id = Column(UuidCol, ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False, index=True)
 
 
 class TimestampMixin:
@@ -51,7 +52,7 @@ class SoftDeleteMixin:
     """Mixin for soft delete support"""
 
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    deleted_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
+    deleted_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=True)
 
     @property
     def is_deleted(self) -> bool:
@@ -61,8 +62,8 @@ class SoftDeleteMixin:
 class AuditMixin:
     """Mixin for audit trail"""
 
-    created_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
-    updated_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
+    created_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=False)
+    updated_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=True)
 
 
 class Tenant(Base):
@@ -70,13 +71,13 @@ class Tenant(Base):
 
     __tablename__ = 'tenants'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)
     slug = Column(String(100), nullable=False, unique=True, index=True)
     logo_url = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     website = Column(String(500), nullable=True)
-    settings = Column(JSONB, default={})
+    settings = Column(JsonCol, default={})
 
     plan = Column(String(50), default='free')
     status = Column(String(20), default='active')
@@ -111,7 +112,7 @@ class User(Base):
 
     __tablename__ = 'users'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
     email = Column(String(500), nullable=False, unique=True, index=True)
     name = Column(String(255), nullable=True)
     avatar_url = Column(Text, nullable=True)
@@ -119,7 +120,7 @@ class User(Base):
 
     clerk_id = Column(String(255), nullable=True, unique=True, index=True)
 
-    preferences = Column(JSONB, default={})
+    preferences = Column(JsonCol, default={})
 
     email_verified = Column(Boolean, default=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
@@ -142,14 +143,14 @@ class Membership(Base):
 
     __tablename__ = 'memberships'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    tenant_id = Column(UuidCol, ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False)
 
     role = Column(String(20), default='member')
     status = Column(String(20), default='active')
 
-    invited_by_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
+    invited_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=True)
     joined_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -169,7 +170,7 @@ class Tender(Base, TenantMixin, TimestampMixin, SoftDeleteMixin, AuditMixin):
 
     __tablename__ = 'tenders'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=False)
     status = Column(String(20), default='draft', index=True)
@@ -180,15 +181,15 @@ class Tender(Base, TenantMixin, TimestampMixin, SoftDeleteMixin, AuditMixin):
     closing_date = Column(DateTime(timezone=True), nullable=True, index=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
 
-    requirements = Column(JSONB, default=[])
-    specifications = Column(JSONB, default={})
+    requirements = Column(JsonCol, default=[])
+    specifications = Column(JsonCol, default={})
 
     ai_summary = Column(Text, nullable=True)
 
-    organization_id = Column(UUID(as_uuid=True), nullable=True)
+    organization_id = Column(UuidCol, nullable=True)
 
     tender_type = Column(String(50), default='open')
-    evaluation_criteria = Column(JSONB, default=[])
+    evaluation_criteria = Column(JsonCol, default=[])
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -213,10 +214,10 @@ class Bid(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = 'bids'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    bidder_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    bidder_id = Column(UuidCol, ForeignKey('users.id'), nullable=False)
     organization_name = Column(String(255), nullable=True)
 
     amount = Column(Float, nullable=True)
@@ -225,9 +226,9 @@ class Bid(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     status = Column(String(20), default='draft', index=True)
 
     proposal = Column(Text, nullable=True)
-    proposal_documents = Column(ARRAY(UUID), default=[])
+    proposal_documents = Column(JsonCol, default=list)
 
-    ai_analysis = Column(JSONB, nullable=True)
+    ai_analysis = Column(JsonCol, nullable=True)
     ai_score = Column(Float, nullable=True)
 
     submitted_at = Column(DateTime(timezone=True), nullable=True, index=True)
@@ -250,8 +251,8 @@ class Document(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = 'documents'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='CASCADE'), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='CASCADE'), nullable=True, index=True)
 
     name = Column(String(500), nullable=False)
     file_name = Column(String(500), nullable=False)
@@ -274,8 +275,8 @@ class Document(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
 
-    metadata = Column(JSONB, default={})
-    tags = Column(ARRAY(String), default=[])
+    metadata_json = Column('metadata', JsonCol, default={})
+    tags = Column(JsonCol, default=list)
     folder = Column(String(255), nullable=True, index=True)
     category = Column(String(100), nullable=True, default='documents')
 
@@ -317,9 +318,9 @@ class DocumentChunk(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'document_chunks'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
-    parsed_document_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
+    parsed_document_id = Column(UuidCol, nullable=True, index=True)
 
     content = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False)
@@ -330,9 +331,9 @@ class DocumentChunk(Base, TenantMixin, TimestampMixin):
     section_path = Column(String(500), nullable=True)
     tokens = Column(Integer, default=0)
 
-    embedding = Column(JSONB, default=None)
+    embedding = Column(JsonCol, default=None)
 
-    metadata = Column(JSONB, default={})
+    metadata_json = Column('metadata', JsonCol, default={})
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
@@ -350,16 +351,16 @@ class AnalysisResult(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'analysis_results'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='CASCADE'), nullable=True, index=True)
-    bid_id = Column(UUID(as_uuid=True), ForeignKey('bids.id', ondelete='CASCADE'), nullable=True, index=True)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='CASCADE'), nullable=True, index=True)
+    bid_id = Column(UuidCol, ForeignKey('bids.id', ondelete='CASCADE'), nullable=True, index=True)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=True, index=True)
 
     analysis_type = Column(String(50), nullable=False)
 
-    prompt_version_id = Column(UUID(as_uuid=True), ForeignKey('prompt_versions.id'), nullable=True)
+    prompt_version_id = Column(UuidCol, ForeignKey('prompt_versions.id'), nullable=True)
 
-    result = Column(JSONB, default={})
+    result = Column(JsonCol, default={})
     summary = Column(Text, nullable=True)
 
     score = Column(Float, nullable=True)
@@ -383,13 +384,13 @@ class Checklist(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = 'checklists'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
 
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
 
-    items = Column(JSONB, default=[])
+    items = Column(JsonCol, default=[])
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -402,8 +403,8 @@ class Risk(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = 'risks'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
 
     title = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
@@ -434,10 +435,10 @@ class Proposal(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'proposals'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    bidder_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    bidder_id = Column(UuidCol, ForeignKey('users.id'), nullable=False)
 
     amount = Column(Float, nullable=False)
     currency = Column(String(3), default='USD')
@@ -460,13 +461,13 @@ class PromptVersion(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'prompt_versions'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)
 
     prompt_type = Column(String(50), nullable=False, index=True)
 
     content = Column(Text, nullable=False)
-    variables = Column(ARRAY(String), default=[])
+    variables = Column(JsonCol, default=list)
 
     version = Column(Integer, nullable=False)
 
@@ -495,7 +496,7 @@ class QueueJob(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'queue_jobs'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
 
     job_type = Column(String(50), nullable=False, index=True)
     job_id = Column(String(255), nullable=True, unique=True, index=True)
@@ -503,8 +504,8 @@ class QueueJob(Base, TenantMixin, TimestampMixin):
     status = Column(String(20), default='pending', index=True)
     priority = Column(Integer, default=0)
 
-    payload = Column(JSONB, default={})
-    result = Column(JSONB, nullable=True)
+    payload = Column(JsonCol, default={})
+    result = Column(JsonCol, nullable=True)
     error = Column(Text, nullable=True)
 
     scheduled_at = Column(DateTime(timezone=True), nullable=True, index=True)
@@ -529,14 +530,14 @@ class UsageLog(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'usage_logs'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id'), nullable=True, index=True)
 
     action = Column(String(100), nullable=False, index=True)
     resource_type = Column(String(50), nullable=False, index=True)
-    resource_id = Column(UUID(as_uuid=True), nullable=True)
+    resource_id = Column(UuidCol, nullable=True)
 
-    metadata = Column(JSONB, default={})
+    metadata_json = Column('metadata', JsonCol, default={})
 
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
@@ -558,7 +559,7 @@ class Subscription(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'subscriptions'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
 
     plan = Column(String(50), nullable=False)
     status = Column(String(20), default='active', index=True)
@@ -575,8 +576,8 @@ class Subscription(Base, TenantMixin, TimestampMixin):
     amount = Column(Float, nullable=False)
     currency = Column(String(3), default='USD')
 
-    features = Column(JSONB, default={})
-    metadata = Column(JSONB, default={})
+    features = Column(JsonCol, default={})
+    metadata_json = Column('metadata', JsonCol, default={})
 
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancel_at_period_end = Column(Boolean, default=True)
@@ -596,18 +597,18 @@ class AuditLog(Base, TenantMixin, TimestampMixin):
 
     __tablename__ = 'audit_logs'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id'), nullable=True, index=True)
 
     action = Column(String(100), nullable=False, index=True)
     action_type = Column(String(50), nullable=False, index=True)
     resource_type = Column(String(50), nullable=False, index=True)
-    resource_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    resource_id = Column(UuidCol, nullable=True, index=True)
     resource_name = Column(String(255), nullable=True)
 
-    changes = Column(JSONB, default={})
-    old_values = Column(JSONB, default={})
-    new_values = Column(JSONB, default={})
+    changes = Column(JsonCol, default={})
+    old_values = Column(JsonCol, default={})
+    new_values = Column(JsonCol, default={})
 
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
@@ -631,16 +632,16 @@ class Notification(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = 'notifications'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False, index=True)
-    tender_id = Column(UUID(as_uuid=True), ForeignKey('tenders.id', ondelete='SET NULL'), nullable=True, index=True)
+    user_id = Column(UuidCol, ForeignKey('users.id'), nullable=False, index=True)
+    tender_id = Column(UuidCol, ForeignKey('tenders.id', ondelete='SET NULL'), nullable=True, index=True)
 
     type = Column(String(50), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
 
-    data = Column(JSONB, default={})
+    data = Column(JsonCol, default={})
 
     is_read = Column(Boolean, default=False, index=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
@@ -663,9 +664,9 @@ class OnboardingState(Base, TimestampMixin):
 
     __tablename__ = 'onboarding_states'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False, unique=True, index=True)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id'), nullable=False, unique=True, index=True)
+    tenant_id = Column(UuidCol, ForeignKey('tenants.id'), nullable=True, index=True)
 
     current_step = Column(Integer, default=1)
     total_steps = Column(Integer, default=5)
@@ -676,17 +677,17 @@ class OnboardingState(Base, TimestampMixin):
     step_4_completed = Column(Boolean, default=False)
     step_5_completed = Column(Boolean, default=False)
 
-    step_1_data = Column(JSONB, default={})
-    step_2_data = Column(JSONB, default={})
-    step_3_data = Column(JSONB, default={})
-    step_4_data = Column(JSONB, default={})
-    step_5_data = Column(JSONB, default={})
+    step_1_data = Column(JsonCol, default={})
+    step_2_data = Column(JsonCol, default={})
+    step_3_data = Column(JsonCol, default={})
+    step_4_data = Column(JsonCol, default={})
+    step_5_data = Column(JsonCol, default={})
 
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     last_step_completed = Column(Integer, nullable=True)
-    metadata = Column(JSONB, default={})
+    metadata_json = Column('metadata', JsonCol, default={})
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -703,8 +704,8 @@ class OnboardingState(Base, TimestampMixin):
 class OCRResult(Base, TenantMixin):
     __tablename__ = 'ocr_results'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
 
     extracted_text = Column(Text, nullable=True)
     confidence_score = Column(Float, default=0.0)
@@ -724,7 +725,7 @@ class OCRResult(Base, TenantMixin):
 
     retry_count = Column(Integer, default=0)
 
-    metadata = Column(JSONB, default=dict)
+    metadata_json = Column('metadata', JsonCol, default=dict)
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -745,8 +746,8 @@ class OCRResult(Base, TenantMixin):
 class OCRJob(Base, TenantMixin, TimestampMixin):
     __tablename__ = 'ocr_jobs'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
 
     arq_job_id = Column(String(255), nullable=True, unique=True, index=True)
     status = Column(String(20), default='pending', index=True)
@@ -757,7 +758,7 @@ class OCRJob(Base, TenantMixin, TimestampMixin):
     retry_count = Column(Integer, default=0)
     max_retries = Column(Integer, default=3)
 
-    result_summary = Column(JSONB, default=dict)
+    result_summary = Column(JsonCol, default=dict)
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -777,23 +778,23 @@ class OCRJob(Base, TenantMixin, TimestampMixin):
 class ParsedDocument(Base, TenantMixin, TimestampMixin):
     __tablename__ = 'parsed_documents'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=generate_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    document_id = Column(UuidCol, ForeignKey('documents.id', ondelete='CASCADE'), nullable=False, index=True)
 
     file_name = Column(String(500), nullable=False)
     file_type = Column(String(20), nullable=False)
 
-    metadata_json = Column(JSONB, default={})
+    metadata_json = Column(JsonCol, default={})
     full_text = Column(Text, nullable=True)
 
     page_count = Column(Integer, default=0)
     word_count = Column(Integer, default=0)
     confidence_score = Column(Float, default=0.0)
 
-    sections_json = Column(JSONB, default=[])
-    tables_json = Column(JSONB, default=[])
-    images_json = Column(JSONB, default=[])
-    links_json = Column(JSONB, default=[])
+    sections_json = Column(JsonCol, default=[])
+    tables_json = Column(JsonCol, default=[])
+    images_json = Column(JsonCol, default=[])
+    links_json = Column(JsonCol, default=[])
 
     status = Column(String(20), default='pending', index=True)
     error_message = Column(Text, nullable=True)
@@ -813,3 +814,16 @@ class ParsedDocument(Base, TenantMixin, TimestampMixin):
     )
 
     document = relationship('Document')
+
+
+# Email system tables (registered on Base.metadata for Alembic)
+from .email.db_models import (  # noqa: E402, F401
+    EmailTemplate,
+    EmailEvent,
+    EmailBranding,
+    SmtpConfig,
+    FirebaseConfig,
+    EmailQueueItem,
+    EmailLog,
+    PasswordResetToken,
+)

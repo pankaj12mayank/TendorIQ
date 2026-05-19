@@ -15,6 +15,7 @@ import {
   UsageAnalytics,
   FailedJobs,
 } from '@/components/admin';
+import { EmailSystem } from '@/components/admin/email-system';
 import {
   RealtimeQueueStatus,
   RealtimeMetrics,
@@ -34,6 +35,7 @@ import {
   FileText,
   BarChart2,
   AlertCircle,
+  Mail,
   Search,
   ChevronLeft,
   ChevronRight,
@@ -58,6 +60,7 @@ const MODULE_ICONS = {
   audit: FileText,
   analytics: BarChart2,
   failed_jobs: AlertCircle,
+  email_system: Mail,
 };
 
 interface RBACGuardProps {
@@ -123,6 +126,8 @@ export default function AdminPage() {
         return <UsageAnalytics />;
       case 'failed_jobs':
         return <FailedJobs />;
+      case 'email_system':
+        return <EmailSystem />;
       default:
         return <UserManagement />;
     }

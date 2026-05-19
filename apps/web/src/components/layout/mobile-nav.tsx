@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Menu, X, LayoutDashboard, FileText, Briefcase, Users, BarChart3, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@clerk/nextjs';
+import { useSignOut } from '@/hooks/use-auth';
 
 const mobileNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -20,7 +20,7 @@ const mobileNavigation = [
 export function MobileNav() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
-  const { signOut } = useAuth();
+  const signOut = useSignOut();
 
   return (
     <div className="lg:hidden">

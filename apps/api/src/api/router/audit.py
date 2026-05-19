@@ -9,18 +9,18 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field
 
-from ....core.models import AuditLog
-from ....core.database import get_db
-from ....dependencies.auth import get_current_user
-from ....core.auth import AuthContext
-from ....dependencies.audit import audit_logger
+from ...core.models import AuditLog
+from ...core.database import get_db
+from ..dependencies.auth import get_current_user
+from ...core.auth import AuthContext
+from ..dependencies.audit import audit_logger
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/audit', tags=['Audit'])
 
 
-class AuditActionType(str, enum):
+class AuditActionType(str, enum.Enum):
     UPLOAD = 'upload'
     DELETE = 'delete'
     EXPORT = 'export'

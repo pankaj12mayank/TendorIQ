@@ -1,18 +1,18 @@
 'use client';
 
-import { useAuth, SignedIn, SignedOut } from '@clerk/nextjs';
+import { useAuth } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  const { isLoaded } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && isSignedIn) {
       router.push('/dashboard');
     }
-  }, [isLoaded, router]);
+  }, [isLoaded, isSignedIn, router]);
 
   if (!isLoaded) {
     return (
@@ -22,9 +22,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
-  return (
-    <SignedOut>
-      <div className="flex min-h-screen flex-col">{children}</div>
-    </SignedOut>
-  );
+  if (isSignedIn) {
+    return null;
+  }
+
+  return <div className="flex min-h-screen flex-col">{children}</div>;
 }

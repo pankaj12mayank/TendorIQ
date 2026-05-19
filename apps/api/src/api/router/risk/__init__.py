@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ...core.risk_analysis import (
+from ....core.risk_analysis import (
     RiskEngine,
     RiskAnalysisRequest,
     RiskAnalysisResponse,

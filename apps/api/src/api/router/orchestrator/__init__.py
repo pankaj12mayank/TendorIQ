@@ -6,7 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from ...core.orchestrator import (
+from ....core.orchestrator import (
     Orchestrator,
     OrchestratorRequest,
     OrchestratorResponse,
@@ -19,7 +19,7 @@ from ...core.orchestrator import (
     ChainStep,
     StepType,
 )
-from ...core.ai import ProviderType
+from ....core.ai import ProviderType
 
 
 router = APIRouter(prefix='/orchestrator', tags=['orchestrator'])

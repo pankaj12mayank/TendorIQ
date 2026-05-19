@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ...core.sso import SSOProvider, SSOConfig, SSOService, SSOUser
-from ...dependencies.auth import get_current_user
+from ..dependencies.auth import get_current_user
 from ...core.auth import AuthContext
 
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ async def authenticate_sso(
         user = await SSOService.authenticate(tenant_id, request.token)
         
         # Map SSO groups to roles
-        from ....core.sso import SSOHandler
+        from ...core.sso import SSOHandler
         handler = SSOHandler(SSOConfig(provider=SSOProvider.OKTA, enabled=True))
         role_mapping = handler.map_groups_to_roles(user.groups)
         

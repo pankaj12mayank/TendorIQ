@@ -11,13 +11,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 
-from ....core.models import AuditLog, User, Tenant
-from ....core.database import get_db
-from ....dependencies.auth import get_current_user
-from ....core.auth import AuthContext
-from ....core.redis import get_redis
-from ....core.queue.monitoring import QueueMonitor
-from ....core.orchestrator.logging import MetricsAggregator
+from ...core.models import AuditLog, User, Tenant
+from ...core.database import get_db
+from ..dependencies.auth import get_current_user
+from ...core.auth import AuthContext
+from ...core.orchestrator.logging import MetricsCollector as MetricsAggregator
 
 logger = logging.getLogger(__name__)
 
@@ -279,8 +277,7 @@ async def get_health(
         checks={
             'api': 'healthy',
             'database': 'healthy',
-            'redis': 'healthy',
-            'queue': 'healthy',
+            'queue': 'inline',
             'ai_providers': 'healthy',
         },
         uptime_seconds=_get_uptime(),
@@ -291,36 +288,25 @@ async def get_health(
 @router.get('/health/detailed')
 async def get_detailed_health(
     db=Depends(get_db),
-    redis=Depends(get_redis),
 ):
     """Detailed health check with component status"""
-    
+    from sqlalchemy import text
+
     db_healthy = False
-    redis_healthy = False
-    
     try:
-        await db.execute('SELECT 1')
+        await db.execute(text('SELECT 1'))
         db_healthy = True
     except Exception:
         pass
-    
-    try:
-        await redis.ping()
-        redis_healthy = True
-    except Exception:
-        pass
-    
-    overall = 'healthy' if db_healthy and redis_healthy else 'degraded'
-    if not db_healthy or not redis_healthy:
-        overall = 'unhealthy'
-    
+
+    overall = 'healthy' if db_healthy else 'unhealthy'
+
     return {
         'status': overall,
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'components': {
             'database': {'status': 'up' if db_healthy else 'down', 'latency_ms': 5},
-            'redis': {'status': 'up' if redis_healthy else 'down', 'latency_ms': 2},
-            'queue': {'status': 'up', 'active_workers': 8},
+            'queue': {'status': 'inline', 'mode': 'in-process'},
             'sentry': {'status': 'configured'},
         },
         'uptime_seconds': _get_uptime(),
@@ -330,25 +316,19 @@ async def get_detailed_health(
 @router.get('/health/ready')
 async def readiness_check(
     db=Depends(get_db),
-    redis=Depends(get_redis),
 ):
     """Readiness check for service orchestration"""
-    
-    checks = {'database': False, 'redis': False}
-    
+    from sqlalchemy import text
+
+    checks: dict[str, bool] = {'database': False}
+
     try:
-        await db.execute('SELECT 1')
+        await db.execute(text('SELECT 1'))
         checks['database'] = True
     except Exception:
         pass
-    
-    try:
-        await redis.ping()
-        checks['redis'] = True
-    except Exception:
-        pass
-    
-    all_ready = all(checks.values())
+
+    all_ready = checks['database']
     
     return JSONResponse(
         status_code=200 if all_ready else 503,

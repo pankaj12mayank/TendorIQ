@@ -41,7 +41,7 @@ class FileService:
             mime_type=mime_type,
             checksum=checksum,
             tender_id=tender_id,
-            metadata=metadata or {},
+            metadata_json=metadata or {},
             created_by_id=created_by_id or UUID('00000000-0000-0000-0000-000000000000'),
         )
         db.add(doc)

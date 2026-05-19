@@ -45,7 +45,7 @@ class DocumentService:
             tender_id=tender_id,
             folder=folder,
             tags=tags or [],
-            metadata=metadata or {},
+            metadata_json=metadata or {},
             processing_status='uploaded',
             uploaded_at=datetime.now(timezone.utc),
             created_by_id=created_by_id or UUID('00000000-0000-0000-0000-000000000000'),
@@ -181,7 +181,7 @@ class DocumentService:
             doc.processed_at = datetime.now(timezone.utc)
 
         if metadata:
-            doc.metadata = {**doc.metadata, **metadata}
+            doc.metadata_json = {**(doc.metadata_json or {}), **metadata}
 
         await db.commit()
         await db.refresh(doc)

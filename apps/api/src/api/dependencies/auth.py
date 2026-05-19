@@ -4,9 +4,9 @@ from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
-from ....core.auth import AuthService, AuthContext, ClerkAuthService
-from ....core.config import settings
-from ....core.rbac import RBACService, Permission
+from ...core.auth import AuthService, AuthContext, ClerkAuthService
+from ...core.config import settings
+from ...core.rbac import RBACService, Permission
 
 ClerkUser = dict
 

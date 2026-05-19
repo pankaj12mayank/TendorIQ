@@ -3,14 +3,15 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { SignUpButton, useUser } from '@clerk/nextjs';
+import { AuthSignUpButton } from '@/components/auth/auth-buttons';
+import { useCurrentUser } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Mail, Calendar, Sparkles } from 'lucide-react';
 
 export function CTASection() {
   const [isLoaded, setIsLoaded] = useState(false);
   const router = useRouter();
-  const { user } = useUser();
+  const user = useCurrentUser();
 
   useEffect(() => {
     setIsLoaded(true);
@@ -20,12 +21,12 @@ export function CTASection() {
     if (user) {
       router.push('/dashboard');
     } else {
-      router.push('/onboarding');
+      router.push('/sign-up');
     }
   };
 
   return (
-    <section className="py-32 relative overflow-hidden">
+    <section id="contact" className="scroll-mt-24 py-32 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-purple-500/10 to-blue-500/10" />
       

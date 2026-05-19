@@ -27,19 +27,21 @@ class EmailJob(BaseJob):
         await self.on_start()
 
         try:
-            from ...services.email import EmailService
+            from ...email.service import EmailService
+            from ...email.schemas import EmailRequest
 
             email_service = EmailService()
             result = await email_service.send(
-                to=to_email,
-                subject=subject,
-                body=body,
-                template=template,
-                attachments=attachments,
-                cc=cc,
-                bcc=bcc,
-                options=options or {},
+                EmailRequest(
+                    to=to_email,
+                    subject=subject,
+                    html=body,
+                )
             )
+            result = {
+                'message_id': result.message_id,
+                'status': result.status.value if hasattr(result.status, 'value') else str(result.status),
+            }
 
             await self.on_success({
                 'to': to_email,

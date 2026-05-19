@@ -1,75 +1,123 @@
 'use client';
 
-import { useAuth, useUser, useSession } from '@clerk/nextjs';
+import dynamic from 'next/dynamic';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
+import {
+  useEffect,
+  useCallback,
+  useContext,
+  useState,
+  useMemo,
+  type ReactNode,
+} from 'react';
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  name: string;
-  imageUrl?: string;
-  role?: string;
-}
+import {
+  clearStoredSession,
+  getStoredSession,
+  setStoredSession,
+  type AuthUser,
+} from '@/lib/auth-session';
+import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
 
-export interface AuthState {
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  user: AuthUser | null;
-}
+import { AuthContext, type AuthContextValue } from './auth-context';
 
-interface AuthContextValue extends AuthState {
-  signOut: () => Promise<void>;
-  getToken: () => Promise<string | null>;
-}
+export type { AuthUser, AuthContextValue };
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+const ClerkAuthProvider = dynamic(
+  () => import('./clerk-auth-provider').then((m) => m.ClerkAuthProvider),
+  { ssr: false }
+);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const { isLoaded, isSignedIn, signOut: clerkSignOut } = useAuth();
-  const { user } = useUser();
-  const { getToken } = useSession();
+function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: string) {
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      const signInUrl = new URL('/sign-in', window.location.origin);
-      signInUrl.searchParams.set('redirect_url', pathname);
-      router.push(signInUrl.toString());
+    if (isLoading) return;
+
+    if (!isAuthenticated && isProtectedPath(pathname)) {
+      const target = pathname.includes('/admin') ? '/admin/login' : '/sign-in';
+      const url = new URL(target, window.location.origin);
+      if (target === '/sign-in') {
+        url.searchParams.set('redirect_url', pathname);
+      }
+      router.replace(url.toString());
+      return;
     }
-  }, [isLoaded, isSignedIn, router, pathname]);
 
-  const handleSignOut = useCallback(async () => {
-    await clerkSignOut();
-    router.push('/sign-in');
-  }, [clerkSignOut, router]);
-
-  const handleGetToken = useCallback(async () => {
-    try {
-      return await getToken();
-    } catch {
-      return null;
+    if (isAuthenticated && (pathname === '/sign-in' || pathname === '/sign-up')) {
+      router.replace(role === 'super_admin' ? '/dashboard/admin' : '/onboarding');
     }
-  }, [getToken]);
+  }, [isAuthenticated, isLoading, pathname, router, role]);
+}
 
-  const value: AuthContextValue = {
-    isAuthenticated: isLoaded && isSignedIn,
-    isLoading: !isLoaded,
-    user: user
-      ? {
-          id: user.id,
-          email: user.emailAddresses[0]?.emailAddress || '',
-          name: user.fullName || user.username || '',
-          imageUrl: user.imageUrl,
-          role: user.publicMetadata?.role as string | undefined,
-        }
-      : null,
-    signOut: handleSignOut,
-    getToken: handleGetToken,
-  };
+function LocalAuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const session = getStoredSession();
+    setUser(session?.user ?? null);
+    setIsLoading(false);
+  }, []);
+
+  useRouteGuard(!!user, isLoading, user?.role);
+
+  const signOut = useCallback(async () => {
+    clearStoredSession();
+    setUser(null);
+    router.push('/');
+  }, [router]);
+
+  const getToken = useCallback(async () => getStoredSession()?.token ?? null, []);
+
+  const loginWithSuperAdmin = useCallback(
+    async (email: string, password: string) => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { detail?: string }).detail || 'Login failed');
+      }
+      const data = await res.json();
+      const authUser: AuthUser = {
+        id: data.user?.email ?? email,
+        email: data.user?.email ?? email,
+        name: data.user?.name ?? 'Super Admin',
+        role: 'super_admin',
+      };
+      setStoredSession(data.token, authUser);
+      setUser(authUser);
+      router.push('/dashboard/admin');
+    },
+    [router]
+  );
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      isAuthenticated: !!user,
+      isLoading,
+      user,
+      signOut,
+      getToken,
+      loginWithSuperAdmin,
+    }),
+    [user, isLoading, signOut, getToken, loginWithSuperAdmin]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  if (isClerkConfigured()) {
+    return <ClerkAuthProvider>{children}</ClerkAuthProvider>;
+  }
+  return <LocalAuthProvider>{children}</LocalAuthProvider>;
 }
 
 export function useAuthContext() {
@@ -78,6 +126,15 @@ export function useAuthContext() {
     throw new Error('useAuthContext must be used within AuthProvider');
   }
   return context;
+}
+
+export function useAuth() {
+  const { isAuthenticated, isLoading, user } = useAuthContext();
+  return {
+    isLoaded: !isLoading,
+    isSignedIn: isAuthenticated,
+    userId: user?.id ?? null,
+  };
 }
 
 export function useAuthState() {
@@ -98,4 +155,9 @@ export function useSignOut() {
 export function useGetToken() {
   const { getToken } = useAuthContext();
   return getToken;
+}
+
+export function useSuperAdminLogin() {
+  const { loginWithSuperAdmin } = useAuthContext();
+  return loginWithSuperAdmin;
 }

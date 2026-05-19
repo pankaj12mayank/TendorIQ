@@ -29,12 +29,14 @@ class PromptVersion(BaseModel):
     description: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
     is_active: bool = True
-    metrics: dict[str, Any] = Field(default_factory={
-        'usage_count': 0,
-        'success_rate': 0.0,
-        'avg_latency_ms': 0,
-        'avg_cost': 0.0,
-    })
+    metrics: dict[str, Any] = Field(
+        default_factory=lambda: {
+            'usage_count': 0,
+            'success_rate': 0.0,
+            'avg_latency_ms': 0,
+            'avg_cost': 0.0,
+        }
+    )
 
 
 class PromptTemplate(BaseModel):

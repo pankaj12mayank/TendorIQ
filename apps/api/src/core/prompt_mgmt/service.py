@@ -8,10 +8,10 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 from ..database import AsyncSession
-from .models import PromptTemplate, PromptVersion, AuditAction
+from .models import PromptTemplate, PromptTemplateVersion, PromptAuditLog, AuditAction
 from .repository import (
     PromptRepository,
-    PromptVersionRepository,
+    PromptTemplateVersionRepository,
     PromptAnalyticsRepository,
     PromptAuditRepository,
 )
@@ -97,7 +97,7 @@ class PromptManagementService:
     def __init__(self, session: AsyncSession):
         self._session = session
         self._prompt_repo = PromptRepository(session)
-        self._version_repo = PromptVersionRepository(session)
+        self._version_repo = PromptTemplateVersionRepository(session)
         self._analytics_repo = PromptAnalyticsRepository(session)
         self._audit_repo = PromptAuditRepository(session)
 
@@ -149,7 +149,7 @@ class PromptManagementService:
         request: CreateVersionRequest | CreatePromptRequest,
         actor: Optional[str] = None,
         set_active: bool = True,
-    ) -> PromptVersion:
+    ) -> PromptTemplateVersion:
         existing_versions = await self._version_repo.get_by_prompt(prompt_id)
         version_number = len(existing_versions) + 1
         version_str = f'{version_number}.0.0'
@@ -440,7 +440,7 @@ class PromptManagementService:
             'updated_at': template.updated_at.isoformat() if template.updated_at else None,
         }
 
-    def _serialize_version(self, version: PromptVersion) -> dict:
+    def _serialize_version(self, version: PromptTemplateVersion) -> dict:
         return {
             'id': str(version.id),
             'prompt_id': str(version.prompt_id),

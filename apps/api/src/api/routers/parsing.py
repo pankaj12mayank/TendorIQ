@@ -8,8 +8,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, delete, update
 
-from .dependencies.auth import CurrentUser
-from .services.document_service import document_service
+from ..dependencies.auth import CurrentUser
+from ..services.document_service import document_service
 from ...core.parsers import parser_service, ChunkingStrategy
 from ...core.storage import storage_service
 from ...core.logging import get_logger
@@ -104,7 +104,7 @@ async def parse_document(
                     end_page=ch.end_page,
                     section_path=ch.section_path,
                     tokens=ch.tokens,
-                    metadata=ch.metadata or {},
+                    metadata=ch.metadata_json or {},
                 )
                 db.add(chunk_record)
 
@@ -113,7 +113,7 @@ async def parse_document(
         await document_service.update_document(
             db, UUID(document_id), UUID(current_user.tenant_id),
             processing_status='completed',
-            metadata={**doc.metadata, 'parsed': True},
+            metadata={**(doc.metadata_json or {}), 'parsed': True},
         )
 
         return {

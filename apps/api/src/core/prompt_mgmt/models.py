@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Index,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from ..db_types import UuidCol
 from sqlalchemy.orm import relationship
 
 from ..database import Base
@@ -26,8 +26,8 @@ from ..database import Base
 class PromptTemplate(Base):
     __tablename__ = 'prompt_templates'
 
-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id = Column(PGUUID(as_uuid=True), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=uuid4)
+    tenant_id = Column(UuidCol, nullable=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     prompt_type = Column(String(50), nullable=False, index=True)
@@ -41,7 +41,7 @@ class PromptTemplate(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    versions = relationship('PromptVersion', back_populates='template', cascade='all, delete-orphan')
+    versions = relationship('PromptTemplateVersion', back_populates='template', cascade='all, delete-orphan')
     analytics = relationship('PromptAnalytics', back_populates='prompt', cascade='all, delete-orphan')
     audit_logs = relationship('PromptAuditLog', back_populates='prompt', cascade='all, delete-orphan')
 
@@ -50,11 +50,11 @@ class PromptTemplate(Base):
     )
 
 
-class PromptVersion(Base):
-    __tablename__ = 'prompt_versions'
+class PromptTemplateVersion(Base):
+    __tablename__ = 'prompt_template_versions'
 
-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    prompt_id = Column(PGUUID(as_uuid=True), ForeignKey('prompt_templates.id', ondelete='CASCADE'), nullable=False, index=True)
+    id = Column(UuidCol, primary_key=True, default=uuid4)
+    prompt_id = Column(UuidCol, ForeignKey('prompt_templates.id', ondelete='CASCADE'), nullable=False, index=True)
     version = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
     system_message = Column(Text, nullable=True)
@@ -84,10 +84,10 @@ class PromptVersion(Base):
 class PromptAnalytics(Base):
     __tablename__ = 'prompt_analytics'
 
-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    prompt_id = Column(PGUUID(as_uuid=True), ForeignKey('prompt_templates.id', ondelete='CASCADE'), nullable=False, index=True)
-    version_id = Column(PGUUID(as_uuid=True), ForeignKey('prompt_versions.id', ondelete='CASCADE'), nullable=False)
-    tenant_id = Column(PGUUID(as_uuid=True), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=uuid4)
+    prompt_id = Column(UuidCol, ForeignKey('prompt_templates.id', ondelete='CASCADE'), nullable=False, index=True)
+    version_id = Column(UuidCol, ForeignKey('prompt_template_versions.id', ondelete='CASCADE'), nullable=False)
+    tenant_id = Column(UuidCol, nullable=True, index=True)
     request_count = Column(Integer, default=0)
     success_count = Column(Integer, default=0)
     failure_count = Column(Integer, default=0)
@@ -102,7 +102,7 @@ class PromptAnalytics(Base):
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     prompt = relationship('PromptTemplate', back_populates='analytics')
-    version = relationship('PromptVersion', back_populates='analytics')
+    version = relationship('PromptTemplateVersion', back_populates='analytics')
 
     __table_args__ = (
         UniqueConstraint('prompt_id', 'version_id', 'tenant_id', name='unique_prompt_version_tenant'),
@@ -112,10 +112,10 @@ class PromptAnalytics(Base):
 class PromptAuditLog(Base):
     __tablename__ = 'prompt_audit_log'
 
-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    prompt_id = Column(PGUUID(as_uuid=True), ForeignKey('prompt_templates.id', ondelete='SET NULL'), nullable=True, index=True)
-    version_id = Column(PGUUID(as_uuid=True), ForeignKey('prompt_versions.id', ondelete='SET NULL'), nullable=True, index=True)
-    tenant_id = Column(PGUUID(as_uuid=True), nullable=True, index=True)
+    id = Column(UuidCol, primary_key=True, default=uuid4)
+    prompt_id = Column(UuidCol, ForeignKey('prompt_templates.id', ondelete='SET NULL'), nullable=True, index=True)
+    version_id = Column(UuidCol, ForeignKey('prompt_template_versions.id', ondelete='SET NULL'), nullable=True, index=True)
+    tenant_id = Column(UuidCol, nullable=True, index=True)
     action = Column(String(50), nullable=False, index=True)
     actor = Column(String(255), nullable=True, index=True)
     changes = Column(JSON, nullable=True)
@@ -126,7 +126,7 @@ class PromptAuditLog(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
 
     prompt = relationship('PromptTemplate', back_populates='audit_logs')
-    version = relationship('PromptVersion', back_populates='audit_logs')
+    version = relationship('PromptTemplateVersion', back_populates='audit_logs')
 
 
 class AuditAction:

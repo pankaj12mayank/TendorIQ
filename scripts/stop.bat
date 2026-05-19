@@ -16,12 +16,8 @@ echo [2/4] Stopping backend...
 taskkill /f /im python.exe /fi "windowtitle eq *uvicorn*" 2>nul
 taskkill /f /im python.exe /fi "windowtitle eq *tenderiq*" 2>nul
 
-:: Kill Redis if running as daemon
-echo [3/4] Stopping Redis...
-taskkill /f /im redis-server.exe 2>nul
-
 :: Clean up
-echo [4/4] Cleaning up...
+echo [3/3] Cleaning up...
 if exist "%~dp0.pid" del "%~dp0.pid"
 
 echo.

@@ -1,9 +1,15 @@
 from .base import (
-    BaseParser, ParsedDocument, DocumentMetadata,
-    PageSegment, Section, TextChunk, ChunkConfig,
-    ChunkingStrategy, ChunkingResult,
-    ParsingError, ValidationError, UnsupportedFormatError,
+    BaseParser,
+    ParsedDocument,
+    DocumentMetadata,
+    PageSegment,
+    Section,
+    TextChunk,
+    ParsingError,
+    ValidationError,
+    UnsupportedFormatError,
 )
+from .chunking import ChunkConfig, ChunkingStrategy, ChunkingResult
 from .pdf_parser import pdf_parser, PDFParser
 from .docx_parser import docx_parser, DOCXParser
 from .chunking import document_chunker, DocumentChunker

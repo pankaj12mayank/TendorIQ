@@ -2,9 +2,7 @@
 
 from enum import Enum
 from typing import Optional
-from pydantic import Field
-
-from ..config import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProviderType(str, Enum):
