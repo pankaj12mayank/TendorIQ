@@ -1,9 +1,20 @@
 """Payment Gateway Integration - Stripe & Razorpay"""
 
 import logging
-import stripe
-import razorpay
 from typing import Optional, Dict, Any
+
+# Import payment libraries - optional, will work if installed
+try:
+    import stripe
+    STRIPE_AVAILABLE = True
+except ImportError:
+    STRIPE_AVAILABLE = False
+
+try:
+    import razorpay
+    RAZORPAY_AVAILABLE = True
+except ImportError:
+    RAZORPAY_AVAILABLE = False
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
@@ -22,13 +33,15 @@ class PaymentGateway:
     """Payment gateway manager"""
     
     def __init__(self):
-        self.stripe_enabled = bool(settings.STRIPE_SECRET_KEY)
-        self.razorpay_enabled = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET)
+        self.stripe_enabled = bool(settings.STRIPE_SECRET_KEY and STRIPE_AVAILABLE)
+        self.razorpay_enabled = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET and RAZORPAY_AVAILABLE)
         
         # Initialize Stripe
         if self.stripe_enabled:
             stripe.api_key = settings.STRIPE_SECRET_KEY
             logger.info("Stripe payment gateway initialized")
+        else:
+            logger.warning("Stripe not available - install stripe package")
         
         # Initialize Razorpay
         if self.razorpay_enabled:
@@ -36,6 +49,8 @@ class PaymentGateway:
                 auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
             )
             logger.info("Razorpay payment gateway initialized")
+        else:
+            logger.warning("Razorpay not available - install razorpay package")
     
     def get_available_gateways(self) -> Dict[str, bool]:
         return {

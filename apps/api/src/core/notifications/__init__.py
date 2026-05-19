@@ -6,7 +6,12 @@ from datetime import datetime
 from uuid import UUID
 from enum import Enum
 
-from ..email.service import EmailService
+try:
+    from ..email.service import EmailService
+    EMAIL_SERVICE_AVAILABLE = True
+except ImportError:
+    EMAIL_SERVICE_AVAILABLE = False
+    EmailService = None
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +128,7 @@ class NotificationService:
     """Send notifications via email and toast"""
     
     def __init__(self):
-        self.email_service = EmailService()
+        self.email_service = EmailService() if EMAIL_SERVICE_AVAILABLE else None
     
     def get_human_message(self, notification_type: NotificationType, **kwargs) -> Dict[str, str]:
         """Get human-readable notification message"""
