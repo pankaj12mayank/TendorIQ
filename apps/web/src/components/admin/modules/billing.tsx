@@ -1,6 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useBillingApi } from '@/hooks/use-admin';
+import { LoadingState } from '@/components/ui/loading-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,12 +20,24 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react';
-import { BillingPlan, Subscription, Invoice } from '../types';
-import { MOCK_BILLING_PLANS, MOCK_SUBSCRIPTIONS, MOCK_INVOICES } from '../constants';
+import { BillingPlan, Subscription } from '../types';
 import { cn } from '@/lib/utils';
 
 export function Billing() {
+  const { plans, subscriptions, isLoading, error, fetchBilling } = useBillingApi();
   const [selectedPlan, setSelectedPlan] = useState<string>('professional');
+
+  useEffect(() => {
+    void fetchBilling();
+  }, [fetchBilling]);
+
+  if (isLoading && plans.length === 0) {
+    return <LoadingState message="Loading billing..." />;
+  }
+
+  if (error) {
+    return <ErrorState title="Billing unavailable" message={error} onRetry={() => void fetchBilling()} />;
+  }
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -32,8 +47,16 @@ export function Billing() {
     });
   };
 
-  const currentSubscription = MOCK_SUBSCRIPTIONS[0];
-  const currentPlan = MOCK_BILLING_PLANS.find((p) => p.id === currentSubscription.planId);
+  const currentSubscription = (subscriptions[0] as Subscription | undefined) ?? {
+    id: 'none',
+    userId: '',
+    planId: 'starter',
+    status: 'active',
+    currentPeriodStart: new Date().toISOString(),
+    currentPeriodEnd: new Date().toISOString(),
+    cancelAtPeriodEnd: false,
+  };
+  const currentPlan = plans.find((p) => p.id === currentSubscription.planId) ?? plans[0];
 
   return (
     <div className="space-y-6">
@@ -165,7 +188,7 @@ export function Billing() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
-                {MOCK_BILLING_PLANS.map((plan) => (
+                {plans.map((plan) => (
                   <div
                     key={plan.id}
                     className={cn(
@@ -219,7 +242,7 @@ export function Billing() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {MOCK_INVOICES.map((invoice) => (
+                {[].map((invoice: { id: string; description: string; amount: number; status: string; createdAt: string }) => (
                   <div key={invoice.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-4">
                       <div className={cn(

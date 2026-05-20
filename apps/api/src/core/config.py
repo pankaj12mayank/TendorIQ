@@ -176,6 +176,14 @@ class Settings(BaseSettings):
     VERCEL_DEPLOYMENT_URL: str = ''
 
     # ===========================================
+    # PAYMENTS (optional — configure in Super Admin / billing)
+    # ===========================================
+    STRIPE_SECRET_KEY: str = ''
+    STRIPE_WEBHOOK_SECRET: str = ''
+    RAZORPAY_KEY_ID: str = ''
+    RAZORPAY_KEY_SECRET: str = ''
+
+    # ===========================================
     # INTERNAL
     # ===========================================
     INTERNAL_API_KEY: str = ''

@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQueueApi } from '@/hooks/use-admin';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +22,6 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { QueueJob } from '../types';
-import { MOCK_QUEUE_JOBS } from '../constants';
 import { cn } from '@/lib/utils';
 
 const JOB_STATUS_COLORS = {
@@ -39,7 +40,7 @@ const PRIORITY_COLORS = {
 };
 
 export function QueueMonitoring() {
-  const [jobs, setJobs] = useState<QueueJob[]>(MOCK_QUEUE_JOBS);
+  const { jobs, isLoading, refreshJobs, retryJob, cancelJob } = useQueueApi();
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -66,11 +67,15 @@ export function QueueMonitoring() {
     });
   };
 
-  const retryJob = (id: string) => {
-    setJobs(jobs.map((j) =>
-      j.id === id ? { ...j, status: 'pending' as const, attempts: 0, error: undefined } : j
-    ));
-  };
+  useEffect(() => {
+    void refreshJobs();
+    const t = setInterval(() => void refreshJobs(), 15000);
+    return () => clearInterval(t);
+  }, [refreshJobs]);
+
+  if (isLoading && jobs.length === 0) {
+    return <LoadingState message="Loading queue..." />;
+  }
 
   return (
     <div className="space-y-6">
@@ -79,7 +84,7 @@ export function QueueMonitoring() {
           <h2 className="text-2xl font-bold">Queue Monitoring</h2>
           <p className="text-muted-foreground">Monitor and manage background jobs</p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => void refreshJobs()}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
         </Button>
@@ -187,7 +192,7 @@ export function QueueMonitoring() {
                   </div>
                   <div className="flex items-center gap-2">
                     {job.status === 'failed' && job.retryable && (
-                      <Button variant="outline" size="sm" onClick={() => retryJob(job.id)}>
+                      <Button variant="outline" size="sm" onClick={() => void retryJob(job.id)}>
                         <RotateCcw className="w-4 h-4 mr-2" />
                         Retry
                       </Button>

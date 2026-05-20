@@ -17,11 +17,32 @@ function Write-Log($level, $msg) {
     Add-Content -Path $LogFile -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $line"
 }
 
+function Test-ApiHealth {
+    param([int]$Port)
+    try {
+        $h = Invoke-RestMethod "http://127.0.0.1:$Port/health" -TimeoutSec 3
+        return ($h.status -eq 'healthy')
+    } catch {
+        return $false
+    }
+}
+
 function Stop-ListenPort($port) {
+    $pids = @()
     Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
+        ForEach-Object { if ($_.OwningProcess -gt 0) { $pids += $_.OwningProcess } }
+    if (-not $pids.Count) {
+        netstat -ano | Select-String ":\s*$port\s+.*LISTENING" | ForEach-Object {
+            if ($_ -match '\s+(\d+)\s*$') { $pids += [int]$Matches[1] }
         }
+    }
+    foreach ($pid in ($pids | Select-Object -Unique)) {
+        Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        taskkill /PID $pid /F 2>$null | Out-Null
+    }
+    Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match "uvicorn\s+src\.main:app.*--port\s+$port" } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
 function Remove-JsonBom($path) {
@@ -133,14 +154,28 @@ function Sync-WebEnvLocal {
 }
 
 function Resolve-ApiPort {
+    # Reuse a healthy API already listening (common after a previous run.bat)
+    foreach ($port in @(8000, 8002, 8001)) {
+        if (Test-ApiHealth -Port $port) {
+            Write-Log "INFO" "API already healthy on http://localhost:$port - reusing it."
+            return @{ Port = $port; AlreadyRunning = $true }
+        }
+    }
+
     Stop-ListenPort 8000
     Start-Sleep -Seconds 1
-    if (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue) {
-        Write-Log "WARN" "Port 8000 still in use (stale process). Using port 8002 for API."
-        Stop-ListenPort 8002
-        return 8002
+    if (-not (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)) {
+        return @{ Port = 8000; AlreadyRunning = $false }
     }
-    return 8000
+
+    Write-Log "WARN" "Port 8000 busy but not healthy - trying port 8002."
+    Stop-ListenPort 8002
+    Start-Sleep -Seconds 1
+    if (-not (Get-NetTCPConnection -LocalPort 8002 -State Listen -ErrorAction SilentlyContinue)) {
+        return @{ Port = 8002; AlreadyRunning = $false }
+    }
+
+    throw "Ports 8000 and 8002 are in use and not responding to /health. Run: run.bat stop"
 }
 
 function Is-Truthy($value) {
@@ -153,6 +188,20 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Forc
 Set-Content -Path $LogFile -Value "TenderIQ startup $(Get-Date)`n"
 
 Write-Log "INFO" "========== TenderIQ Startup =========="
+
+$stopScript = Join-Path $PSScriptRoot "tenderiq-stop.ps1"
+if (Test-Path $stopScript) {
+    Write-Log "INFO" "Stopping any previous TenderIQ processes..."
+    & $stopScript 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+}
+
+$nextDir = Join-Path $WebDir ".next"
+if (Test-Path $nextDir) {
+    Write-Log "INFO" "Clearing Next.js cache (.next)..."
+    Remove-Item -Recurse -Force $nextDir -ErrorAction SilentlyContinue
+}
+
 $forceSetup = Is-Truthy $env:TENDERIQ_FORCE_SETUP
 if ($forceSetup) {
     Write-Log "INFO" "Running in full setup mode (forced dependency install)"
@@ -233,7 +282,9 @@ Pop-Location
 Write-Log "INFO" "Next.js verification OK"
 
 Stop-ListenPort 3000
-$apiPort = Resolve-ApiPort
+$apiResolved = Resolve-ApiPort
+$apiPort = $apiResolved.Port
+$apiAlreadyRunning = $apiResolved.AlreadyRunning
 Sync-WebEnvLocal -ApiPort $apiPort
 
 function Get-LoginEnvBootstrap {
@@ -262,23 +313,23 @@ function Get-LoginEnvBootstrap {
     return $bootstrap
 }
 
-Write-Log "INFO" "Starting backend on http://localhost:$apiPort ..."
-$apiLog = Join-Path $LogDir "api.log"
-$rootEnv = Join-Path $Root ".env"
-$loginEnv = Get-LoginEnvBootstrap -EnvPath $rootEnv
-$apiCmd = "Set-Location '$ApiDir'; $loginEnv; & '$VenvPython' -m uvicorn src.main:app --host 0.0.0.0 --port $apiPort --reload *>> '$apiLog'"
-$apiProc = Start-Process powershell -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $apiCmd) -PassThru
-
-Start-Sleep -Seconds 8
-
-$webpackCache = Join-Path $WebDir ".next\cache\webpack"
-if (Test-Path $webpackCache) {
-    Write-Log "INFO" "Clearing webpack dev cache (prevents chunk load errors)..."
-    Remove-Item -Recurse -Force $webpackCache -ErrorAction SilentlyContinue
-}
-if ($env:TENDERIQ_CLEAR_NEXT_CACHE -eq "1") {
-    Write-Log "INFO" "Clearing full Next.js cache (.next)..."
-    Remove-Item -Recurse -Force (Join-Path $WebDir ".next") -ErrorAction SilentlyContinue
+$apiProc = $null
+if ($apiAlreadyRunning) {
+    Write-Log "INFO" "Backend already running on http://localhost:$apiPort"
+} else {
+    Write-Log "INFO" "Starting backend on http://localhost:$apiPort ..."
+    $apiLog = Join-Path $LogDir "api.log"
+    $rootEnv = Join-Path $Root ".env"
+    $loginEnv = Get-LoginEnvBootstrap -EnvPath $rootEnv
+    $reloadFlag = if ($env:TENDERIQ_UVICORN_RELOAD -eq '1') { ' --reload' } else { '' }
+    $apiCmd = @"
+`$ErrorActionPreference = 'Continue'
+Set-Location '$ApiDir'
+$loginEnv
+& '$VenvPython' -m uvicorn src.main:app --host 0.0.0.0 --port $apiPort$reloadFlag 2>&1 | Out-File -FilePath '$apiLog' -Append -Encoding utf8
+"@
+    $apiProc = Start-Process powershell -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $apiCmd) -PassThru
+    Start-Sleep -Seconds 10
 }
 
 Write-Log "INFO" "Starting frontend on http://localhost:3000 ..."
@@ -287,15 +338,16 @@ $webCmd = "Set-Location '$Root'; pnpm --filter @tendoriq/web run dev *>> '$webLo
 $webProc = Start-Process powershell -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $webCmd) -PassThru
 
 @{
-    api_pid = $apiProc.Id
+    api_pid = if ($apiProc) { $apiProc.Id } else { $null }
     web_pid = $webProc.Id
     api_port = $apiPort
+    api_reused = $apiAlreadyRunning
     started_at = (Get-Date).ToString("o")
 } | ConvertTo-Json | Set-Content $PidFile -Encoding utf8
 
-$apiOk = $false
+$apiOk = $apiAlreadyRunning
 $webOk = $false
-for ($i = 0; $i -lt 15; $i++) {
+for ($i = 0; $i -lt 25; $i++) {
     Start-Sleep -Seconds 2
     if (-not $apiOk) {
         try {

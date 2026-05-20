@@ -68,9 +68,9 @@ export const roleNavGroups: Record<
     {
       label: 'Platform',
       items: [
-        { name: 'Admin Console', href: '/dashboard/admin', icon: Shield },
-        { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-        { name: 'Queue', href: '/dashboard/admin', icon: ListTodo },
+        { name: 'Admin Console', href: '/dashboard/admin?module=users', icon: Shield },
+        { name: 'Analytics', href: '/dashboard/admin?module=analytics', icon: BarChart3 },
+        { name: 'Queue', href: '/dashboard/admin?module=queue', icon: ListTodo },
       ],
     },
   ],
@@ -89,8 +89,7 @@ export const roleNavGroups: Record<
       items: [
         { name: 'Team', href: '/dashboard/organizations', icon: Users },
         { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
-        { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+        { name: 'Usage', href: '/dashboard/usage', icon: BarChart3 },
       ],
     },
   ],
@@ -102,7 +101,7 @@ export const roleNavGroups: Record<
         { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
         { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
         { name: 'Upload', href: '/dashboard/upload', icon: Upload },
-        { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+        { name: 'Usage', href: '/dashboard/usage', icon: BarChart3 },
       ],
     },
   ],

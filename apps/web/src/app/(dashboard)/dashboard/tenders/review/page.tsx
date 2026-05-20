@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useReviewStore, useReviewSections } from '@/components/review/store';
+import { useReviewStore } from '@/components/review/store';
+import { useReviewSections } from '@/hooks/use-review';
 import { useReviewApi, useApprovalWorkflow, useEditWorkflow } from '@/hooks/use-review';
 import {
   ReviewSummary,

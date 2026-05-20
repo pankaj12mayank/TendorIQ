@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useFailedJobsApi } from '@/hooks/use-admin';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +23,6 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { FailedJob } from '../types';
-import { MOCK_FAILED_JOBS } from '../constants';
 import { cn } from '@/lib/utils';
 
 const QUEUE_COLORS = {
@@ -32,7 +33,7 @@ const QUEUE_COLORS = {
 };
 
 export function FailedJobs() {
-  const [jobs, setJobs] = useState<FailedJob[]>(MOCK_FAILED_JOBS);
+  const { jobs, isLoading, fetchFailedJobs, retryJob, deleteJob, clearAll, retryAll } = useFailedJobsApi();
   const [searchQuery, setSearchQuery] = useState('');
   const [queueFilter, setQueueFilter] = useState<string | null>(null);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
@@ -60,21 +61,13 @@ export function FailedJobs() {
     });
   };
 
-  const retryJob = (id: string) => {
-    setJobs(jobs.filter((j) => j.id !== id));
-  };
+  useEffect(() => {
+    void fetchFailedJobs();
+  }, [fetchFailedJobs]);
 
-  const retryAll = () => {
-    setJobs(jobs.filter((j) => !j.retryable));
-  };
-
-  const deleteJob = (id: string) => {
-    setJobs(jobs.filter((j) => j.id !== id));
-  };
-
-  const clearAll = () => {
-    setJobs([]);
-  };
+  if (isLoading && jobs.length === 0) {
+    return <LoadingState message="Loading failed jobs..." />;
+  }
 
   return (
     <div className="space-y-6">
@@ -84,11 +77,11 @@ export function FailedJobs() {
           <p className="text-muted-foreground">Manage and retry failed background jobs</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={retryAll} disabled={stats.retryable === 0}>
+          <Button variant="outline" onClick={() => void retryAll()} disabled={stats.retryable === 0}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Retry All ({stats.retryable})
           </Button>
-          <Button variant="destructive" onClick={clearAll} disabled={jobs.length === 0}>
+          <Button variant="destructive" onClick={() => void clearAll()} disabled={jobs.length === 0}>
             <Trash2 className="w-4 h-4 mr-2" />
             Clear All
           </Button>
@@ -201,7 +194,7 @@ export function FailedJobs() {
                     </div>
                     <div className="flex items-center gap-2">
                       {job.retryable && (
-                        <Button variant="outline" size="sm" onClick={() => retryJob(job.id)}>
+                        <Button variant="outline" size="sm" onClick={() => void retryJob(job.id)}>
                           <RotateCcw className="w-4 h-4 mr-2" />
                           Retry
                         </Button>
@@ -213,7 +206,7 @@ export function FailedJobs() {
                           <ChevronRight className="w-4 h-4" />
                         )}
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => deleteJob(job.id)}>
+                      <Button variant="ghost" size="sm" onClick={() => void deleteJob(job.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>

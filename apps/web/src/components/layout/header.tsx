@@ -3,8 +3,11 @@
 import Link from 'next/link';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { useState, useCallback, useMemo } from 'react';
 
 import { useCurrentUser, useSignOut } from '@/hooks/use-auth';
+import { isSuperAdmin } from '@/lib/permissions';
+import { SignOutDialog } from '@/components/auth/sign-out-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,13 +18,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTenantStore } from '@/stores/tenant-store';
-import { useCallback, useMemo } from 'react';
 
 export function Header() {
   const user = useCurrentUser();
   const signOut = useSignOut();
   const { theme, setTheme } = useTheme();
   const { currentOrganization, setCurrentOrganization, organizations } = useTenantStore();
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   const initials = useMemo(() => {
     if (!user?.name) return 'U';
@@ -33,14 +36,18 @@ export function Header() {
       .slice(0, 2);
   }, [user?.name]);
 
-  const handleSignOut = useCallback(() => {
-    signOut();
+  const settingsHref = isSuperAdmin(user?.role)
+    ? '/dashboard/admin?module=ai_settings'
+    : '/dashboard/settings';
+
+  const handleConfirmSignOut = useCallback(async () => {
+    await signOut();
   }, [signOut]);
 
   return (
     <header className="sticky-header-shadow flex h-16 items-center justify-between px-6">
       <div className="flex items-center gap-4">
-        {organizations.length > 1 && (
+        {organizations.length > 1 && !isSuperAdmin(user?.role) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="h-9 w-48 justify-between font-normal">
@@ -94,18 +101,27 @@ export function Header() {
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/dashboard/settings">Settings</Link>
+              <Link href={settingsHref}>Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/dashboard/settings/profile">Profile</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              onClick={() => setSignOutOpen(true)}
+              className="text-destructive focus:text-destructive"
+            >
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <SignOutDialog
+        open={signOutOpen}
+        onOpenChange={setSignOutOpen}
+        onConfirm={handleConfirmSignOut}
+      />
     </header>
   );
 }

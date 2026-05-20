@@ -1,26 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, LayoutDashboard, FileText, Briefcase, Users, BarChart3, Settings } from 'lucide-react';
+import {
+  Menu,
+  X,
+  LayoutDashboard,
+  FileText,
+  Briefcase,
+  Users,
+  BarChart3,
+  CreditCard,
+  Shield,
+  ListTodo,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useSignOut } from '@/hooks/use-auth';
+import { useSignOut, useCurrentUser } from '@/hooks/use-auth';
+import { isSuperAdmin } from '@/lib/permissions';
+import { SignOutDialog } from '@/components/auth/sign-out-dialog';
 
-const mobileNavigation = [
+const tenantNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
   { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
-  { name: 'Organizations', href: '/dashboard/organizations', icon: Users },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+  { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
+  { name: 'Usage', href: '/dashboard/usage', icon: BarChart3 },
+];
+
+const superAdminNavigation = [
+  { name: 'Admin Console', href: '/dashboard/admin?module=users', icon: Shield },
+  { name: 'Analytics', href: '/dashboard/admin?module=analytics', icon: BarChart3 },
+  { name: 'Queue', href: '/dashboard/admin?module=queue', icon: ListTodo },
 ];
 
 export function MobileNav() {
   const [isOpen, setIsOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
   const pathname = usePathname();
   const signOut = useSignOut();
+  const user = useCurrentUser();
+
+  const navigation = useMemo(
+    () => (isSuperAdmin(user?.role) ? superAdminNavigation : tenantNavigation),
+    [user?.role]
+  );
 
   return (
     <div className="lg:hidden">
@@ -43,8 +68,10 @@ export function MobileNav() {
               </Link>
             </div>
             <nav className="space-y-1 p-4">
-              {mobileNavigation.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              {navigation.map((item) => {
+                const base = item.href.split('?')[0];
+                const isActive =
+                  pathname === base || (base !== '/dashboard' && pathname.startsWith(`${base}/`));
                 return (
                   <Link
                     key={item.name}
@@ -66,15 +93,17 @@ export function MobileNav() {
             <div className="absolute bottom-0 w-full border-t p-4">
               <Button
                 variant="ghost"
-                className="w-full justify-start"
-                onClick={() => signOut()}
+                className="w-full justify-start text-destructive"
+                onClick={() => setSignOutOpen(true)}
               >
-                Sign Out
+                Sign out
               </Button>
             </div>
           </div>
         </>
       )}
+
+      <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} onConfirm={signOut} />
     </div>
   );
 }

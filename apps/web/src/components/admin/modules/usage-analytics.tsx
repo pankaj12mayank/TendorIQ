@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
+import { useAnalyticsApi } from '@/hooks/use-analytics';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +22,6 @@ import {
   ArrowDownRight,
 } from 'lucide-react';
 import { UsageMetric } from '../types';
-import { MOCK_USAGE_METRICS, ANALYTICS_CARDS } from '../constants';
 import { cn } from '@/lib/utils';
 
 interface SparklineProps {
@@ -57,9 +58,11 @@ function Sparkline({ data, color = '#3b82f6', height = 40 }: SparklineProps) {
 }
 
 export function UsageAnalytics() {
-  const [timeRange, setTimeRange] = useState('7d');
-  const [metrics] = useState(ANALYTICS_CARDS);
-  const usageData = MOCK_USAGE_METRICS;
+  const { metrics: usageData, cards, isLoading, timeRange, setTimeRange, fetchMetrics, exportReport } = useAnalyticsApi();
+
+  if (isLoading && usageData.length === 0) {
+    return <LoadingState message="Loading analytics..." />;
+  }
 
   const totalApiCalls = usageData.reduce((sum, d) => sum + d.apiCalls, 0);
   const totalDocuments = usageData.reduce((sum, d) => sum + d.documentsProcessed, 0);
@@ -89,11 +92,11 @@ export function UsageAnalytics() {
               <SelectItem value="1y">Last year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => void exportReport('json')}>
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => void fetchMetrics()}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -101,7 +104,7 @@ export function UsageAnalytics() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {metrics.map((metric, idx) => (
+        {cards.map((metric, idx) => (
           <Card key={idx}>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">

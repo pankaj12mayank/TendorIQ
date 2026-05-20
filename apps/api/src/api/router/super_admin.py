@@ -79,7 +79,7 @@ def create_auth_token(email: str, role: str, sub: Optional[str] = None) -> str:
         'role': role,
         'type': 'access_token',
         'iat': datetime.utcnow().timestamp(),
-        'exp': (datetime.utcnow() + timedelta(days=7)).timestamp(),
+        'exp': (datetime.utcnow() + timedelta(hours=24)).timestamp(),
     }
     return jwt.encode(payload, get_settings().JWT_SECRET, algorithm='HS256')
 

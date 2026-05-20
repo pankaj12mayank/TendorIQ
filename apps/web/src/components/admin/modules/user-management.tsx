@@ -1,6 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAdminUsersApi } from '@/hooks/use-admin';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,7 +39,8 @@ import { ROLE_COLORS, STATUS_COLORS } from '../constants';
 import { cn } from '@/lib/utils';
 
 export function UserManagement() {
-  const { users, pagination, searchQuery, selectedItems, setSearchQuery, toggleSelectItem, selectAllItems, deleteUser } = useAdminStore();
+  const { users, isLoading, fetchUsers, deleteUser } = useAdminUsersApi();
+  const { pagination, searchQuery, selectedItems, setSearchQuery, toggleSelectItem, selectAllItems } = useAdminStore();
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
@@ -55,6 +59,14 @@ export function UserManagement() {
       year: 'numeric',
     });
   };
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
+
+  if (isLoading && users.length === 0) {
+    return <LoadingState message="Loading users..." />;
+  }
 
   const formatLastActive = (dateStr: string) => {
     const date = new Date(dateStr);

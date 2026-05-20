@@ -9,8 +9,7 @@ export function AppClerkProvider({ children }: { children: ReactNode }) {
   const clerkEnabled = isClerkConfigured();
   const ClerkProvider = useLazyClientModule<{ children: ReactNode; appearance?: object }>(
     clerkEnabled,
-    () => import('@clerk/nextjs'),
-    'ClerkProvider'
+    () => import('@clerk/nextjs').then((mod) => ({ default: mod.ClerkProvider }))
   );
 
   if (!clerkEnabled || !ClerkProvider) {

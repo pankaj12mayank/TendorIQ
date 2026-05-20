@@ -12,25 +12,33 @@ import {
 } from '@/lib/auth-session';
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { isProtectedPath } from '@/lib/clerk-config';
+import { getRolePermissions } from '@/lib/permissions';
+import { toast } from 'sonner';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
 
 function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: string) {
   const router = useRouter();
   const pathname = usePathname();
-
   useEffect(() => {
     if (isLoading) return;
 
     if (!isAuthenticated && isProtectedPath(pathname)) {
       const url = new URL('/sign-in', window.location.origin);
-      url.searchParams.set('redirect_url', pathname);
+      const redirect = pathname + window.location.search;
+      url.searchParams.set('redirect_url', redirect);
       router.replace(url.toString());
       return;
     }
 
     if (isAuthenticated && (pathname === '/sign-in' || pathname === '/sign-up')) {
-      router.replace(getPostLoginPath(role));
+      const params = new URLSearchParams(window.location.search);
+      const redirectUrl = params.get('redirect_url');
+      if (redirectUrl && redirectUrl.startsWith('/dashboard')) {
+        router.replace(redirectUrl);
+      } else {
+        router.replace(getPostLoginPath(role));
+      }
     }
   }, [isAuthenticated, isLoading, pathname, router, role]);
 }
@@ -42,17 +50,24 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  const stored = typeof window !== 'undefined' ? getStoredSession() : null;
+
   const authUser: AuthUser | null = user
     ? {
         id: user.id,
         email: user.emailAddresses[0]?.emailAddress || '',
         name: user.fullName || user.username || '',
         imageUrl: user.imageUrl,
-        role: user.publicMetadata?.role as string | undefined,
+        role: (user.publicMetadata?.role as string | undefined) ?? stored?.user.role,
+        permissions: getRolePermissions(
+          (user.publicMetadata?.role as string | undefined) ?? stored?.user.role
+        ),
       }
-    : null;
+    : stored?.user ?? null;
 
-  useRouteGuard(isLoaded && !!isSignedIn, !isLoaded, authUser?.role);
+  const isAuthenticated = (isLoaded && !!isSignedIn) || !!stored;
+
+  useRouteGuard(isAuthenticated, !isLoaded, authUser?.role);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !authUser) return;
@@ -94,8 +109,10 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
         email: data.user?.email ?? email,
         name: data.user?.name ?? email.split('@')[0] ?? 'User',
         role,
+        permissions: getRolePermissions(role),
       };
       setStoredSession(data.token, sessionUser);
+      toast.success('Signed in successfully');
       router.push(getPostLoginPath(role));
     },
     [router]
@@ -103,14 +120,14 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      isAuthenticated: isLoaded && !!isSignedIn,
+      isAuthenticated,
       isLoading: !isLoaded,
       user: authUser,
       signOut,
       getToken,
       loginWithCredentials,
     }),
-    [isLoaded, isSignedIn, authUser, signOut, getToken, loginWithCredentials]
+    [isAuthenticated, isLoaded, authUser, signOut, getToken, loginWithCredentials]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

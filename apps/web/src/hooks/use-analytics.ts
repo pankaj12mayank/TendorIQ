@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
+import { api } from '@/lib/api-client';
 import { useAnalyticsStore } from '@/components/admin/store';
 import { UsageMetric, AnalyticsCard } from '@/components/admin/types';
-import { MOCK_USAGE_METRICS, ANALYTICS_CARDS } from '@/components/admin/constants';
+import { ANALYTICS_CARDS } from '@/components/admin/constants';
 
 interface UseAnalyticsApiReturn {
   metrics: UsageMetric[];
@@ -16,44 +17,80 @@ interface UseAnalyticsApiReturn {
 }
 
 export function useAnalyticsApi(): UseAnalyticsApiReturn {
-  const { metrics, sparklineData, setMetrics } = useAnalyticsStore();
-  const [allMetrics] = useState<UsageMetric[]>(MOCK_USAGE_METRICS);
-  const [cards] = useState<AnalyticsCard[]>(ANALYTICS_CARDS);
+  const { metrics: storeMetrics, setMetrics } = useAnalyticsStore();
+  const [allMetrics, setAllMetrics] = useState<UsageMetric[]>([]);
+  const [cards, setCards] = useState<AnalyticsCard[]>(ANALYTICS_CARDS);
   const [isLoading, setLoading] = useState(false);
   const [timeRange, setTimeRange] = useState('7d');
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setLoading(false);
-  }, []);
+    try {
+      const res = await api.get<{
+        totalUsers: number;
+        apiCallsToday: number;
+        activeJobs: number;
+        errorRate: number;
+        monthlyCost: number;
+        usage: UsageMetric[];
+      }>('/api/v1/admin/platform/analytics/summary');
 
-  const exportReport = useCallback(async (format: 'csv' | 'json' | 'pdf') => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const data = format === 'json' 
-      ? JSON.stringify({ metrics: allMetrics, cards }, null, 2)
-      : JSON.stringify({ metrics: allMetrics, cards });
-    
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `analytics-report.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    setLoading(false);
-  }, [allMetrics]);
+      setMetrics({
+        totalUsers: res.totalUsers,
+        activeDocuments: 0,
+        apiCallsToday: res.apiCallsToday,
+        monthlyCost: res.monthlyCost,
+      });
 
-  const getMetricByDate = useCallback((date: string) => {
-    return allMetrics.find(m => m.date === date);
-  }, [allMetrics]);
+      setCards([
+        { title: 'Total Users', value: String(res.totalUsers), change: 0, changeType: 'increase', trend: 'up' },
+        { title: 'API Calls Today', value: String(res.apiCallsToday), change: 0, changeType: 'increase', trend: 'up' },
+        { title: 'Active Jobs', value: String(res.activeJobs), change: 0, changeType: 'increase', trend: 'up' },
+        { title: 'Monthly Cost', value: `$${res.monthlyCost}`, change: 0, changeType: 'decrease', trend: 'down' },
+      ]);
 
-  const getTotal = useCallback((field: keyof UsageMetric) => {
-    return allMetrics.reduce((sum, m) => sum + (typeof m[field] === 'number' ? m[field] as number : 0), 0);
-  }, [allMetrics]);
+      setAllMetrics(res.usage?.length ? res.usage : []);
+    } finally {
+      setLoading(false);
+    }
+  }, [setMetrics]);
+
+  useEffect(() => {
+    void fetchMetrics();
+  }, [fetchMetrics]);
+
+  const exportReport = useCallback(
+    async (format: 'csv' | 'json' | 'pdf') => {
+      setLoading(true);
+      try {
+        const data = JSON.stringify({ metrics: allMetrics, cards, summary: storeMetrics }, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `analytics-report.${format === 'pdf' ? 'json' : format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [allMetrics, cards, storeMetrics]
+  );
+
+  const getMetricByDate = useCallback(
+    (date: string) => allMetrics.find((m) => m.date === date),
+    [allMetrics]
+  );
+
+  const getTotal = useCallback(
+    (field: keyof UsageMetric) =>
+      allMetrics.reduce(
+        (sum, m) => sum + (typeof m[field] === 'number' ? (m[field] as number) : 0),
+        0
+      ),
+    [allMetrics]
+  );
 
   return {
     metrics: allMetrics,
@@ -78,31 +115,14 @@ interface UseRealtimeMetricsReturn {
 }
 
 export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
-  const [apiCalls, setApiCalls] = useState(2150);
-  const [activeJobs, setActiveJobs] = useState(12);
-  const [errorRate, setErrorRate] = useState(0.5);
-  const [avgResponseTime, setAvgResponseTime] = useState(245);
-  
-  const subscribe = useCallback(() => {
-    const interval = setInterval(() => {
-      setApiCalls(prev => prev + Math.floor(Math.random() * 10) - 3);
-      setActiveJobs(prev => Math.max(0, prev + Math.floor(Math.random() * 3) - 1));
-      setErrorRate(prev => Math.max(0, Math.min(5, prev + (Math.random() - 0.5) * 0.2)));
-      setAvgResponseTime(prev => Math.max(100, Math.min(500, prev + Math.floor(Math.random() * 40) - 20)));
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  const unsubscribe = useCallback(() => {
-  }, []);
+  const { metrics } = useAnalyticsStore();
 
   return {
-    apiCalls,
-    activeJobs,
-    errorRate,
-    avgResponseTime,
-    subscribe,
-    unsubscribe,
+    apiCalls: metrics.apiCallsToday,
+    activeJobs: 0,
+    errorRate: 0,
+    avgResponseTime: 0,
+    subscribe: () => {},
+    unsubscribe: () => {},
   };
 }

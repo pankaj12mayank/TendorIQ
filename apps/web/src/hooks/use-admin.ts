@@ -1,137 +1,122 @@
 import { useCallback, useState } from 'react';
+import { toast } from 'sonner';
+
+import { api, ApiError } from '@/lib/api-client';
 import { useAdminStore } from '@/components/admin/store';
-import { 
-  User, 
-  UserRole, 
-  BillingPlan, 
-  AIProvider, 
+import {
+  User,
+  UserRole,
+  BillingPlan,
+  AIProvider,
   PromptTemplate,
   QueueJob,
   AuditLogEntry,
   FailedJob,
-  AdminModule,
   AdvancedFilter,
-  PaginationState,
-  SortState
 } from '@/components/admin/types';
-import { 
-  MOCK_USERS, 
-  MOCK_BILLING_PLANS, 
-  MOCK_AI_PROVIDERS, 
-  MOCK_PROMPTS,
-  MOCK_QUEUE_JOBS,
-  MOCK_AUDIT_LOGS,
-  MOCK_FAILED_JOBS
-} from '@/components/admin/constants';
 
-interface UseAdminApiReturn {
-  users: User[];
-  isLoading: boolean;
-  isError: boolean;
-  error: string | null;
-  fetchUsers: (filters?: AdvancedFilter[]) => Promise<void>;
-  createUser: (user: Partial<User>) => Promise<void>;
-  updateUser: (id: string, data: Partial<User>) => Promise<void>;
-  deleteUser: (id: string) => Promise<void>;
-  updateUserRole: (id: string, role: UserRole) => Promise<void>;
-  toggleUserStatus: (id: string) => Promise<void>;
+function handleApiError(err: unknown, fallback: string) {
+  const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : fallback;
+  toast.error(msg);
+  throw err;
 }
 
-export function useAdminUsersApi(): UseAdminApiReturn {
+// --- Users ---
+
+export function useAdminUsersApi() {
   const { users, setUsers, isLoading, setLoading } = useAdminStore();
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(async (filters?: AdvancedFilter[]) => {
-    setIsError(false);
-    setError(null);
-    setLoading(true);
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      let filteredUsers = [...MOCK_USERS];
-      
-      if (filters) {
-        filters.forEach(filter => {
-          filteredUsers = filteredUsers.filter(user => {
-            const value = (user as Record<string, unknown>)[filter.field];
-            switch (filter.operator) {
-              case 'eq':
-                return value === filter.value;
-              case 'ne':
-                return value !== filter.value;
-              case 'contains':
-                return String(value).toLowerCase().includes(String(filter.value).toLowerCase());
-              case 'in':
-                return (filter.value as string[]).includes(String(value));
-              default:
-                return true;
-            }
-          });
-        });
+  const fetchUsers = useCallback(
+    async (_filters?: AdvancedFilter[]) => {
+      setIsError(false);
+      setError(null);
+      setLoading(true);
+      try {
+        const res = await api.get<{ users: User[] }>('/api/v1/admin/platform/users');
+        setUsers(res.users);
+      } catch (err) {
+        setIsError(true);
+        setError('Failed to fetch users');
+        handleApiError(err, 'Failed to fetch users');
+      } finally {
+        setLoading(false);
       }
-      
-      setUsers(filteredUsers);
-    } catch (err) {
-      setIsError(true);
-      setError('Failed to fetch users');
-    } finally {
-      setLoading(false);
-    }
-  }, [setUsers, setLoading]);
+    },
+    [setUsers, setLoading]
+  );
 
-  const createUser = useCallback(async (userData: Partial<User>) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name: userData.name || 'New User',
-      email: userData.email || 'new@example.com',
-      role: userData.role || 'viewer',
-      status: 'pending',
-      organization: userData.organization || 'Organization',
-      lastActive: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      permissions: userData.permissions || ['read'],
-    };
-    
-    useAdminStore.getState().addUser(newUser);
-    setLoading(false);
-  }, [setLoading]);
+  const createUser = useCallback(
+    async (userData: Partial<User>) => {
+      setLoading(true);
+      try {
+        const created = await api.post<User>('/api/v1/admin/platform/users', {
+          name: userData.name,
+          email: userData.email,
+          role: userData.role || 'viewer',
+          status: userData.status || 'active',
+          organization: userData.organization,
+        });
+        useAdminStore.getState().addUser(created);
+        toast.success('User created successfully');
+      } catch (err) {
+        handleApiError(err, 'Unable to create user');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading]
+  );
 
-  const updateUser = useCallback(async (id: string, data: Partial<User>) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    useAdminStore.getState().updateUser(id, data);
-    setLoading(false);
-  }, [setLoading]);
+  const updateUser = useCallback(
+    async (id: string, data: Partial<User>) => {
+      setLoading(true);
+      try {
+        const updated = await api.patch<User>(`/api/v1/admin/platform/users/${id}`, data);
+        useAdminStore.getState().updateUser(id, updated);
+        toast.success('User updated');
+      } catch (err) {
+        handleApiError(err, 'Unable to save changes');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading]
+  );
 
-  const deleteUser = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    useAdminStore.getState().deleteUser(id);
-    setLoading(false);
-  }, [setLoading]);
+  const deleteUser = useCallback(
+    async (id: string) => {
+      setLoading(true);
+      try {
+        await api.delete(`/api/v1/admin/platform/users/${id}`);
+        useAdminStore.getState().deleteUser(id);
+        toast.success('User removed');
+      } catch (err) {
+        handleApiError(err, 'Unable to delete user');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading]
+  );
 
-  const updateUserRole = useCallback(async (id: string, role: UserRole) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    useAdminStore.getState().updateUser(id, { role });
-    setLoading(false);
-  }, [setLoading]);
+  const updateUserRole = useCallback(
+    async (id: string, role: UserRole) => {
+      await updateUser(id, { role });
+    },
+    [updateUser]
+  );
 
-  const toggleUserStatus = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const user = useAdminStore.getState().users.find(u => u.id === id);
-    if (user) {
+  const toggleUserStatus = useCallback(
+    async (id: string) => {
+      const user = useAdminStore.getState().users.find((u) => u.id === id);
+      if (!user) return;
       const newStatus = user.status === 'active' ? 'inactive' : 'active';
-      useAdminStore.getState().updateUser(id, { status: newStatus });
-    }
-    setLoading(false);
-  }, [setLoading]);
+      await updateUser(id, { status: newStatus });
+    },
+    [updateUser]
+  );
 
   return {
     users,
@@ -147,334 +132,509 @@ export function useAdminUsersApi(): UseAdminApiReturn {
   };
 }
 
-interface UseBillingApiReturn {
-  plans: BillingPlan[];
-  isLoading: boolean;
-  createPlan: (plan: Partial<BillingPlan>) => Promise<void>;
-  updatePlan: (id: string, data: Partial<BillingPlan>) => Promise<void>;
-  deletePlan: (id: string) => Promise<void>;
+// --- Billing ---
+
+export function useBillingApi() {
+  const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [subscriptions, setSubscriptions] = useState<unknown[]>([]);
+  const [isLoading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchBilling = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get<{
+        plans: BillingPlan[];
+        subscriptions: unknown[];
+        invoices: unknown[];
+      }>('/api/v1/admin/platform/billing');
+      setPlans(res.plans);
+      setSubscriptions(res.subscriptions);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load billing');
+      handleApiError(err, 'Billing data could not be loaded');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return {
+    plans,
+    subscriptions,
+    isLoading,
+    error,
+    fetchBilling,
+    createPlan: async () => {
+      toast.info('Plan changes are managed in billing configuration');
+    },
+    updatePlan: async () => {
+      toast.info('Plan changes are managed in billing configuration');
+    },
+    deletePlan: async () => {
+      toast.info('Plan changes are managed in billing configuration');
+    },
+  };
 }
 
-export function useBillingApi(): UseBillingApiReturn {
-  const [plans, setPlans] = useState<BillingPlan[]>(MOCK_BILLING_PLANS);
+// --- AI providers ---
+
+export function useAIProvidersApi() {
+  const [providers, setProviders] = useState<AIProvider[]>([]);
   const [isLoading, setLoading] = useState(false);
 
-  const createPlan = useCallback(async (planData: Partial<BillingPlan>) => {
+  const fetchProviders = useCallback(async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newPlan: BillingPlan = {
-      id: `plan-${Date.now()}`,
-      name: planData.name || 'New Plan',
-      price: planData.price || 0,
-      interval: planData.interval || 'monthly',
-      features: planData.features || [],
-      limits: planData.limits || { users: 0, documents: 0, apiCalls: 0, storage: 0 },
-    };
-    setPlans([...plans, newPlan]);
-    setLoading(false);
-  }, [plans]);
+    try {
+      const res = await api.get<{ providers: AIProvider[] }>('/api/v1/admin/platform/ai-providers');
+      setProviders(
+        res.providers.map((p) => {
+          const row = p as AIProvider & { api_key_masked?: string; is_active?: boolean; is_default?: boolean };
+          return {
+            ...row,
+            apiKeyMasked: row.apiKeyMasked ?? row.api_key_masked ?? '',
+            isActive: row.isActive ?? row.is_active ?? true,
+          };
+        })
+      );
+    } catch (err) {
+      handleApiError(err, 'Failed to load AI providers');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const updatePlan = useCallback(async (id: string, data: Partial<BillingPlan>) => {
+  const addProvider = useCallback(
+    async (data: Partial<AIProvider> & { api_key?: string }) => {
+      setLoading(true);
+      try {
+        await api.post('/api/v1/admin/platform/ai-providers', {
+          name: data.name,
+          type: data.type || 'ollama',
+          base_url: (data as { base_url?: string }).base_url,
+          api_key: data.api_key,
+          is_active: data.isActive ?? true,
+          models: data.models || [],
+          settings: data.settings,
+        });
+        toast.success('Provider added');
+        await fetchProviders();
+      } catch (err) {
+        handleApiError(err, 'Unable to add provider');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchProviders]
+  );
+
+  const updateProvider = useCallback(
+    async (id: string, data: Partial<AIProvider> & { api_key?: string }) => {
+      setLoading(true);
+      try {
+        await api.patch(`/api/v1/admin/platform/ai-providers/${id}`, data);
+        toast.success('Provider updated');
+        await fetchProviders();
+      } catch (err) {
+        handleApiError(err, 'Unable to update provider');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchProviders]
+  );
+
+  const deleteProvider = useCallback(
+    async (id: string) => {
+      setLoading(true);
+      try {
+        await api.delete(`/api/v1/admin/platform/ai-providers/${id}`);
+        toast.success('Provider deleted');
+        await fetchProviders();
+      } catch (err) {
+        handleApiError(err, 'Unable to delete provider');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchProviders]
+  );
+
+  const toggleProvider = useCallback(
+    async (id: string) => {
+      const p = providers.find((x) => x.id === id);
+      if (!p) return;
+      await updateProvider(id, { isActive: !p.isActive });
+    },
+    [providers, updateProvider]
+  );
+
+  const testProvider = useCallback(async (id: string) => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPlans(plans.map(p => p.id === id ? { ...p, ...data } : p));
-    setLoading(false);
-  }, [plans]);
+    try {
+      const res = await api.post<{ success: boolean; message: string }>(
+        `/api/v1/admin/platform/ai-providers/${id}/test`
+      );
+      if (res.success) toast.success(res.message);
+      else toast.error(res.message);
+    } catch (err) {
+      handleApiError(err, 'Provider test failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const deletePlan = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPlans(plans.filter(p => p.id !== id));
-    setLoading(false);
-  }, [plans]);
+  const updateSettings = useCallback(
+    async (providerId: string, settings: AIProvider['settings']) => {
+      await updateProvider(providerId, { settings });
+    },
+    [updateProvider]
+  );
 
-  return { plans, isLoading, createPlan, updatePlan, deletePlan };
+  return {
+    providers,
+    isLoading,
+    fetchProviders,
+    addProvider,
+    updateProvider,
+    deleteProvider,
+    toggleProvider,
+    testProvider,
+    updateSettings,
+  };
 }
 
-interface UseAIProvidersApiReturn {
-  providers: AIProvider[];
-  isLoading: boolean;
-  addProvider: (provider: Partial<AIProvider>) => Promise<void>;
-  updateProvider: (id: string, data: Partial<AIProvider>) => Promise<void>;
-  deleteProvider: (id: string) => Promise<void>;
-  toggleProvider: (id: string) => Promise<void>;
-  updateSettings: (providerId: string, settings: AIProvider['settings']) => Promise<void>;
+// --- Prompts ---
+
+function mapPrompt(row: Record<string, unknown>): PromptTemplate {
+  return {
+    id: String(row.id ?? row.name),
+    name: String(row.name ?? ''),
+    description: String(row.description ?? ''),
+    category: String(row.category ?? 'custom'),
+    content: String(row.content ?? ''),
+    variables: Array.isArray(row.variables)
+      ? row.variables.map((v: { name?: string }) => ({
+          name: v.name ?? 'var',
+          type: 'string' as const,
+          required: true,
+        }))
+      : [],
+    version: Number(row.version ?? 1),
+    isActive: Boolean(row.is_active ?? row.isActive ?? true),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+    updatedAt: String(row.updated_at ?? new Date().toISOString()),
+    createdBy: String(row.created_by ?? 'System'),
+  };
 }
 
-export function useAIProvidersApi(): UseAIProvidersApiReturn {
-  const [providers, setProviders] = useState<AIProvider[]>(MOCK_AI_PROVIDERS);
+export function usePromptsApi() {
+  const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [isLoading, setLoading] = useState(false);
 
-  const addProvider = useCallback(async (providerData: Partial<AIProvider>) => {
+  const fetchPrompts = useCallback(async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newProvider: AIProvider = {
-      id: `provider-${Date.now()}`,
-      name: providerData.name || 'New Provider',
-      type: providerData.type || 'openai',
-      apiKeyMasked: 'sk-****-xxxx',
-      isActive: true,
-      models: providerData.models || [],
-      settings: providerData.settings || { temperature: 0.7, maxTokens: 2048, topP: 1, frequencyPenalty: 0, presencePenalty: 0 },
-    };
-    setProviders([...providers, newProvider]);
-    setLoading(false);
-  }, [providers]);
+    try {
+      const res = await api.get<{ items?: unknown[]; prompts?: unknown[] } | unknown[]>(
+        '/api/v1/prompts/'
+      );
+      const list = Array.isArray(res)
+        ? res
+        : (res as { items?: unknown[] }).items ?? (res as { prompts?: unknown[] }).prompts ?? [];
+      setPrompts(list.map((r) => mapPrompt(r as Record<string, unknown>)));
+    } catch (err) {
+      handleApiError(err, 'Failed to load prompts');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const updateProvider = useCallback(async (id: string, data: Partial<AIProvider>) => {
+  const createPrompt = useCallback(
+    async (data: Partial<PromptTemplate>) => {
+      setLoading(true);
+      try {
+        await api.post('/api/v1/prompts/', {
+          name: data.name,
+          description: data.description,
+          prompt_type: data.category || 'custom',
+          category: data.category,
+          content: data.content,
+          variables: (data.variables || []).map((v) => v.name),
+          is_active: data.isActive ?? true,
+        });
+        toast.success('Prompt created');
+        await fetchPrompts();
+      } catch (err) {
+        handleApiError(err, 'Unable to create prompt');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchPrompts]
+  );
+
+  const updatePrompt = useCallback(
+    async (id: string, data: Partial<PromptTemplate>) => {
+      setLoading(true);
+      try {
+        await api.put(`/api/v1/prompts/${id}`, data);
+        toast.success('Prompt updated');
+        await fetchPrompts();
+      } catch (err) {
+        handleApiError(err, 'Unable to update prompt');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchPrompts]
+  );
+
+  const deletePrompt = useCallback(
+    async (id: string) => {
+      setLoading(true);
+      try {
+        await api.delete(`/api/v1/prompts/${id}`);
+        toast.success('Prompt deleted');
+        await fetchPrompts();
+      } catch (err) {
+        handleApiError(err, 'Unable to delete prompt');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchPrompts]
+  );
+
+  const togglePromptActive = useCallback(
+    async (id: string) => {
+      const p = prompts.find((x) => x.id === id);
+      if (!p) return;
+      await updatePrompt(id, { isActive: !p.isActive });
+    },
+    [prompts, updatePrompt]
+  );
+
+  const testPrompt = useCallback(async (id: string, variables: Record<string, unknown>) => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProviders(providers.map(p => p.id === id ? { ...p, ...data } : p));
-    setLoading(false);
-  }, [providers]);
+    try {
+      const p = prompts.find((x) => x.id === id);
+      let result = p?.content || '';
+      Object.entries(variables).forEach(([k, v]) => {
+        result = result.replace(`{${k}}`, String(v));
+      });
+      toast.success('Prompt preview ready');
+      return result;
+    } finally {
+      setLoading(false);
+    }
+  }, [prompts]);
 
-  const deleteProvider = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProviders(providers.filter(p => p.id !== id));
-    setLoading(false);
-  }, [providers]);
-
-  const toggleProvider = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setProviders(providers.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
-    setLoading(false);
-  }, [providers]);
-
-  const updateSettings = useCallback(async (providerId: string, settings: AIProvider['settings']) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProviders(providers.map(p => p.id === providerId ? { ...p, settings } : p));
-    setLoading(false);
-  }, [providers]);
-
-  return { providers, isLoading, addProvider, updateProvider, deleteProvider, toggleProvider, updateSettings };
+  return {
+    prompts,
+    isLoading,
+    fetchPrompts,
+    createPrompt,
+    updatePrompt,
+    deletePrompt,
+    togglePromptActive,
+    testPrompt,
+  };
 }
 
-interface UsePromptsApiReturn {
-  prompts: PromptTemplate[];
-  isLoading: boolean;
-  createPrompt: (prompt: Partial<PromptTemplate>) => Promise<void>;
-  updatePrompt: (id: string, data: Partial<PromptTemplate>) => Promise<void>;
-  deletePrompt: (id: string) => Promise<void>;
-  togglePromptActive: (id: string) => Promise<void>;
-  testPrompt: (id: string, variables: Record<string, unknown>) => Promise<string>;
-}
+// --- Queue ---
 
-export function usePromptsApi(): UsePromptsApiReturn {
-  const [prompts, setPrompts] = useState<PromptTemplate[]>(MOCK_PROMPTS);
-  const [isLoading, setLoading] = useState(false);
-
-  const createPrompt = useCallback(async (promptData: Partial<PromptTemplate>) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const newPrompt: PromptTemplate = {
-      id: `prompt-${Date.now()}`,
-      name: promptData.name || 'New Prompt',
-      description: promptData.description || '',
-      category: promptData.category || 'custom',
-      content: promptData.content || '',
-      variables: promptData.variables || [],
-      version: 1,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      createdBy: 'Admin',
-    };
-    setPrompts([...prompts, newPrompt]);
-    setLoading(false);
-  }, [prompts]);
-
-  const updatePrompt = useCallback(async (id: string, data: Partial<PromptTemplate>) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPrompts(prompts.map(p => p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p));
-    setLoading(false);
-  }, [prompts]);
-
-  const deletePrompt = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setPrompts(prompts.filter(p => p.id !== id));
-    setLoading(false);
-  }, [prompts]);
-
-  const togglePromptActive = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setPrompts(prompts.map(p => p.id === id ? { ...p, isActive: !p.isActive } : p));
-    setLoading(false);
-  }, [prompts]);
-
-  const testPrompt = useCallback(async (id: string, variables: Record<string, unknown>): Promise<string> => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    const prompt = prompts.find(p => p.id === id);
-    let result = prompt?.content || '';
-    Object.entries(variables).forEach(([key, value]) => {
-      result = result.replace(`{${key}}`, String(value));
-    });
-    setLoading(false);
-    return result;
-  }, [prompts]);
-
-  return { prompts, isLoading, createPrompt, updatePrompt, deletePrompt, togglePromptActive, testPrompt };
-}
-
-interface UseQueueApiReturn {
-  jobs: QueueJob[];
-  isLoading: boolean;
-  refreshJobs: () => Promise<void>;
-  retryJob: (id: string) => Promise<void>;
-  cancelJob: (id: string) => Promise<void>;
-  pauseJob: (id: string) => Promise<void>;
-  resumeJob: (id: string) => Promise<void>;
-}
-
-export function useQueueApi(): UseQueueApiReturn {
-  const [jobs, setJobs] = useState<QueueJob[]>(MOCK_QUEUE_JOBS);
+export function useQueueApi() {
+  const [jobs, setJobs] = useState<QueueJob[]>([]);
   const [isLoading, setLoading] = useState(false);
 
   const refreshJobs = useCallback(async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setJobs([...jobs]);
-    setLoading(false);
-  }, [jobs]);
+    try {
+      const res = await api.get<{ jobs: QueueJob[] }>('/api/v1/admin/platform/queue/jobs');
+      setJobs(res.jobs);
+    } catch (err) {
+      handleApiError(err, 'Failed to load queue');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const retryJob = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setJobs(jobs.map(j => j.id === id ? { ...j, status: 'pending' as const, attempts: 0, error: undefined } : j));
-    setLoading(false);
-  }, [jobs]);
+  const retryJob = useCallback(
+    async (id: string) => {
+      try {
+        await api.post(`/api/v1/admin/platform/queue/jobs/${id}/retry`);
+        toast.success('Job retry scheduled');
+        await refreshJobs();
+      } catch (err) {
+        handleApiError(err, 'Retry failed');
+      }
+    },
+    [refreshJobs]
+  );
 
-  const cancelJob = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setJobs(jobs.filter(j => j.id !== id));
-    setLoading(false);
-  }, [jobs]);
+  const cancelJob = useCallback(
+    async (id: string) => {
+      setJobs((prev) => prev.filter((j) => j.id !== id));
+      toast.success('Job removed from view');
+    },
+    []
+  );
 
   const pauseJob = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setJobs(jobs.map(j => j.id === id ? { ...j, status: 'pending' as const } : j));
-    setLoading(false);
-  }, [jobs]);
+    setJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, status: 'pending' as const } : j))
+    );
+  }, []);
 
   const resumeJob = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setJobs(jobs.map(j => j.id === id ? { ...j, status: 'processing' as const } : j));
-    setLoading(false);
-  }, [jobs]);
+    setJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, status: 'processing' as const } : j))
+    );
+  }, []);
 
   return { jobs, isLoading, refreshJobs, retryJob, cancelJob, pauseJob, resumeJob };
 }
 
-interface UseAuditLogApiReturn {
-  logs: AuditLogEntry[];
-  isLoading: boolean;
-  fetchLogs: (filters?: AdvancedFilter[]) => Promise<void>;
-  exportLogs: (format: 'csv' | 'json' | 'pdf') => Promise<void>;
-  getLogById: (id: string) => AuditLogEntry | undefined;
+// --- Audit ---
+
+function mapAuditLog(row: Record<string, unknown>): AuditLogEntry {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id ?? ''),
+    userName: String(row.user_name ?? row.user_email ?? 'Unknown'),
+    userRole: String(row.user_role ?? 'user'),
+    action: String(row.action),
+    resource: String(row.resource_type ?? row.resource ?? ''),
+    resourceId: row.resource_id as string | undefined,
+    details: String(
+      row.changes
+        ? JSON.stringify(row.changes)
+        : row.resource_name ?? row.action
+    ),
+    ipAddress: String(row.ip_address ?? ''),
+    userAgent: String(row.user_agent ?? ''),
+    timestamp: String(row.created_at ?? row.timestamp ?? ''),
+    actionType: String(row.action_type ?? 'admin_action'),
+  };
 }
 
-export function useAuditLogApi(): UseAuditLogApiReturn {
-  const [logs, setLogs] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOGS);
+export function useAuditLogApi() {
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [isLoading, setLoading] = useState(false);
 
-  const fetchLogs = useCallback(async (filters?: AdvancedFilter[]) => {
+  const fetchLogs = useCallback(async (_filters?: AdvancedFilter[]) => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    let filteredLogs = [...MOCK_AUDIT_LOGS];
-    
-    if (filters) {
-      filters.forEach(filter => {
-        filteredLogs = filteredLogs.filter(log => {
-          const value = (log as Record<string, unknown>)[filter.field];
-          switch (filter.operator) {
-            case 'contains':
-              return String(value).toLowerCase().includes(String(filter.value).toLowerCase());
-            case 'eq':
-              return value === filter.value;
-            default:
-              return true;
-          }
-        });
-      });
+    try {
+      const res = await api.get<Record<string, unknown>[]>('/api/v1/audit/logs?limit=100');
+      setLogs(res.map((r) => mapAuditLog(r)));
+    } catch (err) {
+      handleApiError(err, 'Failed to load audit logs');
+    } finally {
+      setLoading(false);
     }
-    
-    setLogs(filteredLogs);
-    setLoading(false);
   }, []);
 
-  const exportLogs = useCallback(async (format: 'csv' | 'json' | 'pdf') => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const data = format === 'json' ? JSON.stringify(logs, null, 2) : JSON.stringify(logs);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit-logs.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    
-    setLoading(false);
-  }, [logs]);
+  const exportLogs = useCallback(
+    async (format: 'csv' | 'json' | 'pdf') => {
+      setLoading(true);
+      try {
+        const res = await api.post<{ content: string; mime_type: string }>('/api/v1/audit/export', {
+          format: format === 'pdf' ? 'json' : format,
+        });
+        const blob = new Blob([typeof res.content === 'string' ? res.content : JSON.stringify(res.content)], {
+          type: res.mime_type || 'text/csv',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-logs.${format === 'pdf' ? 'json' : format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success('Audit log export started');
+      } catch (err) {
+        handleApiError(err, 'Export failed');
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
-  const getLogById = useCallback((id: string) => {
-    return logs.find(l => l.id === id);
-  }, [logs]);
+  const getLogById = useCallback(
+    (id: string) => logs.find((l) => l.id === id),
+    [logs]
+  );
 
   return { logs, isLoading, fetchLogs, exportLogs, getLogById };
 }
 
-interface UseFailedJobsApiReturn {
-  jobs: FailedJob[];
-  isLoading: boolean;
-  retryJob: (id: string) => Promise<void>;
-  retryAll: () => Promise<void>;
-  deleteJob: (id: string) => Promise<void>;
-  clearAll: () => Promise<void>;
-}
+// --- Failed jobs ---
 
-export function useFailedJobsApi(): UseFailedJobsApiReturn {
-  const [jobs, setJobs] = useState<FailedJob[]>(MOCK_FAILED_JOBS);
+export function useFailedJobsApi() {
+  const [jobs, setJobs] = useState<FailedJob[]>([]);
   const [isLoading, setLoading] = useState(false);
 
-  const retryJob = useCallback(async (id: string) => {
+  const fetchFailedJobs = useCallback(async () => {
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setJobs(jobs.filter(j => j.id !== id));
-    setLoading(false);
-  }, [jobs]);
-
-  const retryAll = useCallback(async () => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setJobs(jobs.filter(j => !j.retryable));
-    setLoading(false);
-  }, [jobs]);
-
-  const deleteJob = useCallback(async (id: string) => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setJobs(jobs.filter(j => j.id !== id));
-    setLoading(false);
-  }, [jobs]);
-
-  const clearAll = useCallback(async () => {
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setJobs([]);
-    setLoading(false);
+    try {
+      const res = await api.get<{ jobs: FailedJob[] }>('/api/v1/admin/platform/failed-jobs');
+      setJobs(res.jobs);
+    } catch (err) {
+      handleApiError(err, 'Failed to load failed jobs');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { jobs, isLoading, retryJob, retryAll, deleteJob, clearAll };
+  const retryJob = useCallback(
+    async (id: string) => {
+      try {
+        await api.post(`/api/v1/admin/platform/queue/jobs/${id}/retry`);
+        await api.delete(`/api/v1/admin/platform/failed-jobs/${id}`);
+        setJobs((prev) => prev.filter((j) => j.id !== id));
+        toast.success('Job retry scheduled');
+      } catch (err) {
+        handleApiError(err, 'Retry failed');
+      }
+    },
+    []
+  );
+
+  const retryAll = useCallback(async () => {
+    const retryable = jobs.filter((j) => j.retryable);
+    for (const j of retryable) {
+      await retryJob(j.id);
+    }
+  }, [jobs, retryJob]);
+
+  const deleteJob = useCallback(
+    async (id: string) => {
+      try {
+        await api.delete(`/api/v1/admin/platform/failed-jobs/${id}`);
+        setJobs((prev) => prev.filter((j) => j.id !== id));
+        toast.success('Failed job dismissed');
+      } catch (err) {
+        handleApiError(err, 'Unable to remove job');
+      }
+    },
+    []
+  );
+
+  const clearAll = useCallback(async () => {
+    for (const j of jobs) {
+      await api.delete(`/api/v1/admin/platform/failed-jobs/${j.id}`);
+    }
+    setJobs([]);
+    toast.success('Failed jobs cleared');
+  }, [jobs]);
+
+  return {
+    jobs,
+    isLoading,
+    fetchFailedJobs,
+    retryJob,
+    retryAll,
+    deleteJob,
+    clearAll,
+  };
 }

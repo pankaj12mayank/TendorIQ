@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { AdminModule, User, AdvancedFilter, PaginationState, SortState } from './types';
-import { MOCK_USERS, MOCK_AUDIT_LOGS, MOCK_QUEUE_JOBS, MOCK_FAILED_JOBS } from './constants';
 
 interface AdminState {
   activeModule: AdminModule;
@@ -36,8 +35,8 @@ interface AdminState {
 
 export const useAdminStore = create<AdminState>((set) => ({
   activeModule: 'users',
-  users: MOCK_USERS,
-  pagination: { page: 1, pageSize: 10, total: MOCK_USERS.length, totalPages: 3 },
+  users: [],
+  pagination: { page: 1, pageSize: 10, total: 0, totalPages: 1 },
   sort: { field: 'createdAt', direction: 'desc' },
   filters: [],
   searchQuery: '',
@@ -120,10 +119,10 @@ interface AnalyticsState {
 
 export const useAnalyticsStore = create<AnalyticsState>((set) => ({
   metrics: {
-    totalUsers: 28,
-    activeDocuments: 1247,
-    apiCallsToday: 2100,
-    monthlyCost: 2847,
+    totalUsers: 0,
+    activeDocuments: 0,
+    apiCallsToday: 0,
+    monthlyCost: 0,
   },
   sparklineData: {
     users: [20, 22, 25, 24, 26, 28],

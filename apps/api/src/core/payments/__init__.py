@@ -33,12 +33,15 @@ class PaymentGateway:
     """Payment gateway manager"""
     
     def __init__(self):
-        self.stripe_enabled = bool(settings.STRIPE_SECRET_KEY and STRIPE_AVAILABLE)
-        self.razorpay_enabled = bool(settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET and RAZORPAY_AVAILABLE)
+        stripe_key = getattr(settings, 'STRIPE_SECRET_KEY', '') or ''
+        razorpay_id = getattr(settings, 'RAZORPAY_KEY_ID', '') or ''
+        razorpay_secret = getattr(settings, 'RAZORPAY_KEY_SECRET', '') or ''
+        self.stripe_enabled = bool(stripe_key and STRIPE_AVAILABLE)
+        self.razorpay_enabled = bool(razorpay_id and razorpay_secret and RAZORPAY_AVAILABLE)
         
         # Initialize Stripe
         if self.stripe_enabled:
-            stripe.api_key = settings.STRIPE_SECRET_KEY
+            stripe.api_key = stripe_key
             logger.info("Stripe payment gateway initialized")
         else:
             logger.warning("Stripe not available - install stripe package")

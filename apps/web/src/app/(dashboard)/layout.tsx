@@ -1,8 +1,9 @@
 'use client';
 
+import { Suspense, useEffect, useState } from 'react';
 import { useAuth, useCurrentUser } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { canAccessAdminConsole } from '@/lib/permissions';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
@@ -20,6 +21,8 @@ export default function DashboardLayout({
   const { isLoaded, userId } = useAuth();
   const user = useCurrentUser();
   const router = useRouter();
+  const pathname = usePathname();
+  const isAdminConsole = pathname.startsWith('/dashboard/admin');
   const [mounted, setMounted] = useState(false);
   const [checkedOnboarding, setCheckedOnboarding] = useState(false);
   const store = useOnboardingStore();
@@ -56,6 +59,12 @@ export default function DashboardLayout({
     checkOnboarding();
   }, [isLoaded, userId, user?.role, fetchStatus, router]);
 
+  useEffect(() => {
+    if (isAdminConsole && user && !canAccessAdminConsole(user.role)) {
+      router.replace('/dashboard');
+    }
+  }, [isAdminConsole, user, router]);
+
   if (!mounted || !isLoaded || !checkedOnboarding) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -68,10 +77,32 @@ export default function DashboardLayout({
     return null;
   }
 
+  if (isAdminConsole && user && !canAccessAdminConsole(user.role)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingState message="Redirecting..." />
+      </div>
+    );
+  }
+
+  if (isAdminConsole) {
+    return (
+      <>
+        <div className="flex min-h-screen flex-col">
+          <Header />
+          <main className="flex-1 overflow-hidden">{children}</main>
+        </div>
+        <Toaster />
+      </>
+    );
+  }
+
   return (
     <>
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Suspense fallback={<aside className="hidden w-64 lg:block" />}>
+          <Sidebar />
+        </Suspense>
         <div className="flex min-w-0 flex-1 flex-col">
           <MobileNav />
           <Header />

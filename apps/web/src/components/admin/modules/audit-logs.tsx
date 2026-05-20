@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuditLogApi } from '@/hooks/use-admin';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +21,6 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { AuditLogEntry } from '../types';
-import { MOCK_AUDIT_LOGS } from '../constants';
 import { cn } from '@/lib/utils';
 import { ROLE_COLORS } from '../constants';
 
@@ -33,7 +34,15 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 export function AuditLogs() {
-  const [logs, setLogs] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOGS);
+  const { logs, isLoading, fetchLogs, exportLogs } = useAuditLogApi();
+
+  useEffect(() => {
+    void fetchLogs();
+  }, [fetchLogs]);
+
+  if (isLoading && logs.length === 0) {
+    return <LoadingState message="Loading audit logs..." />;
+  }
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
@@ -70,7 +79,7 @@ export function AuditLogs() {
           <h2 className="text-2xl font-bold">Audit Logs</h2>
           <p className="text-muted-foreground">Complete history of all system actions</p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={() => void exportLogs('csv')}>
           <Download className="w-4 h-4 mr-2" />
           Export Logs
         </Button>

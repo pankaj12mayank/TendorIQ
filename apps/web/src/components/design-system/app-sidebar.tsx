@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Sparkles } from 'lucide-react';
 import { useState } from 'react';
@@ -21,6 +21,7 @@ function resolveRole(role?: string): AppRole {
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const user = useCurrentUser();
   const role = resolveRole(user?.role);
   const groups = roleNavGroups[role];
@@ -61,9 +62,15 @@ export function AppSidebar() {
             )}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
+                const [baseHref, query] = item.href.split('?');
+                const moduleParam = query
+                  ? new URLSearchParams(query).get('module')
+                  : null;
+                const isActive = moduleParam
+                  ? pathname.startsWith('/dashboard/admin') &&
+                    searchParams.get('module') === moduleParam
+                  : pathname === baseHref ||
+                    (baseHref !== '/dashboard' && pathname.startsWith(`${baseHref}/`));
                 const Icon = item.icon;
                 return (
                   <li key={item.href}>

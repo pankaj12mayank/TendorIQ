@@ -16,7 +16,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { ReviewSection } from '../types';
-import { useReviewStore, useReviewSections } from '../store';
+import { useReviewStore } from '../store';
 import { cn } from '@/lib/utils';
 
 interface EditableFieldProps {

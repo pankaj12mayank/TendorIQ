@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type ComponentType } from 'react';
+import { useState } from 'react';
 import { Shield } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -10,20 +10,19 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { useAuthContext } from '@/hooks/use-auth';
 import { isClerkConfigured } from '@/lib/clerk-config';
+import { useLazyClientModule } from '@/lib/lazy-client-module';
 
 export default function SignInPage() {
   const { loginWithCredentials, isAuthenticated, isLoading, user } = useAuthContext();
   const clerkEnabled = isClerkConfigured();
-  const [ClerkView, setClerkView] = useState<ComponentType | null>(null);
+  const ClerkView = useLazyClientModule(
+    clerkEnabled,
+    () => import('./sign-in-clerk')
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!clerkEnabled) return;
-    void import('./sign-in-clerk').then((m) => setClerkView(() => m.default));
-  }, [clerkEnabled]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

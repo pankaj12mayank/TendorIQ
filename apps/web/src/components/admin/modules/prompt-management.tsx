@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { usePromptsApi } from '@/hooks/use-admin';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +22,6 @@ import {
   Variable,
 } from 'lucide-react';
 import { PromptTemplate } from '../types';
-import { MOCK_PROMPTS } from '../constants';
 import { cn } from '@/lib/utils';
 
 const CATEGORY_COLORS = {
@@ -32,7 +33,15 @@ const CATEGORY_COLORS = {
 };
 
 export function PromptManagement() {
-  const [prompts, setPrompts] = useState<PromptTemplate[]>(MOCK_PROMPTS);
+  const { prompts, isLoading, fetchPrompts, togglePromptActive, deletePrompt } = usePromptsApi();
+
+  useEffect(() => {
+    void fetchPrompts();
+  }, [fetchPrompts]);
+
+  if (isLoading && prompts.length === 0) {
+    return <LoadingState message="Loading prompts..." />;
+  }
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptTemplate | null>(null);
@@ -44,11 +53,6 @@ export function PromptManagement() {
     return matchesSearch && matchesCategory;
   });
 
-  const togglePromptActive = (id: string) => {
-    setPrompts(prompts.map((p) =>
-      p.id === id ? { ...p, isActive: !p.isActive } : p
-    ));
-  };
 
   return (
     <div className="space-y-6">

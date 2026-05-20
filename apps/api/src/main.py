@@ -44,6 +44,7 @@ from .api.router.billing import router as billing_router
 from .api.router.sso import router as sso_router
 from .api.router.admin_auth import router as admin_auth_router
 from .api.router.super_admin import router as super_admin_router
+from .api.router.admin_platform import router as admin_platform_router
 from .api.router.email_system import router as email_system_router
 
 configure_logging()
@@ -153,6 +154,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(base_router, tags=['Base'])
 app.include_router(super_admin_router, prefix='/api/v1')
+app.include_router(admin_platform_router, prefix='/api/v1')
 app.include_router(auth_router, prefix='/api/v1')
 app.include_router(tenders_router, prefix='/api/v1')
 app.include_router(organizations_router, prefix='/api/v1')

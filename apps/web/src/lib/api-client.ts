@@ -1,5 +1,7 @@
 import type { ZodSchema } from 'zod';
 
+import { clearStoredSession } from '@/lib/auth-session';
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -58,6 +60,14 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401 && typeof window !== 'undefined') {
+        clearStoredSession();
+        const path = window.location.pathname + window.location.search;
+        if (path.startsWith('/dashboard')) {
+          window.location.href = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
+        }
+      }
+
       let errorData: Record<string, unknown> = {};
       try {
         errorData = await response.json();
@@ -65,9 +75,15 @@ class ApiClient {
         errorData = { message: response.statusText };
       }
 
+      const message =
+        (errorData.detail as string) ||
+        (errorData.error as string) ||
+        (errorData.message as string) ||
+        'An error occurred';
+
       throw new ApiError(
         response.status,
-        (errorData.error as string) || 'An error occurred',
+        typeof message === 'object' ? JSON.stringify(message) : String(message),
         (errorData.code as string) || 'UNKNOWN_ERROR',
         errorData.details as Record<string, unknown> | undefined
       );

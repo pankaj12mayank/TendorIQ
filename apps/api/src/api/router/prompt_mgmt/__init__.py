@@ -15,9 +15,14 @@ from ....core.prompt_mgmt import (
     PromptConfig,
 )
 from ....core.database import AsyncSession, get_db
+from ...dependencies.auth import require_super_admin
 
 
-router = APIRouter(prefix='/prompts', tags=['prompt_management'])
+router = APIRouter(
+    prefix='/prompts',
+    tags=['prompt_management'],
+    dependencies=[Depends(require_super_admin)],
+)
 
 
 class CreatePromptRequestDTO(BaseModel):

@@ -1,6 +1,7 @@
-"""Email Service with Resend Provider"""
+"""Email Service with Resend Provider (optional — configure via Admin Email System or .env)."""
 
 import logging
+import os
 from typing import Optional, Any
 from datetime import datetime, timedelta
 from enum import Enum
@@ -34,15 +35,21 @@ class EmailService:
     def _initialize_client(self):
         if self.provider == EmailProvider.RESEND:
             if resend is None:
-                logger.warning('resend package not installed, email service will run in mock mode')
+                logger.debug('resend package not installed; transactional email uses mock until configured')
                 return
-            api_key = getattr(__import__('os').environ, 'RESEND_API_KEY', None)
-            if api_key:
+            api_key = (
+                os.environ.get('RESEND_API_KEY')
+                or os.environ.get('EMAIL_API_KEY')
+                or ''
+            ).strip()
+            if api_key and 'placeholder' not in api_key.lower():
                 resend.api_key = api_key
                 self._client = resend
-                logger.info('Resend email client initialized')
+                logger.debug('Resend email client initialized')
             else:
-                logger.warning('RESEND_API_KEY not found, email service will run in mock mode')
+                logger.debug(
+                    'No Resend API key in environment; use Admin Console → Email System for SMTP/templates'
+                )
 
     async def send(self, request: EmailRequest) -> EmailResponse:
         start_time = datetime.utcnow()
@@ -124,18 +131,21 @@ class EmailService:
         return results
 
 
-email_service = EmailService()
+_email_service: EmailService | None = None
 
 
 def get_email_service() -> EmailService:
-    return email_service
+    global _email_service
+    if _email_service is None:
+        _email_service = EmailService()
+    return _email_service
 
 
 class EmailTriggerHandler:
     """Handle different email triggers"""
 
-    def __init__(self, email_service: EmailService = None):
-        self.email_service = email_service or email_service
+    def __init__(self, email_service: EmailService | None = None):
+        self.email_service = email_service or get_email_service()
 
     async def handle_upload_received(self, user_email: str, file_name: str, tender_name: str) -> EmailResponse:
         template_data = {
