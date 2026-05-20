@@ -173,7 +173,8 @@ pip install -r requirements.txt
 | Script | Purpose |
 |--------|---------|
 | `run.bat` | One-click startup (main script) |
-| `scripts/stop.bat` | Stop all services |
+| `run.bat setup` | Force full dependency setup + startup |
+| `run.bat stop` | Stop all services |
 | `scripts/restart.bat` | Restart all services |
 | `scripts/validate-env.ps1` | Validate environment |
 | `scripts/health-check.ps1` | Check service health |

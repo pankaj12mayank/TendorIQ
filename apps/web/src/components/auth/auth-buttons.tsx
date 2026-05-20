@@ -1,10 +1,10 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { Button, type ButtonProps } from '@/components/ui/button';
+import { useLazyClientModule } from '@/lib/lazy-client-module';
 import { isClerkConfigured } from '@/lib/clerk-config';
 
 type Props = {
@@ -30,26 +30,30 @@ function LocalSignUpButton({ children, className }: Props) {
   );
 }
 
-const ClerkSignInButton = dynamic(
-  () => import('./auth-buttons-clerk').then((m) => m.ClerkSignInButton),
-  { ssr: false }
-);
-
-const ClerkSignUpButton = dynamic(
-  () => import('./auth-buttons-clerk').then((m) => m.ClerkSignUpButton),
-  { ssr: false }
-);
-
 export function AuthSignInButton({ variant, className, ...props }: Props) {
-  if (!isClerkConfigured()) {
+  const clerkEnabled = isClerkConfigured();
+  const ClerkSignInButton = useLazyClientModule<Props>(
+    clerkEnabled,
+    () => import('./auth-buttons-clerk'),
+    'ClerkSignInButton'
+  );
+
+  if (!clerkEnabled || !ClerkSignInButton) {
     return <LocalSignInButton variant={variant} className={className} {...props} />;
   }
-  return <ClerkSignInButton {...props} />;
+  return <ClerkSignInButton variant={variant} className={className} {...props} />;
 }
 
 export function AuthSignUpButton({ className, ...props }: Props) {
-  if (!isClerkConfigured()) {
+  const clerkEnabled = isClerkConfigured();
+  const ClerkSignUpButton = useLazyClientModule<Props>(
+    clerkEnabled,
+    () => import('./auth-buttons-clerk'),
+    'ClerkSignUpButton'
+  );
+
+  if (!clerkEnabled || !ClerkSignUpButton) {
     return <LocalSignUpButton className={className} {...props} />;
   }
-  return <ClerkSignUpButton {...props} />;
+  return <ClerkSignUpButton className={className} {...props} />;
 }

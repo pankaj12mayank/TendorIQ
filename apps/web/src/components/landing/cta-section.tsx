@@ -21,7 +21,7 @@ export function CTASection() {
     if (user) {
       router.push('/dashboard');
     } else {
-      router.push('/sign-up');
+      router.push('/sign-in');
     }
   };
 
@@ -110,7 +110,7 @@ export function CTASection() {
               className="bg-primary hover:bg-primary/90 text-lg px-8 py-6"
               onClick={handleGetStarted}
             >
-              Start Free Trial
+              Get Started
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </motion.div>

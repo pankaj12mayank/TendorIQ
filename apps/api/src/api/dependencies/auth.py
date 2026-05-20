@@ -29,8 +29,16 @@ async def get_current_user(authorization: Annotated[Optional[str], Header()] = N
 
     token = authorization.replace('Bearer ', '')
 
-    # Try Clerk first if configured
-    if settings.CLERK_SECRET_KEY and settings.AUTH_PROVIDER == 'clerk':
+    clerk_key = settings.CLERK_SECRET_KEY or ''
+    clerk_ready = (
+        settings.AUTH_PROVIDER == 'clerk'
+        and clerk_key
+        and 'placeholder' not in clerk_key.lower()
+        and len(clerk_key) > 20
+    )
+
+    # Try Clerk first only when properly configured
+    if clerk_ready:
         clerk_user = await ClerkAuthService.verify_token(token)
         if clerk_user:
             return AuthContext(

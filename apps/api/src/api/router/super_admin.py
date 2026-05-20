@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from pydantic import BaseModel
 from jose import jwt, JWTError
 
-from ...core.config import settings
+from ...core.config import get_settings
 from ...core.auth import AuthContext
 from ...core.database import get_db
 from ..dependencies.auth import get_current_user
@@ -39,31 +39,49 @@ class MeResponse(BaseModel):
 
 
 def verify_super_admin_credentials(email: str, password: str) -> bool:
-    """Verify credentials from .env"""
-    
-    if not settings.SUPER_ADMIN_EMAIL or not settings.SUPER_ADMIN_PASSWORD:
+    """Verify super admin credentials from .env (fresh read each login)."""
+    s = get_settings()
+    admin_email = (s.SUPER_ADMIN_EMAIL or '').strip()
+    admin_password = (s.SUPER_ADMIN_PASSWORD or '').strip()
+    if not admin_email or not admin_password:
         logger.warning("Super Admin credentials not configured in .env")
         return False
-    
     return (
-        email.lower() == settings.SUPER_ADMIN_EMAIL.lower() and 
-        password == settings.SUPER_ADMIN_PASSWORD
+        email.strip().lower() == admin_email.lower()
+        and password.strip() == admin_password
     )
 
 
-def create_super_admin_token(email: str) -> str:
-    """Create JWT token for super admin"""
-    
+def verify_demo_user_credentials(email: str, password: str) -> Optional[dict]:
+    """Optional demo tenant user for local dev (role from .env, no per-role API keys)."""
+    s = get_settings()
+    demo_email = (s.DEMO_USER_EMAIL or '').strip()
+    demo_password = (s.DEMO_USER_PASSWORD or '').strip()
+    if not demo_email or not demo_password:
+        return None
+    if (
+        email.strip().lower() == demo_email.lower()
+        and password.strip() == demo_password
+    ):
+        return {
+            'email': demo_email,
+            'role': (s.DEMO_USER_ROLE or 'admin').strip(),
+            'name': (s.DEMO_USER_NAME or 'Demo User').strip(),
+        }
+    return None
+
+
+def create_auth_token(email: str, role: str, sub: Optional[str] = None) -> str:
+    """Create JWT for any role — permissions enforced server-side by role."""
     payload = {
-        'sub': 'super_admin',
+        'sub': sub or email,
         'email': email,
-        'role': 'super_admin',
-        'type': 'super_admin_token',
+        'role': role,
+        'type': 'access_token',
         'iat': datetime.utcnow().timestamp(),
         'exp': (datetime.utcnow() + timedelta(days=7)).timestamp(),
     }
-    
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm='HS256')
+    return jwt.encode(payload, get_settings().JWT_SECRET, algorithm='HS256')
 
 
 @router.post('/login', response_model=LoginResponse)
@@ -71,28 +89,40 @@ async def login(
     request: LoginRequest,
     authorization: Optional[str] = Header(None)
 ):
-    """Login with email/password (Super Admin from .env OR Clerk)"""
-    
-    # Check if Super Admin credentials
+    """Unified email/password login — role comes from account, not API keys."""
+
     if verify_super_admin_credentials(request.email, request.password):
-        logger.info(f"Super Admin login successful: {request.email}")
-        
-        token = create_super_admin_token(request.email)
-        
+        logger.info("Login successful: super_admin %s", request.email)
+        token = create_auth_token(request.email, 'super_admin', sub='super_admin')
         return LoginResponse(
             success=True,
-            message="Login successful as Super Admin",
+            message="Login successful",
             user={
                 "email": request.email,
+                "name": "Super Admin",
                 "role": "super_admin",
                 "is_super_admin": True,
             },
-            token=token
+            token=token,
         )
-    
-    # Otherwise check if Clerk auth token provided
+
+    demo = verify_demo_user_credentials(request.email, request.password)
+    if demo:
+        logger.info("Login successful: %s role=%s", demo['email'], demo['role'])
+        token = create_auth_token(demo['email'], demo['role'])
+        return LoginResponse(
+            success=True,
+            message="Login successful",
+            user={
+                "email": demo['email'],
+                "name": demo['name'],
+                "role": demo['role'],
+                "is_super_admin": False,
+            },
+            token=token,
+        )
+
     if authorization and authorization.startswith('Bearer '):
-        # This would verify Clerk token
         return LoginResponse(
             success=True,
             message="Clerk authentication used",
@@ -100,13 +130,12 @@ async def login(
                 "email": request.email,
                 "role": "user",
                 "is_super_admin": False,
-            }
+            },
         )
-    
-    # Invalid credentials
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid email or password"
+        detail="Invalid email or password",
     )
 
 
@@ -114,9 +143,13 @@ async def login(
 async def get_me(current_user: AuthContext = Depends(get_current_user)):
     """Get current user info"""
     
+    s = get_settings()
     is_super_admin = (
-        current_user.role == 'super_admin' or 
-        (current_user.email and current_user.email.lower() == settings.SUPER_ADMIN_EMAIL.lower())
+        current_user.role == 'super_admin'
+        or (
+            current_user.email
+            and current_user.email.lower() == (s.SUPER_ADMIN_EMAIL or '').strip().lower()
+        )
     )
     
     # Get all permissions for super admin
@@ -138,7 +171,7 @@ async def get_me(current_user: AuthContext = Depends(get_current_user)):
     
     return MeResponse(
         user_id=current_user.user_id or "super_admin",
-        email=current_user.email or settings.SUPER_ADMIN_EMAIL,
+        email=current_user.email or s.SUPER_ADMIN_EMAIL,
         role=current_user.role or "super_admin",
         is_super_admin=is_super_admin,
         permissions=permissions
@@ -149,14 +182,20 @@ async def get_me(current_user: AuthContext = Depends(get_current_user)):
 async def auth_status():
     """Check authentication status and Super Admin config"""
     
-    super_admin_configured = bool(settings.SUPER_ADMIN_EMAIL and settings.SUPER_ADMIN_PASSWORD)
-    
+    s = get_settings()
+    super_admin_configured = bool(
+        (s.SUPER_ADMIN_EMAIL or '').strip() and (s.SUPER_ADMIN_PASSWORD or '').strip()
+    )
+
     return {
         "super_admin_configured": super_admin_configured,
-        "super_admin_email": settings.SUPER_ADMIN_EMAIL if super_admin_configured else None,
-        "stripe_configured": bool(settings.STRIPE_SECRET_KEY),
-        "razorpay_configured": bool(settings.RAZORPAY_KEY_ID),
-        "message": "Super Admin login available" if super_admin_configured else "Configure SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in .env"
+        "super_admin_email": s.SUPER_ADMIN_EMAIL.strip() if super_admin_configured else None,
+        "demo_user_configured": bool((s.DEMO_USER_EMAIL or '').strip()),
+        "message": (
+            "Sign in at /sign-in with SUPER_ADMIN_* or DEMO_USER_* from .env"
+            if super_admin_configured
+            else "Configure SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in .env"
+        ),
     }
 
 

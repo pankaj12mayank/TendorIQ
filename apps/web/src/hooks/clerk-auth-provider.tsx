@@ -7,8 +7,10 @@ import { useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
   clearStoredSession,
   getStoredSession,
+  setStoredSession,
   type AuthUser,
 } from '@/lib/auth-session';
+import { getPostLoginPath } from '@/lib/auth-redirect';
 import { isProtectedPath } from '@/lib/clerk-config';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
@@ -21,17 +23,14 @@ function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: stri
     if (isLoading) return;
 
     if (!isAuthenticated && isProtectedPath(pathname)) {
-      const target = pathname.includes('/admin') ? '/admin/login' : '/sign-in';
-      const url = new URL(target, window.location.origin);
-      if (target === '/sign-in') {
-        url.searchParams.set('redirect_url', pathname);
-      }
+      const url = new URL('/sign-in', window.location.origin);
+      url.searchParams.set('redirect_url', pathname);
       router.replace(url.toString());
       return;
     }
 
     if (isAuthenticated && (pathname === '/sign-in' || pathname === '/sign-up')) {
-      router.replace(role === 'super_admin' ? '/dashboard/admin' : '/onboarding');
+      router.replace(getPostLoginPath(role));
     }
   }, [isAuthenticated, isLoading, pathname, router, role]);
 }
@@ -76,9 +75,31 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clerkGetToken]);
 
-  const loginWithSuperAdmin = useCallback(async () => {
-    throw new Error('Use /admin/login for super admin credentials');
-  }, []);
+  const loginWithCredentials = useCallback(
+    async (email: string, password: string) => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { detail?: string }).detail || 'Login failed');
+      }
+      const data = await res.json();
+      const role = (data.user?.role as string) || 'user';
+      const sessionUser: AuthUser = {
+        id: data.user?.email ?? email,
+        email: data.user?.email ?? email,
+        name: data.user?.name ?? email.split('@')[0] ?? 'User',
+        role,
+      };
+      setStoredSession(data.token, sessionUser);
+      router.push(getPostLoginPath(role));
+    },
+    [router]
+  );
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -87,9 +108,9 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
       user: authUser,
       signOut,
       getToken,
-      loginWithSuperAdmin,
+      loginWithCredentials,
     }),
-    [isLoaded, isSignedIn, authUser, signOut, getToken, loginWithSuperAdmin]
+    [isLoaded, isSignedIn, authUser, signOut, getToken, loginWithCredentials]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

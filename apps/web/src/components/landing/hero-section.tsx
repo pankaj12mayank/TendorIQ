@@ -39,7 +39,7 @@ export function HeroSection() {
       router.push(user.role === 'super_admin' ? '/dashboard/admin' : '/dashboard');
       return;
     }
-    router.push('/sign-up');
+    router.push('/sign-in');
   };
 
   return (
@@ -133,7 +133,7 @@ export function HeroSection() {
                 className="bg-primary hover:bg-primary/90 text-lg px-8 py-6"
                 onClick={handleGetStarted}
               >
-                Start Free
+                Get Started
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </motion.div>

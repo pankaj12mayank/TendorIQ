@@ -54,9 +54,10 @@ cd tenderiq
 run.bat
 ```
 
-`run.bat` installs/verifies Python + Node deps, starts API (`:8000`) and web (`:3000`), and opens the browser. Stop with `stop.bat`.
+`run.bat` installs/verifies Python + Node deps, starts API (`:8000`) and web (`:3000`), and opens the browser. Stop with `run.bat stop`.
+Use `run.bat setup` when you want a full dependency setup pass (slower, but useful after lockfile/requirements changes).
 
-**Auth:** Super Admin → `/admin/login` (set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` in `.env`). Tenants → Clerk keys in `apps/web/.env.local`, then `/sign-up` → onboarding → dashboard.
+**Auth:** One sign-in at `/sign-in` (email/password; role from JWT). Set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` in `.env` for platform admin. Optional `DEMO_USER_*` for a dev tenant. Tenants can also use Clerk if keys are in `apps/web/.env.local`.
 
 Logs: `.tenderiq/startup.log`, `api.log`, `web.log`.
 

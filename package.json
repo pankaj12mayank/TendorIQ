@@ -23,6 +23,7 @@
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.4.1",
     "eslint": "^8.57.0",
+    "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.4.2",
     "turbo": "^2.3.3",
     "typescript": "^5.7.3"
@@ -35,18 +36,28 @@
   "turbo": {
     "tasks": {
       "build": {
-        "dependsOn": ["^build"],
-        "outputs": [".next/**", "dist/**", ".turbo/**"]
+        "dependsOn": [
+          "^build"
+        ],
+        "outputs": [
+          ".next/**",
+          "dist/**",
+          ".turbo/**"
+        ]
       },
       "dev": {
         "cache": false,
         "persistent": true
       },
       "lint": {
-        "dependsOn": ["^build"]
+        "dependsOn": [
+          "^build"
+        ]
       },
       "typecheck": {
-        "dependsOn": ["^build"]
+        "dependsOn": [
+          "^build"
+        ]
       }
     }
   }

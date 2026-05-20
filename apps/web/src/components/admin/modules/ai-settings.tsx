@@ -14,7 +14,6 @@ import {
   Settings,
   CheckCircle,
   XCircle,
-  Key,
   Save,
   RotateCcw,
 } from 'lucide-react';
@@ -79,7 +78,9 @@ export function AISettings() {
                           <h3 className="font-semibold">{provider.name}</h3>
                           <Badge variant="outline">{provider.type}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">API Key: {provider.apiKeyMasked}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Server keys in <code>.env</code> — access by role only
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -215,25 +216,18 @@ export function AISettings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>API Key Management</CardTitle>
+              <CardTitle>Access control</CardTitle>
+              <CardDescription>
+                AI features use shared keys from the server environment. Who can use them is
+                controlled by user role (super_admin, admin, manager, etc.), not separate API keys
+                per role.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                <Key className="w-5 h-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">OpenAI API Key</p>
-                  <p className="text-xs text-muted-foreground">sk-****-xxxx</p>
-                </div>
-                <Button variant="ghost" size="sm">Rotate</Button>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-                <Key className="w-5 h-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Anthropic API Key</p>
-                  <p className="text-xs text-muted-foreground">sk-****-xxxx</p>
-                </div>
-                <Button variant="ghost" size="sm">Rotate</Button>
-              </div>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Set <code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code> in the project{' '}
+                <code>.env</code> file once. No keys are required in the browser or per tenant role.
+              </p>
             </CardContent>
           </Card>
         </div>

@@ -19,9 +19,5 @@ export function isPublicPath(pathname: string): boolean {
 }
 
 export function isProtectedPath(pathname: string): boolean {
-  return (
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/onboarding') ||
-    (pathname.startsWith('/admin') && pathname !== '/admin/login')
-  );
+  return pathname.startsWith('/dashboard') || pathname.startsWith('/onboarding');
 }

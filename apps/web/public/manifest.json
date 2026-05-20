@@ -1,0 +1,10 @@
+{
+  "name": "TenderIQ",
+  "short_name": "TenderIQ",
+  "description": "AI-powered tender management platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": []
+}

@@ -152,6 +152,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(base_router, tags=['Base'])
+app.include_router(super_admin_router, prefix='/api/v1')
 app.include_router(auth_router, prefix='/api/v1')
 app.include_router(tenders_router, prefix='/api/v1')
 app.include_router(organizations_router, prefix='/api/v1')
@@ -177,7 +178,6 @@ app.include_router(observability_router, prefix='/api/v1')
 app.include_router(billing_router, prefix='/api/v1')
 app.include_router(sso_router, prefix='/api/v1')
 app.include_router(admin_auth_router, prefix='/api/v1')
-app.include_router(super_admin_router, prefix='/api/v1')
 app.include_router(email_system_router, prefix='/api/v1')
 
 

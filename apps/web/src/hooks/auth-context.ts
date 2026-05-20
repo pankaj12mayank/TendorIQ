@@ -10,7 +10,7 @@ export interface AuthContextValue {
   user: AuthUser | null;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
-  loginWithSuperAdmin: (email: string, password: string) => Promise<void>;
+  loginWithCredentials: (email: string, password: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

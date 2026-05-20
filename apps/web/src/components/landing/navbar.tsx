@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AuthSignInButton, AuthSignUpButton } from '@/components/auth/auth-buttons';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
 
@@ -82,10 +82,9 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
                   Go to Dashboard
                 </Button>
               ) : (
-                <>
-                  <AuthSignInButton mode="modal">Log in</AuthSignInButton>
-                  <AuthSignUpButton mode="modal">Start Free</AuthSignUpButton>
-                </>
+                <Button asChild className="bg-primary hover:bg-primary/90">
+                  <Link href="/sign-in">Log in</Link>
+                </Button>
               )}
             </div>
 
@@ -130,14 +129,9 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
                     Go to Dashboard
                   </Button>
                 ) : (
-                  <>
-                    <AuthSignInButton mode="modal" className="w-full" variant="outline">
-                      Log in
-                    </AuthSignInButton>
-                    <AuthSignUpButton mode="modal" className="w-full">
-                      Start Free
-                    </AuthSignUpButton>
-                  </>
+                  <Button asChild className="w-full bg-primary">
+                    <Link href="/sign-in">Log in</Link>
+                  </Button>
                 )}
               </div>
             </div>

@@ -1,15 +1,27 @@
 """Application Configuration - Centralized Settings Management"""
 
-from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Optional
 
+from dotenv import load_dotenv
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Monorepo root .env (run.bat / uvicorn cwd may be apps/api)
+import os
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+_DOTENV_OVERRIDE = os.environ.get('DOTENV_PATH', '').strip()
+_ENV_FILE = (
+    Path(_DOTENV_OVERRIDE)
+    if _DOTENV_OVERRIDE and Path(_DOTENV_OVERRIDE).is_file()
+    else _PROJECT_ROOT / '.env'
+)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file='.env',
+        env_file=str(_ENV_FILE) if _ENV_FILE.is_file() else '.env',
         env_file_encoding='utf-8',
         case_sensitive=False,
         extra='ignore',
@@ -102,7 +114,13 @@ class Settings(BaseSettings):
     EMAIL_FROM_NAME: str = 'TenderIQ'
     FRONTEND_URL: str = 'http://localhost:3000'
     SUPER_ADMIN_EMAIL: str = 'admin@tenderiq.com'
-    SUPER_ADMIN_PASSWORD: str = 'changeme'
+    SUPER_ADMIN_PASSWORD: str = 'SuperAdmin@123'
+
+    # Optional demo tenant login (development) — role-based JWT, no API keys
+    DEMO_USER_EMAIL: str = ''
+    DEMO_USER_PASSWORD: str = ''
+    DEMO_USER_ROLE: str = 'admin'
+    DEMO_USER_NAME: str = 'Demo User'
 
     # SMTP
     SMTP_HOST: str = ''
@@ -233,8 +251,10 @@ class Settings(BaseSettings):
         return url
 
 
-@lru_cache
 def get_settings() -> Settings:
+    """Load settings; root .env wins over stale process env (e.g. old changeme)."""
+    if _ENV_FILE.is_file():
+        load_dotenv(_ENV_FILE, override=True)
     return Settings()
 
 

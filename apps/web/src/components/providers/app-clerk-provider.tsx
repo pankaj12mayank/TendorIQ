@@ -1,17 +1,19 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import type { ReactNode } from 'react';
 
+import { useLazyClientModule } from '@/lib/lazy-client-module';
 import { isClerkConfigured } from '@/lib/clerk-config';
 
-const ClerkProvider = dynamic(
-  () => import('@clerk/nextjs').then((m) => m.ClerkProvider),
-  { ssr: false }
-);
-
 export function AppClerkProvider({ children }: { children: ReactNode }) {
-  if (!isClerkConfigured()) {
+  const clerkEnabled = isClerkConfigured();
+  const ClerkProvider = useLazyClientModule<{ children: ReactNode; appearance?: object }>(
+    clerkEnabled,
+    () => import('@clerk/nextjs'),
+    'ClerkProvider'
+  );
+
+  if (!clerkEnabled || !ClerkProvider) {
     return <>{children}</>;
   }
 

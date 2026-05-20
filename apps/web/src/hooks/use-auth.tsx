@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   useEffect,
@@ -17,16 +16,13 @@ import {
   setStoredSession,
   type AuthUser,
 } from '@/lib/auth-session';
+import { getPostLoginPath } from '@/lib/auth-redirect';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
+import { useLazyClientModule } from '@/lib/lazy-client-module';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
 
 export type { AuthUser, AuthContextValue };
-
-const ClerkAuthProvider = dynamic(
-  () => import('./clerk-auth-provider').then((m) => m.ClerkAuthProvider),
-  { ssr: false }
-);
 
 function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: string) {
   const router = useRouter();
@@ -36,17 +32,14 @@ function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: stri
     if (isLoading) return;
 
     if (!isAuthenticated && isProtectedPath(pathname)) {
-      const target = pathname.includes('/admin') ? '/admin/login' : '/sign-in';
-      const url = new URL(target, window.location.origin);
-      if (target === '/sign-in') {
-        url.searchParams.set('redirect_url', pathname);
-      }
+      const url = new URL('/sign-in', window.location.origin);
+      url.searchParams.set('redirect_url', pathname);
       router.replace(url.toString());
       return;
     }
 
     if (isAuthenticated && (pathname === '/sign-in' || pathname === '/sign-up')) {
-      router.replace(role === 'super_admin' ? '/dashboard/admin' : '/onboarding');
+      router.replace(getPostLoginPath(role));
     }
   }, [isAuthenticated, isLoading, pathname, router, role]);
 }
@@ -72,7 +65,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   const getToken = useCallback(async () => getStoredSession()?.token ?? null, []);
 
-  const loginWithSuperAdmin = useCallback(
+  const loginWithCredentials = useCallback(
     async (email: string, password: string) => {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
@@ -85,15 +78,16 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         throw new Error((err as { detail?: string }).detail || 'Login failed');
       }
       const data = await res.json();
+      const role = (data.user?.role as string) || 'user';
       const authUser: AuthUser = {
         id: data.user?.email ?? email,
         email: data.user?.email ?? email,
-        name: data.user?.name ?? 'Super Admin',
-        role: 'super_admin',
+        name: data.user?.name ?? email.split('@')[0] ?? 'User',
+        role,
       };
       setStoredSession(data.token, authUser);
       setUser(authUser);
-      router.push('/dashboard/admin');
+      router.push(getPostLoginPath(role));
     },
     [router]
   );
@@ -105,16 +99,23 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       user,
       signOut,
       getToken,
-      loginWithSuperAdmin,
+      loginWithCredentials,
     }),
-    [user, isLoading, signOut, getToken, loginWithSuperAdmin]
+    [user, isLoading, signOut, getToken, loginWithCredentials]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  if (isClerkConfigured()) {
+  const clerkEnabled = isClerkConfigured();
+  const ClerkAuthProvider = useLazyClientModule<{ children: ReactNode }>(
+    clerkEnabled,
+    () => import('./clerk-auth-provider'),
+    'ClerkAuthProvider'
+  );
+
+  if (clerkEnabled && ClerkAuthProvider) {
     return <ClerkAuthProvider>{children}</ClerkAuthProvider>;
   }
   return <LocalAuthProvider>{children}</LocalAuthProvider>;
@@ -157,7 +158,7 @@ export function useGetToken() {
   return getToken;
 }
 
-export function useSuperAdminLogin() {
-  const { loginWithSuperAdmin } = useAuthContext();
-  return loginWithSuperAdmin;
+export function useLogin() {
+  const { loginWithCredentials } = useAuthContext();
+  return loginWithCredentials;
 }

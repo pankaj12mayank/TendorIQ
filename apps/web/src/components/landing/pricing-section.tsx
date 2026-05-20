@@ -4,19 +4,16 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { 
-  Check, 
-  Sparkles,
-  Building2,
-  ArrowRight
-} from 'lucide-react';
+import { Check, Sparkles, Building2, ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const YEARLY_DISCOUNT = 0.2;
 
 const plans = [
   {
     id: 'starter',
     name: 'Starter',
-    price: '$29',
-    period: '/month',
+    monthlyPrice: 29,
     description: 'Perfect for small teams getting started',
     icon: Sparkles,
     color: 'from-blue-500 to-cyan-500',
@@ -27,19 +24,14 @@ const plans = [
       'Email Support',
       'Standard Analytics',
     ],
-    notIncluded: [
-      'Advanced Risk Detection',
-      'Proposal Generator',
-      'API Access',
-    ],
-    cta: 'Start Free Trial',
+    notIncluded: ['Advanced Risk Detection', 'Proposal Generator', 'API Access'],
+    cta: 'Get Started',
     popular: false,
   },
   {
     id: 'professional',
     name: 'Professional',
-    price: '$99',
-    period: '/month',
+    monthlyPrice: 99,
     description: 'For growing teams with advanced needs',
     icon: Sparkles,
     color: 'from-purple-500 to-pink-500',
@@ -54,14 +46,13 @@ const plans = [
       'API Access',
     ],
     notIncluded: [],
-    cta: 'Start Free Trial',
+    cta: 'Get Started',
     popular: true,
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 'Custom',
-    period: '',
+    monthlyPrice: null,
     description: 'For large organizations with custom needs',
     icon: Building2,
     color: 'from-orange-500 to-red-500',
@@ -81,160 +72,184 @@ const plans = [
   },
 ];
 
+function getPlanDisplayPrice(
+  monthlyPrice: number | null,
+  billingPeriod: 'monthly' | 'yearly'
+): { price: string; period: string; sublabel?: string } {
+  if (monthlyPrice === null) {
+    return { price: 'Custom', period: '' };
+  }
+  if (billingPeriod === 'monthly') {
+    return { price: `$${monthlyPrice}`, period: '/month' };
+  }
+  const yearlyMonthly = Math.round(monthlyPrice * (1 - YEARLY_DISCOUNT));
+  return {
+    price: `$${yearlyMonthly}`,
+    period: '/month',
+    sublabel: `$${monthlyPrice * 12} billed yearly`,
+  };
+}
+
 export function PricingSection() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const router = useRouter();
 
   const handlePlanSelect = (planId: string) => {
     if (planId === 'enterprise') {
-      router.push('/contact');
+      router.push('/sign-in');
     } else {
-      router.push('/onboarding');
+      router.push('/sign-in');
     }
   };
 
   return (
-    <section id="pricing" className="scroll-mt-24 py-32 bg-gradient-to-b from-background via-muted/10 to-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
+    <section id="pricing" className="scroll-mt-24 bg-gradient-to-b from-background via-muted/10 to-background py-32">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center max-w-3xl mx-auto mb-16"
+          className="mx-auto mb-16 max-w-3xl text-center"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 text-green-500 text-sm font-medium mb-6">
-            <Sparkles className="w-4 h-4" />
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-green-500/10 px-4 py-2 text-sm font-medium text-green-500">
+            <Sparkles className="h-4 w-4" />
             Simple Pricing
           </div>
-          
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Plans That Scale With You
-          </h2>
-          
-          <p className="text-xl text-muted-foreground mb-8">
-            Start free, upgrade when you need more power.
-          </p>
-
-          {/* Billing Toggle */}
-          <div className="inline-flex items-center p-1 bg-muted rounded-full">
+          <h2 className="mb-6 text-4xl font-bold md:text-5xl">Plans That Scale With You</h2>
+          <p className="mb-8 text-xl text-muted-foreground">Start free, upgrade when you need more power.</p>
+          <div className="inline-flex items-center rounded-full bg-muted p-1">
             <button
+              type="button"
               onClick={() => setBillingPeriod('monthly')}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+              className={cn(
+                'rounded-full px-6 py-2 text-sm font-medium transition-all',
                 billingPeriod === 'monthly'
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground'
-              }`}
+              )}
             >
               Monthly
             </button>
             <button
+              type="button"
               onClick={() => setBillingPeriod('yearly')}
-              className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${
+              className={cn(
+                'rounded-full px-6 py-2 text-sm font-medium transition-all',
                 billingPeriod === 'yearly'
                   ? 'bg-background text-foreground shadow-sm'
                   : 'text-muted-foreground'
-              }`}
+              )}
             >
               Yearly
-              <span className="ml-1 text-green-500 text-xs">-20%</span>
+              <span className="ml-1 text-xs text-green-500">-20%</span>
             </button>
           </div>
         </motion.div>
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {plans.map((plan, index) => (
-            <motion.div
-              key={plan.id}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
-              whileHover={{ y: -10 }}
-              className={`relative rounded-2xl p-8 ${
-                plan.popular
-                  ? 'bg-gradient-to-b from-primary/10 to-background border-2 border-primary/50'
-                  : 'bg-card dark:bg-card-dark border border-border'
-              }`}
-            >
-              {/* Popular Badge */}
-              {plan.popular && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  whileInView={{ scale: 1 }}
-                  className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-white text-sm font-medium rounded-full"
-                >
-                  Most Popular
-                </motion.div>
-              )}
+        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-3">
+          {plans.map((plan, index) => {
+            const highlighted = hoveredId ? plan.id === hoveredId : plan.popular;
+            const display = getPlanDisplayPrice(plan.monthlyPrice, billingPeriod);
 
-              {/* Header */}
-              <div className="text-center mb-6">
-                <div className={`inline-flex w-12 h-12 rounded-xl bg-gradient-to-br ${plan.color} items-center justify-center mb-4`}>
-                  <plan.icon className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
-                <div className="flex items-baseline justify-center gap-1">
-                  <span className="text-4xl font-bold">{plan.price}</span>
-                  <span className="text-muted-foreground">{plan.period}</span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
-              </div>
-
-              {/* Features */}
-              <ul className="space-y-3 mb-8">
-                {plan.features.map((feature, i) => (
-                  <motion.li
-                    key={i}
-                    initial={{ opacity: 0, x: -10 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.3 + i * 0.05 }}
-                    className="flex items-center gap-3 text-sm"
-                  >
-                    <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Check className="w-3 h-3 text-primary" />
-                    </div>
-                    {feature}
-                  </motion.li>
-                ))}
-                {plan.notIncluded.map((feature, i) => (
-                  <li key={i} className="flex items-center gap-3 text-sm text-muted-foreground/50">
-                    <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center">
-                      <span className="text-xs">×</span>
-                    </div>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              {/* CTA */}
-              <Button
-                onClick={() => handlePlanSelect(plan.id)}
-                className={`w-full ${
-                  plan.popular
-                    ? 'bg-primary hover:bg-primary/90'
-                    : 'bg-muted hover:bg-muted/80'
-                }`}
+            return (
+              <motion.div
+                key={plan.id}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                onMouseEnter={() => setHoveredId(plan.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                className={cn(
+                  'relative rounded-2xl p-8 transition-all duration-300',
+                  highlighted
+                    ? 'scale-[1.02] border-2 border-primary bg-gradient-to-b from-primary/15 to-background shadow-lg shadow-primary/20'
+                    : 'border border-border bg-card dark:bg-card-dark'
+                )}
               >
-                {plan.cta}
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </motion.div>
-          ))}
+                {plan.popular && !hoveredId && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-full bg-primary px-4 py-1 text-sm font-medium text-primary-foreground">
+                    Most Popular
+                  </div>
+                )}
+
+                <div className="mb-6 text-center">
+                  <div
+                    className={cn(
+                      'mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br',
+                      plan.color
+                    )}
+                  >
+                    <plan.icon className="h-6 w-6 text-white" />
+                  </div>
+                  <h3 className="mb-2 text-xl font-bold">{plan.name}</h3>
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="flex items-baseline justify-center gap-1">
+                      {billingPeriod === 'yearly' && plan.monthlyPrice !== null && (
+                        <span className="text-lg text-muted-foreground line-through">
+                          ${plan.monthlyPrice}
+                        </span>
+                      )}
+                      <span className="text-4xl font-bold">{display.price}</span>
+                      <span className="text-muted-foreground">{display.period}</span>
+                    </div>
+                    {display.sublabel && (
+                      <p className="text-xs text-green-500">{display.sublabel}</p>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
+                </div>
+
+                <ul className="mb-8 space-y-3">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-3 text-sm">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20">
+                        <Check className="h-3 w-3 text-primary" />
+                      </div>
+                      {feature}
+                    </li>
+                  ))}
+                  {plan.notIncluded.map((feature) => (
+                    <li key={feature} className="flex items-center gap-3 text-sm text-muted-foreground/50">
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted">
+                        <span className="text-xs">×</span>
+                      </div>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  onClick={() => handlePlanSelect(plan.id)}
+                  className={cn(
+                    'w-full transition-all',
+                    highlighted
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      : 'bg-muted text-foreground hover:bg-muted/80'
+                  )}
+                >
+                  {plan.cta}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </motion.div>
+            );
+          })}
         </div>
 
-        {/* Comparison Note */}
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
-          className="text-center mt-12"
+          className="mt-12 text-center"
         >
           <p className="text-muted-foreground">
             Need a custom solution?{' '}
-            <button className="text-primary font-medium hover:underline">
+            <button
+              type="button"
+              className="font-medium text-primary hover:underline"
+              onClick={() => router.push('/sign-in')}
+            >
               Talk to our team
             </button>
           </p>
