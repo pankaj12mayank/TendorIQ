@@ -10,15 +10,19 @@ from pydantic import BaseModel, Field
 from ....core.proposal import (
     ProposalEngine,
     SectionType,
-    ProposalDraft,
     ProposalGenerationRequest,
-    SectionUpdateRequest,
     RegenerationRequest,
     get_proposal_engine,
 )
+from ....core.auth import AuthContext
+from ...dependencies.rbac_deps import RequireAiAnalysis, require_tenant_member
 
 
-router = APIRouter(prefix='/proposal', tags=['proposal'])
+router = APIRouter(
+    prefix='/proposal',
+    tags=['proposal'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 class GenerateProposalRequest(BaseModel):
@@ -64,6 +68,7 @@ class CreateIntelligenceRequest(BaseModel):
 @router.post('/generate')
 async def generate_proposal(
     request: GenerateProposalRequest,
+    current_user: RequireAiAnalysis,
     engine: ProposalEngine = Depends(get_proposal_engine),
 ):
     try:

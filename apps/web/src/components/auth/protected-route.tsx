@@ -1,20 +1,24 @@
 'use client';
 
 import { useAuthState } from '@/hooks/use-auth';
+import { getMembershipRole } from '@/lib/auth-user';
+import { hasPermission } from '@/lib/permissions';
 import { LoadingState } from '@/components/ui/loading-state';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
-  requiredRoles?: ('super_admin' | 'tenant_admin' | 'user')[];
+  requiredRoles?: ('super_admin' | 'owner' | 'admin' | 'manager' | 'analyst' | 'member' | 'viewer')[];
+  requiredPermission?: string;
 }
 
 export function ProtectedRoute({
   children,
   fallback,
   requiredRoles,
+  requiredPermission,
 }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user } = useAuthState();
   const pathname = usePathname();
@@ -37,11 +41,32 @@ export function ProtectedRoute({
   }
 
   if (requiredRoles && requiredRoles.length > 0) {
-    const userRole = user?.role || 'user';
+    const userRole = getMembershipRole(user);
 
-    if (!requiredRoles.includes(userRole as 'super_admin' | 'tenant_admin' | 'user')) {
+    if (!requiredRoles.includes(userRole as (typeof requiredRoles)[number])) {
       if (fallback) return <>{fallback}</>;
 
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-lg font-semibold">Access Denied</h2>
+            <p className="text-muted-foreground">
+              You don't have permission to access this page.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  if (requiredPermission) {
+    const allowed = hasPermission(
+      getMembershipRole(user),
+      requiredPermission,
+      user?.permissions
+    );
+    if (!allowed) {
+      if (fallback) return <>{fallback}</>;
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
@@ -66,13 +91,14 @@ interface GuestRouteProps {
 export function GuestRoute({ children }: GuestRouteProps) {
   const { isAuthenticated, isLoading } = useAuthState();
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
       const redirectUrl = pathname || '/dashboard';
-      window.location.href = redirectUrl;
+      router.push(redirectUrl);
     }
-  }, [isLoading, isAuthenticated, pathname]);
+  }, [isLoading, isAuthenticated, pathname, router]);
 
   if (isLoading) {
     return <LoadingState message="Loading..." />;

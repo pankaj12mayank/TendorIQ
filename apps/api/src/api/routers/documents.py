@@ -1,4 +1,4 @@
-"""Document Management API Router"""
+﻿"""Document Management API Router"""
 
 import re
 from datetime import datetime
@@ -6,8 +6,17 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dependencies.auth import CurrentUser
+from ...core.database import get_db
+from ...core.models import Document
+
+from ..dependencies.rbac_deps import (
+    RequireDocumentCreate,
+    RequireDocumentDelete,
+    RequireDocumentRead,
+    require_tenant_member,
+)
 from ..services.document_service import document_service
 from ..services.file_service import file_service
 from ...core.storage import storage_service
@@ -30,7 +39,11 @@ from ..schemas.document import (
     DocumentStatsResponse,
 )
 
-router = APIRouter(prefix='/documents', tags=['documents'])
+router = APIRouter(
+    prefix='/documents',
+    tags=['documents'],
+    dependencies=[Depends(require_tenant_member)],
+)
 logger = get_logger('documents_api')
 
 
@@ -89,8 +102,8 @@ def _doc_to_list_item(doc) -> DocumentListItem:
 @router.post('/upload/initiate')
 async def initiate_document_upload(
     data: DocumentCreate,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
 ):
     """Initiate document upload"""
     if not current_user.tenant_id:
@@ -161,8 +174,8 @@ async def initiate_document_upload(
 @router.post('/upload/complete/{document_id}')
 async def complete_document_upload(
     document_id: str,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
 ):
     """Mark upload complete and trigger processing"""
     if not current_user.tenant_id:
@@ -202,8 +215,8 @@ async def complete_document_upload(
 
 @router.get('/list', response_model=DocumentListResponse)
 async def list_documents(
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
     search: Optional[str] = Query(None, max_length=200),
     status_filter: Optional[str] = Query(None, alias='status'),
     file_type: Optional[str] = Query(None),
@@ -258,8 +271,8 @@ async def list_documents(
 
 @router.get('/stats', response_model=DocumentStatsResponse)
 async def get_document_stats(
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get document statistics"""
     if not current_user.tenant_id:
@@ -278,8 +291,8 @@ async def get_document_stats(
 
 @router.get('/quota', response_model=QuotaCheckResponse)
 async def check_quota(
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
     file_size: int = Query(..., ge=1),
 ):
     """Check upload quota"""
@@ -293,193 +306,11 @@ async def check_quota(
     return QuotaCheckResponse(**quota)
 
 
-@router.get('/{document_id}')
-async def get_document(
-    document_id: str,
-    current_user: CurrentUser,
-    db=None,
-):
-    """Get single document details"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-
-    doc = await document_service.get_document(db, UUID(document_id), UUID(current_user.tenant_id))
-    if not doc:
-        raise HTTPException(status_code=404, detail='Document not found')
-
-    return {'success': True, 'document': _doc_to_response(doc)}
-
-
-@router.patch('/{document_id}')
-async def update_document(
-    document_id: str,
-    data: DocumentUpdate,
-    current_user: CurrentUser,
-    db=None,
-):
-    """Update document metadata"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-
-    doc = await document_service.update_document(
-        db, UUID(document_id), UUID(current_user.tenant_id),
-        name=data.name,
-        folder=data.folder,
-        tags=data.tags,
-        is_public=data.is_public,
-        metadata=data.metadata,
-    )
-
-    if not doc:
-        raise HTTPException(status_code=404, detail='Document not found')
-
-    return {'success': True, 'document': _doc_to_response(doc)}
-
-
-@router.patch('/{document_id}/status')
-async def update_document_status(
-    document_id: str,
-    data: ProcessingStatusUpdate,
-    current_user: CurrentUser,
-    db=None,
-):
-    """Update document processing status"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-
-    doc = await document_service.update_processing_status(
-        db, UUID(document_id), UUID(current_user.tenant_id),
-        status=data.status,
-        error_message=data.error_message,
-        metadata=data.metadata,
-    )
-
-    if not doc:
-        raise HTTPException(status_code=404, detail='Document not found')
-
-    return {'success': True, 'document': _doc_to_response(doc)}
-
-
-@router.post('/retry', response_model=RetryResponse)
-async def retry_documents(
-    data: RetryRequest,
-    current_user: CurrentUser,
-    db=None,
-):
-    """Retry failed documents"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-
-    retried = 0
-    skipped = 0
-    errors = []
-
-    for doc_id in data.document_ids:
-        try:
-            doc = await document_service.retry_document(
-                db, UUID(doc_id), UUID(current_user.tenant_id)
-            )
-            if doc:
-                retried += 1
-            else:
-                skipped += 1
-                errors.append(f'Document {doc_id}: max retries exceeded or not found')
-        except Exception as e:
-            skipped += 1
-            errors.append(f'Document {doc_id}: {str(e)}')
-
-    return RetryResponse(
-        success=True,
-        retried_count=retried,
-        skipped_count=skipped,
-        errors=errors,
-    )
-
-
-@router.post('/batch')
-async def batch_update_documents(
-    data: BatchStatusUpdate,
-    current_user: CurrentUser,
-    db=None,
-):
-    """Batch update documents (archive, restore, delete)"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-
-    doc_ids = [UUID(did) for did in data.document_ids]
-
-    if data.status == 'archived':
-        updated = await document_service.archive_documents(
-            db, doc_ids, UUID(current_user.tenant_id)
-        )
-    elif data.status == 'restored':
-        updated = await document_service.unarchive_documents(
-            db, doc_ids, UUID(current_user.tenant_id)
-        )
-    elif data.status == 'deleted':
-        updated, failed = await document_service.batch_delete(
-            db, doc_ids, UUID(current_user.tenant_id), permanently=False
-        )
-        return BatchUpdateResponse(
-            success=True,
-            updated_count=updated,
-            errors=[f'{failed} documents not found'] if failed else [],
-        )
-    else:
-        raise HTTPException(status_code=400, detail='Invalid status')
-
-    return BatchUpdateResponse(
-        success=True,
-        updated_count=updated,
-        errors=[],
-    )
-
-
-@router.delete('/{document_id}')
-async def delete_document(
-    document_id: str,
-    current_user: CurrentUser,
-    db=None,
-    permanently: bool = Query(False),
-):
-    """Delete a document"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-
-    doc = await document_service.get_document(db, UUID(document_id), UUID(current_user.tenant_id))
-    if not doc:
-        raise HTTPException(status_code=404, detail='Document not found')
-
-    file_size = doc.file_size
-    storage_key = doc.storage_key
-
-    if permanently:
-        await storage_service.delete_file(storage_key)
-        await document_service.permanent_delete_document(
-            db, UUID(document_id), UUID(current_user.tenant_id)
-        )
-        await document_service.update_quota_usage(
-            db, UUID(current_user.tenant_id), file_size, False
-        )
-    else:
-        await document_service.soft_delete_document(
-            db, UUID(document_id), UUID(current_user.tenant_id),
-            deleted_by_id=UUID(current_user.user_id)
-        )
-
-    return {
-        'success': True,
-        'document_id': document_id,
-        'deleted': True,
-        'permanently': permanently,
-    }
-
-
 @router.get('/download/{document_id}')
 async def download_document(
     document_id: str,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
     expires_seconds: int = Query(3600, ge=60, le=86400),
 ):
     """Get signed download URL"""
@@ -521,8 +352,8 @@ async def download_document(
 
 @router.get('/folders/list')
 async def list_folders(
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """List all folders for tenant"""
     if not current_user.tenant_id:
@@ -543,3 +374,185 @@ async def list_folders(
     folders = [f[0] for f in result.all() if f[0]]
 
     return {'success': True, 'folders': folders}
+
+
+@router.get('/{document_id}')
+async def get_document(
+    document_id: str,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get single document details"""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Tenant context required')
+
+    doc = await document_service.get_document(db, UUID(document_id), UUID(current_user.tenant_id))
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found')
+
+    return {'success': True, 'document': _doc_to_response(doc)}
+
+
+@router.patch('/{document_id}')
+async def update_document(
+    document_id: str,
+    data: DocumentUpdate,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update document metadata"""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Tenant context required')
+
+    doc = await document_service.update_document(
+        db, UUID(document_id), UUID(current_user.tenant_id),
+        name=data.name,
+        folder=data.folder,
+        tags=data.tags,
+        is_public=data.is_public,
+        metadata=data.metadata,
+    )
+
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found')
+
+    return {'success': True, 'document': _doc_to_response(doc)}
+
+
+@router.patch('/{document_id}/status')
+async def update_document_status(
+    document_id: str,
+    data: ProcessingStatusUpdate,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update document processing status"""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Tenant context required')
+
+    doc = await document_service.update_processing_status(
+        db, UUID(document_id), UUID(current_user.tenant_id),
+        status=data.status,
+        error_message=data.error_message,
+        metadata=data.metadata,
+    )
+
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found')
+
+    return {'success': True, 'document': _doc_to_response(doc)}
+
+
+@router.post('/retry', response_model=RetryResponse)
+async def retry_documents(
+    data: RetryRequest,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retry failed documents"""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Tenant context required')
+
+    retried = 0
+    skipped = 0
+    errors = []
+
+    for doc_id in data.document_ids:
+        try:
+            doc = await document_service.retry_document(
+                db, UUID(doc_id), UUID(current_user.tenant_id)
+            )
+            if doc:
+                retried += 1
+            else:
+                skipped += 1
+                errors.append(f'Document {doc_id}: max retries exceeded or not found')
+        except Exception as e:
+            skipped += 1
+            errors.append(f'Document {doc_id}: {str(e)}')
+
+    return RetryResponse(
+        success=True,
+        retried_count=retried,
+        skipped_count=skipped,
+        errors=errors,
+    )
+
+
+@router.post('/batch')
+async def batch_update_documents(
+    data: BatchStatusUpdate,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Batch update documents (archive, restore, delete)"""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Tenant context required')
+
+    doc_ids = [UUID(did) for did in data.document_ids]
+
+    if data.status == 'archived':
+        updated = await document_service.archive_documents(
+            db, doc_ids, UUID(current_user.tenant_id)
+        )
+    elif data.status == 'restored':
+        updated = await document_service.unarchive_documents(
+            db, doc_ids, UUID(current_user.tenant_id)
+        )
+    elif data.status == 'deleted':
+        updated, failed = await document_service.batch_delete(
+            db, doc_ids, UUID(current_user.tenant_id), permanently=False
+        )
+        return BatchUpdateResponse(
+            success=True,
+            updated_count=updated,
+            errors=[f'{failed} documents not found'] if failed else [],
+        )
+    else:
+        raise HTTPException(status_code=400, detail='Invalid status')
+
+    return BatchUpdateResponse(
+        success=True,
+        updated_count=updated,
+        errors=[],
+    )
+
+
+@router.delete('/{document_id}')
+async def delete_document(
+    document_id: str,
+    current_user: RequireDocumentDelete,
+    db: AsyncSession = Depends(get_db),
+    permanently: bool = Query(False),
+):
+    """Delete a document"""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Tenant context required')
+
+    doc = await document_service.get_document(db, UUID(document_id), UUID(current_user.tenant_id))
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found')
+
+    file_size = doc.file_size
+    storage_key = doc.storage_key
+
+    if permanently:
+        await storage_service.delete_file(storage_key)
+        await document_service.permanent_delete_document(
+            db, UUID(document_id), UUID(current_user.tenant_id)
+        )
+        await document_service.update_quota_usage(
+            db, UUID(current_user.tenant_id), file_size, False
+        )
+    else:
+        await document_service.soft_delete_document(
+            db, UUID(document_id), UUID(current_user.tenant_id),
+            deleted_by_id=UUID(current_user.user_id)
+        )
+
+    return {
+        'success': True,
+        'document_id': document_id,
+        'deleted': True,
+        'permanently': permanently,
+    }

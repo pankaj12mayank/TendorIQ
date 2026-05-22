@@ -25,6 +25,7 @@ import {
   DataTableCell,
 } from '@/components/design-system/data-table';
 import { StatusBadge } from '@/components/design-system/status-badge';
+import { CanCreateTender } from '@/components/auth/rbac';
 import { Button } from '@/components/ui/button';
 import { useTenders } from '@/hooks/use-api';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -41,6 +42,10 @@ const pipelineSteps = [
 
 export default function DashboardPage() {
   const { data, isLoading, isError, refetch } = useTenders({ limit: 8 });
+  const tenders = data?.data ?? [];
+  const activeTenders = tenders.filter(t => t.status === 'published').length;
+  const pipelineValue = tenders.reduce((sum, t) => sum + (Number(t.budget) || 0), 0);
+  const organizationCount = new Set(tenders.map(t => t.organizationId).filter(Boolean)).size;
 
   return (
     <div className="space-y-8">
@@ -66,10 +71,10 @@ export default function DashboardPage() {
         animate="animate"
         className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
       >
-        <KpiCard title="Active tenders" value="24" trend="+12%" trendUp icon={FileText} delay={0} />
-        <KpiCard title="Bids in progress" value="18" trend="+5%" trendUp icon={TrendingUp} delay={0.05} />
-        <KpiCard title="Organizations" value="3" trend="0%" icon={Users} delay={0.1} />
-        <KpiCard title="Pipeline value" value="$2.4M" trend="+18%" trendUp icon={DollarSign} delay={0.15} />
+        <KpiCard title="Active tenders" value={String(activeTenders)} trend={isLoading ? '...' : `${activeTenders > 0 ? '+' : ''}${activeTenders}`} trendUp icon={FileText} delay={0} />
+        <KpiCard title="Organizations" value={String(organizationCount || '—')} trend="0%" icon={Users} delay={0.05} />
+        <KpiCard title="Pipeline value" value={pipelineValue > 0 ? `$${(pipelineValue / 1000).toFixed(0)}K` : '—'} trend={isLoading ? '...' : '+'} trendUp icon={DollarSign} delay={0.1} />
+        <KpiCard title="Total tenders" value={String(tenders.length)} trend={isLoading ? '...' : ''} icon={TrendingUp} delay={0.15} />
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-5">
@@ -134,16 +139,18 @@ export default function DashboardPage() {
               <span className="text-sm font-semibold">Quick actions</span>
             </div>
             <div className="grid gap-2">
-              <Link
-                href="/dashboard/tenders/new"
-                className="flex items-center justify-between rounded-lg border border-border/60 p-3 text-sm font-medium transition-all hover:border-primary/30 hover:bg-primary/5"
-              >
-                <span className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" />
-                  Create tender
-                </span>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </Link>
+              <CanCreateTender>
+                <Link
+                  href="/dashboard/tenders/new"
+                  className="flex items-center justify-between rounded-lg border border-border/60 p-3 text-sm font-medium transition-all hover:border-primary/30 hover:bg-primary/5"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    Create tender
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                </Link>
+              </CanCreateTender>
               <Link
                 href="/dashboard/bids"
                 className="flex items-center justify-between rounded-lg border border-border/60 p-3 text-sm font-medium transition-all hover:border-primary/30 hover:bg-primary/5"

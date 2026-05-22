@@ -1,5 +1,6 @@
 """Onboarding API Router"""
 
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -22,8 +23,10 @@ from ..schemas.onboarding import (
     Step4Response,
     Step5Response,
     ExpertiseCategoryResponse,
+    OnboardingSessionTokens,
     AVAILABLE_PLANS,
 )
+from ..onboarding_helpers import issue_tenant_session_tokens
 from ...core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -163,11 +166,14 @@ async def get_onboarding_status(
     """Get current user's onboarding status"""
     state = await onboarding_service.get_state_by_user(db, UUID(current_user.user_id))
     if not state:
+        now = datetime.now(timezone.utc)
         return OnboardingStateResponse(
             id='',
             user_id=current_user.user_id,
             current_step=1,
             total_steps=5,
+            created_at=now,
+            updated_at=now,
         )
     return _state_to_response(state)
 
@@ -203,6 +209,11 @@ async def step1_create_organization(
         step_data={'name': data.name, 'slug': data.slug, 'logo_url': data.logo_url},
     )
 
+    session_tokens = issue_tenant_session_tokens(
+        current_user,
+        tenant_id=str(tenant.id),
+        membership_role='owner',
+    )
     return Step1Response(
         success=True,
         step=1,
@@ -210,6 +221,7 @@ async def step1_create_organization(
         tenant_id=str(tenant.id),
         tenant_name=tenant.name,
         onboarding_state=_state_to_response(state),
+        session=OnboardingSessionTokens(**session_tokens),
     )
 
 
@@ -358,12 +370,22 @@ async def step5_dashboard_setup(
         step_data=data.model_dump(exclude_none=True),
     )
 
+    session_tokens = None
+    if state.tenant_id:
+        session_tokens = OnboardingSessionTokens(
+            **issue_tenant_session_tokens(
+                current_user,
+                tenant_id=str(state.tenant_id),
+                membership_role=current_user.membership_role or 'owner',
+            )
+        )
     return Step5Response(
         success=True,
         step=5,
         completed=True,
         is_onboarding_complete=True,
         onboarding_state=_state_to_response(state),
+        session=session_tokens,
     )
 
 

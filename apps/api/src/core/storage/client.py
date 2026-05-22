@@ -1,5 +1,6 @@
-"""Cloudflare R2 / S3-compatible Storage Client"""
+"""Cloudflare R2 / S3-compatible Storage Client (async via asyncio.to_thread)"""
 
+import asyncio
 import hashlib
 import os
 import re
@@ -33,6 +34,10 @@ ALLOWED_MIME_TYPES = {
 
 MAX_FILENAME_LENGTH = 255
 SANITIZE_PATTERN = re.compile(r'[^\w.\-]')
+
+
+def _run_sync(fn, *args, **kwargs):
+    return asyncio.to_thread(fn, *args, **kwargs)
 
 
 class StorageService:
@@ -148,7 +153,8 @@ class StorageService:
             if acl:
                 extra_args['ACL'] = acl
 
-            self.client.put_object(
+            await _run_sync(
+                self.client.put_object,
                 Bucket=self.bucket,
                 Key=storage_key,
                 Body=file_content,
@@ -176,7 +182,8 @@ class StorageService:
 
     async def delete_file(self, storage_key: str) -> dict:
         try:
-            self.client.delete_object(
+            await _run_sync(
+                self.client.delete_object,
                 Bucket=self.bucket,
                 Key=storage_key,
             )
@@ -193,7 +200,8 @@ class StorageService:
                 return {'success': True, 'deleted': 0}
 
             objects = [{'Key': key} for key in storage_keys]
-            self.client.delete_objects(
+            await _run_sync(
+                self.client.delete_objects,
                 Bucket=self.bucket,
                 Delete={'Objects': objects},
             )
@@ -204,7 +212,7 @@ class StorageService:
             logger.error(f'Batch delete failed: {e}')
             return {'success': False, 'error': str(e)}
 
-    def generate_signed_upload_url(
+    async def generate_signed_upload_url(
         self,
         storage_key: str,
         content_type: Optional[str] = None,
@@ -214,20 +222,16 @@ class StorageService:
             expire = expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
             expiration = datetime.now(timezone.utc) + timedelta(seconds=expire)
 
-            conditions = []
-            if content_type:
-                conditions.append(['content-type', content_type])
-
             extra_args = {}
             if content_type:
                 extra_args['ContentType'] = content_type
 
-            presigned_url = self.client.generate_presigned_url(
+            presigned_url = await _run_sync(
+                self.client.generate_presigned_url,
                 'put_object',
                 Params={
                     'Bucket': self.bucket,
                     'Key': storage_key,
-                    **({} if not conditions else {}),
                 },
                 ExpiresIn=expire,
             )
@@ -244,7 +248,7 @@ class StorageService:
             logger.error(f'Signed URL generation failed: {e}')
             return {'success': False, 'error': str(e)}
 
-    def generate_signed_download_url(
+    async def generate_signed_download_url(
         self,
         storage_key: str,
         expires_seconds: Optional[int] = None,
@@ -258,7 +262,8 @@ class StorageService:
             if filename:
                 extra_args['ResponseContentDisposition'] = f'attachment; filename="{filename}"'
 
-            signed_url = self.client.generate_presigned_url(
+            signed_url = await _run_sync(
+                self.client.generate_presigned_url,
                 'get_object',
                 Params={
                     'Bucket': self.bucket,
@@ -282,7 +287,8 @@ class StorageService:
 
     async def get_file_metadata(self, storage_key: str) -> dict:
         try:
-            response = self.client.head_object(
+            response = await _run_sync(
+                self.client.head_object,
                 Bucket=self.bucket,
                 Key=storage_key,
             )
@@ -312,7 +318,8 @@ class StorageService:
                 extra_args['Metadata'] = {k: str(v) for k, v in metadata.items()}
                 extra_args['MetadataDirective'] = 'REPLACE'
 
-            self.client.copy_object(
+            await _run_sync(
+                self.client.copy_object,
                 Bucket=self.bucket,
                 Key=destination_key,
                 CopySource=copy_source,
@@ -343,7 +350,7 @@ class StorageService:
             if continuation_token:
                 kwargs['ContinuationToken'] = continuation_token
 
-            response = self.client.list_objects_v2(**kwargs)
+            response = await _run_sync(self.client.list_objects_v2, **kwargs)
 
             files = []
             for obj in response.get('Contents', []):
@@ -372,7 +379,8 @@ class StorageService:
             cutoff_str = cutoff.strftime('%Y/%m/%d')
             prefix = f'{tenant_id}/'
 
-            response = self.client.list_objects_v2(
+            response = await _run_sync(
+                self.client.list_objects_v2,
                 Bucket=self.bucket,
                 Prefix=prefix,
             )
@@ -386,14 +394,16 @@ class StorageService:
                     deleted_count += 1
 
                 if len(objects_to_delete) >= 1000:
-                    self.client.delete_objects(
+                    await _run_sync(
+                        self.client.delete_objects,
                         Bucket=self.bucket,
                         Delete={'Objects': objects_to_delete},
                     )
                     objects_to_delete = []
 
             if objects_to_delete:
-                self.client.delete_objects(
+                await _run_sync(
+                    self.client.delete_objects,
                     Bucket=self.bucket,
                     Delete={'Objects': objects_to_delete},
                 )

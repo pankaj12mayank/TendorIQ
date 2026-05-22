@@ -163,6 +163,7 @@ class PasswordResetToken(Base):
     __tablename__ = 'password_reset_tokens'
 
     id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id'), nullable=True, index=True)
     email = Column(String(255), nullable=False, index=True)
     token_hash = Column(String(128), nullable=False, unique=True, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)

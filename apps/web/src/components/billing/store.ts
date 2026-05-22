@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import { 
-  Plan, 
-  Subscription, 
-  Invoice, 
-  PaymentMethod, 
+import { api } from '@/lib/api-client';
+import { mapQuotaFromUsageApi, mapSubscriptionFromApi } from '@/lib/billing-api';
+import {
+  Plan,
+  Subscription,
+  Invoice,
+  PaymentMethod,
   QuotaStatus,
   BillingInterval,
-  PlanChangeType
 } from './types';
-import { PLANS, MOCK_SUBSCRIPTION, MOCK_INVOICES, MOCK_QUOTA_STATUS } from './constants';
+
 
 interface BillingState {
   plans: Plan[];
@@ -39,25 +40,11 @@ interface BillingState {
 }
 
 export const useBillingStore = create<BillingState>((set, get) => ({
-  plans: PLANS,
-  currentSubscription: MOCK_SUBSCRIPTION,
-  invoices: MOCK_INVOICES,
-  paymentMethods: [
-    {
-      id: 'pm_1',
-      userId: 'user_123',
-      stripePaymentMethodId: 'pm_stripe_123',
-      type: 'card',
-      brand: 'visa',
-      last4: '4242',
-      expiryMonth: 12,
-      expiryYear: 2027,
-      isDefault: true,
-      isActive: true,
-      createdAt: '2026-01-01T00:00:00Z',
-    },
-  ],
-  quotaStatus: MOCK_QUOTA_STATUS,
+  plans: [],
+  currentSubscription: null,
+  invoices: [],
+  paymentMethods: [],
+  quotaStatus: [],
   isLoading: false,
   isProcessing: false,
   error: null,
@@ -72,139 +59,86 @@ export const useBillingStore = create<BillingState>((set, get) => ({
   setError: (error) => set({ error }),
 
   changePlan: async (planId: string, billingInterval: BillingInterval) => {
-    const { plans } = get();
-    const newPlan = plans.find(p => p.id === planId);
-    const currentSub = get().currentSubscription;
-
-    if (!newPlan || !currentSub) {
-      set({ error: 'Invalid plan or subscription' });
-      return;
-    }
-
     set({ isProcessing: true, error: null });
-
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const updatedSubscription: Subscription = {
-      ...currentSub,
-      planId: newPlan.id,
-      plan: newPlan,
-      billingInterval,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const invoice: Invoice = {
-      id: `inv_${Date.now()}`,
-      subscriptionId: currentSub.id,
-      userId: currentSub.userId,
-      invoiceNumber: `INV-${new Date().getFullYear()}-${String(get().invoices.length + 1).padStart(4, '0')}`,
-      amount: billingInterval === 'monthly' ? newPlan.priceMonthly : newPlan.priceAnnual,
-      currency: newPlan.currency,
-      status: 'pending',
-      description: `${newPlan.displayName} Plan - ${billingInterval === 'monthly' ? 'Monthly' : 'Annual'}`,
-      dueDate: new Date().toISOString(),
-      billingPeriodStart: new Date().toISOString(),
-      billingPeriodEnd: new Date(Date.now() + (billingInterval === 'monthly' ? 30 : 365) * 24 * 60 * 60 * 1000).toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-
-    set(state => ({
-      currentSubscription: updatedSubscription,
-      invoices: [invoice, ...state.invoices],
-      isProcessing: false,
-    }));
+    try {
+      const res = await api.post<{ subscription?: Subscription }>(
+        '/api/v1/billing/subscription/change',
+        { plan_id: planId, billing_interval: billingInterval }
+      );
+      if (res.subscription) {
+        set({ currentSubscription: mapSubscriptionFromApi(res.subscription), isProcessing: false });
+      } else {
+        const sub = await api.get<Subscription>('/api/v1/billing/subscription');
+        set({ currentSubscription: mapSubscriptionFromApi(sub), isProcessing: false });
+      }
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Plan change failed', isProcessing: false });
+    }
   },
 
   cancelSubscription: async (reason?: string) => {
     set({ isProcessing: true, error: null });
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const currentSub = get().currentSubscription;
-    if (!currentSub) {
-      set({ error: 'No subscription found', isProcessing: false });
-      return;
+    try {
+      const res = await api.post<{ subscription: Subscription }>(
+        '/api/v1/billing/subscription/cancel',
+        { reason }
+      );
+      set({ currentSubscription: mapSubscriptionFromApi(res.subscription), isProcessing: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Cancellation failed', isProcessing: false });
     }
-
-    const updatedSubscription: Subscription = {
-      ...currentSub,
-      status: 'canceled',
-      canceledAt: new Date().toISOString(),
-      cancelAtPeriodEnd: true,
-      updatedAt: new Date().toISOString(),
-    };
-
-    set(state => ({
-      currentSubscription: updatedSubscription,
-      isProcessing: false,
-    }));
   },
 
   reactivateSubscription: async () => {
     set({ isProcessing: true, error: null });
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const currentSub = get().currentSubscription;
-    if (!currentSub) {
-      set({ error: 'No subscription found', isProcessing: false });
-      return;
+    try {
+      const res = await api.post<{ subscription: Subscription }>('/api/v1/billing/subscription/reactivate');
+      set({ currentSubscription: mapSubscriptionFromApi(res.subscription), isProcessing: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Reactivation failed', isProcessing: false });
     }
-
-    const updatedSubscription: Subscription = {
-      ...currentSub,
-      status: 'active',
-      canceledAt: undefined,
-      cancelAtPeriodEnd: false,
-      updatedAt: new Date().toISOString(),
-    };
-
-    set(state => ({
-      currentSubscription: updatedSubscription,
-      isProcessing: false,
-    }));
   },
 
   updatePaymentMethod: async (methodId: string, isDefault: boolean) => {
     set({ isProcessing: true, error: null });
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    set(state => ({
-      paymentMethods: state.paymentMethods.map(pm =>
-        pm.id === methodId ? { ...pm, isDefault } : pm
-      ),
-      isProcessing: false,
-    }));
+    try {
+      await api.patch(`/api/v1/billing/payment-methods/${methodId}`, { is_default: isDefault });
+      const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
+      set({ paymentMethods: res.payment_methods, isProcessing: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Update failed', isProcessing: false });
+    }
   },
 
   addPaymentMethod: async (method: PaymentMethod) => {
     set({ isProcessing: true, error: null });
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    set(state => ({
-      paymentMethods: [...state.paymentMethods, method],
-      isProcessing: false,
-    }));
+    try {
+      await api.post('/api/v1/billing/payment-methods', method);
+      const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
+      set({ paymentMethods: res.payment_methods, isProcessing: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Add failed', isProcessing: false });
+    }
   },
 
   removePaymentMethod: async (methodId: string) => {
     set({ isProcessing: true, error: null });
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    set(state => ({
-      paymentMethods: state.paymentMethods.filter(pm => pm.id !== methodId),
-      isProcessing: false,
-    }));
+    try {
+      await api.delete(`/api/v1/billing/payment-methods/${methodId}`);
+      const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
+      set({ paymentMethods: res.payment_methods, isProcessing: false });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Remove failed', isProcessing: false });
+    }
   },
 
   refreshQuota: async () => {
     set({ isLoading: true });
-
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    set({ isLoading: false });
+    try {
+      const data = await api.get<{ quotas?: QuotaStatus[]; quota?: QuotaStatus[] }>('/api/v1/billing/quota');
+      set({ quotaStatus: mapQuotaFromUsageApi(data), isLoading: false });
+    } catch {
+      set({ isLoading: false });
+    }
   },
 }));

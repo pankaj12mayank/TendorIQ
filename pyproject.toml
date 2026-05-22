@@ -1,5 +1,5 @@
 [project]
-name = "tendermonorepo"
+name = "tenderiq"
 version = "1.0.0"
 description = "TenderIQ - Tender Management Platform"
 requires-python = ">=3.12"

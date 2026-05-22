@@ -3,13 +3,12 @@
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncConnection
 
 from alembic import context
 
 import sys
 from os.path import dirname, abspath
-sys.path.insert(0, dirname(dirname(abspath(__file__))))
+sys.path.insert(0, dirname(dirname(abspath(__file__))) + '/src')
 
 from core.models import Base
 from core.config import settings
@@ -39,7 +38,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    connectable: AsyncEngine = create_engine(
+    connectable = create_engine(
         config.get_main_option("sqlalchemy.url"),
         poolclass=pool.NullPool,
     )

@@ -1,5 +1,5 @@
 {
-  "name": "tendermonorepo",
+  "name": "tenderiq",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -11,10 +11,10 @@
     "build:api": "turbo build --filter=api",
     "lint": "turbo lint",
     "lint:web": "eslint apps/web --ext .ts,.tsx",
-    "lint:api": "flake8 apps/api",
+    "lint:api": "ruff check apps/api/src",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "typecheck": "turbo typecheck",
-    "clean": "turbo clean && rm -rf node_modules",
+    "clean": "turbo clean && node -e \"require('fs').rmSync('node_modules',{recursive:true,force:true})\"",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:studio": "turbo run db:studio",

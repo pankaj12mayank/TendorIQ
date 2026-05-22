@@ -15,7 +15,9 @@ class TenderBase(BaseModel):
 
 
 class TenderCreate(TenderBase):
-    organization_id: str
+    """Tenant is taken from JWT; organization_id is optional legacy alias."""
+
+    organization_id: Optional[str] = None
 
 
 class TenderUpdate(BaseModel):

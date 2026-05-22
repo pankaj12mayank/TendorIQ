@@ -1,8 +1,9 @@
-"""Database Configuration and Session Management"""
+﻿"""Database Configuration and Session Management"""
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import settings
@@ -49,8 +50,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_db_session() -> AsyncSession:
-    async with async_session_maker() as session:
-        return session
+    """Create and return a standalone session (caller must close it)."""
+    return async_session_maker()
 
 
 @asynccontextmanager
@@ -65,11 +66,11 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    logger.info('Initializing database connection')
+    logger.info('Verifying database connection')
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info('Database initialized successfully')
+        async with engine.connect() as conn:
+            await conn.execute(text('SELECT 1'))
+        logger.info('Database connection verified')
     except Exception as exc:
         if settings.is_development:
             logger.warning(f'Database unavailable, continuing without persistence: {exc}')

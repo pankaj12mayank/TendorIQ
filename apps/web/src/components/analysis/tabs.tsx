@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { AnalysisSection } from './types';
 import { useAnalysisStore, useAnalysisSections } from './store';
-import { MOCK_ANALYSIS } from './constants';
+
 
 const SECTION_ICONS = {
   summary: FileText,

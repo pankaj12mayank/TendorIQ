@@ -6,7 +6,7 @@ import {
   ExportOptions,
   ConfidenceScore 
 } from './types';
-import { MOCK_ANALYSIS } from './constants';
+
 
 interface AnalysisState {
   analysis: TenderAnalysis | null;
@@ -28,7 +28,7 @@ interface AnalysisState {
 }
 
 export const useAnalysisStore = create<AnalysisState>((set, get) => ({
-  analysis: MOCK_ANALYSIS,
+  analysis: null,
   activeSection: 'summary',
   editState: null,
   isLoading: false,
@@ -50,24 +50,23 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
   saveEdit: () => {
     const { editState, analysis } = get();
-    if (!editState || !analysis) return;
+    if (!editState || !analysis || !editState.section || !editState.fieldId) return;
 
     set({ isSaving: true });
+
+    const updatedAnalysis = { ...analysis };
+    const sectionKey = editState.section as string;
+    const section = (updatedAnalysis as Record<string, unknown>)[sectionKey] as Record<string, unknown>;
+    if (section) {
+      section[editState.fieldId] = editState.newValue;
+    }
     
-    setTimeout(() => {
-      const updatedAnalysis = { ...analysis };
-      (updatedAnalysis as Record<string, unknown>)[editState.section] = {
-        ...(updatedAnalysis as Record<string, unknown>)[editState.section] as object,
-        [editState.fieldId]: editState.newValue
-      };
-      
-      set({
-        analysis: updatedAnalysis,
-        editState: null,
-        isSaving: false,
-        hasUnsavedChanges: false
-      });
-    }, 500);
+    set({
+      analysis: updatedAnalysis,
+      editState: null,
+      isSaving: false,
+      hasUnsavedChanges: false
+    });
   },
 
   cancelEdit: () => set({ editState: null }),
@@ -75,11 +74,14 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   updateSection: (section, data) => {
     const { analysis } = get();
     if (!analysis) return;
+
+    const sectionKey = section as string;
+    const currentSection = (analysis as unknown as Record<string, unknown>)[sectionKey] as Record<string, unknown> ?? {};
     
     set({ 
       analysis: { 
         ...analysis, 
-        [section]: { ...(analysis as Record<string, unknown>)[section] as object, ...data as object },
+        [sectionKey]: { ...currentSection, ...data as Record<string, unknown> },
         updatedAt: new Date().toISOString()
       },
       hasUnsavedChanges: true
@@ -126,8 +128,17 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
   refreshAnalysis: async () => {
     set({ isLoading: true });
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    set({ analysis: MOCK_ANALYSIS, isLoading: false });
+    try {
+      const res = await fetch('/api/v1/analysis/current');
+      if (res.ok) {
+        const data = await res.json();
+        set({ analysis: data, isLoading: false });
+      } else {
+        set({ isLoading: false });
+      }
+    } catch {
+      set({ isLoading: false });
+    }
   }
 }));
 

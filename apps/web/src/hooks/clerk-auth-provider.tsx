@@ -2,7 +2,7 @@
 
 import { useAuth as useClerkAuth, useUser, useSession } from '@clerk/nextjs';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { useEffect, useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import {
   clearStoredSession,
@@ -10,9 +10,15 @@ import {
   setStoredSession,
   type AuthUser,
 } from '@/lib/auth-session';
+import {
+  exchangeClerkSession,
+  tokensFromLoginResponse,
+  userFromLoginResponse,
+} from '@/lib/auth-api';
 import { getPostLoginPath } from '@/lib/auth-redirect';
+import { buildApiAuthHeaders } from '@/lib/auth-user';
 import { isProtectedPath } from '@/lib/clerk-config';
-import { getRolePermissions } from '@/lib/permissions';
+import { isSuperAdmin } from '@/lib/permissions';
 import { toast } from 'sonner';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
@@ -45,50 +51,100 @@ function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: stri
 
 export function ClerkAuthProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, signOut: clerkSignOut } = useClerkAuth();
-  const { user } = useUser();
-  const { getToken: clerkGetToken } = useSession();
+  const { user: clerkUser } = useUser();
+  const { session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const [syncedUser, setSyncedUser] = useState<AuthUser | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const stored = typeof window !== 'undefined' ? getStoredSession() : null;
 
-  const authUser: AuthUser | null = user
-    ? {
-        id: user.id,
-        email: user.emailAddresses[0]?.emailAddress || '',
-        name: user.fullName || user.username || '',
-        imageUrl: user.imageUrl,
-        role: (user.publicMetadata?.role as string | undefined) ?? stored?.user.role,
-        permissions: getRolePermissions(
-          (user.publicMetadata?.role as string | undefined) ?? stored?.user.role
-        ),
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !session) {
+      if (!isSignedIn) setSyncedUser(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSyncing(true);
+
+    (async () => {
+      try {
+        const clerkToken = await session.getToken();
+        if (!clerkToken || cancelled) return;
+
+        const exchanged = await exchangeClerkSession(clerkToken);
+        if (cancelled) return;
+
+        if (exchanged) {
+          setStoredSession(exchanged.token, exchanged.user, {
+            refreshToken: exchanged.refreshToken,
+            expiresInSec: exchanged.expiresIn,
+          });
+          setSyncedUser(exchanged.user);
+          return;
+        }
+      } finally {
+        if (!cancelled) setSyncing(false);
       }
-    : stored?.user ?? null;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn, session, clerkUser?.id]);
+
+  const authUser: AuthUser | null = syncedUser ?? stored?.user ?? null;
 
   const isAuthenticated = (isLoaded && !!isSignedIn) || !!stored;
 
-  useRouteGuard(isAuthenticated, !isLoaded, authUser?.role);
+  const routeRole =
+    authUser?.membershipRole ??
+    authUser?.role ??
+    (clerkUser?.publicMetadata?.membership_role as string | undefined) ??
+    (clerkUser?.publicMetadata?.role as string | undefined);
+
+  useRouteGuard(isAuthenticated, !isLoaded || syncing, routeRole);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !authUser) return;
-    if (authUser.role === 'super_admin' && pathname.startsWith('/dashboard') && !pathname.includes('/admin')) {
+    if (isSuperAdmin(authUser.role) && pathname.startsWith('/dashboard') && !pathname.includes('/admin')) {
       router.replace('/dashboard/admin');
     }
   }, [isLoaded, isSignedIn, authUser, pathname, router]);
 
   const signOut = useCallback(async () => {
+    const token = getStoredSession()?.token;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    if (token) {
+      try {
+        await fetch(`${apiUrl}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildApiAuthHeaders(token, authUser ?? undefined),
+          },
+        });
+      } catch {
+        // continue
+      }
+    }
     clearStoredSession();
+    setSyncedUser(null);
     await clerkSignOut();
     router.push('/');
-  }, [clerkSignOut, router]);
+  }, [clerkSignOut, router, authUser]);
 
   const getToken = useCallback(async () => {
+    const local = getStoredSession()?.token;
+    if (local) return local;
     try {
-      return (await clerkGetToken()) ?? getStoredSession()?.token ?? null;
+      return (await session?.getToken()) ?? null;
     } catch {
-      return getStoredSession()?.token ?? null;
+      return null;
     }
-  }, [clerkGetToken]);
+  }, [session]);
 
   const loginWithCredentials = useCallback(
     async (email: string, password: string) => {
@@ -103,17 +159,17 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
         throw new Error((err as { detail?: string }).detail || 'Login failed');
       }
       const data = await res.json();
-      const role = (data.user?.role as string) || 'user';
-      const sessionUser: AuthUser = {
-        id: data.user?.email ?? email,
-        email: data.user?.email ?? email,
-        name: data.user?.name ?? email.split('@')[0] ?? 'User',
-        role,
-        permissions: getRolePermissions(role),
-      };
-      setStoredSession(data.token, sessionUser);
+      const tokens = tokensFromLoginResponse(data);
+      const sessionUser = userFromLoginResponse(data);
+      setStoredSession(tokens.access_token, sessionUser, {
+        refreshToken: tokens.refresh_token,
+        expiresInSec: tokens.expires_in,
+      });
+      setSyncedUser(sessionUser);
       toast.success('Signed in successfully');
-      router.push(getPostLoginPath(role));
+      router.push(
+        getPostLoginPath(role === 'super_admin' ? role : membershipRole)
+      );
     },
     [router]
   );
@@ -121,13 +177,13 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       isAuthenticated,
-      isLoading: !isLoaded,
+      isLoading: !isLoaded || syncing,
       user: authUser,
       signOut,
       getToken,
       loginWithCredentials,
     }),
-    [isAuthenticated, isLoaded, authUser, signOut, getToken, loginWithCredentials]
+    [isAuthenticated, isLoaded, syncing, authUser, signOut, getToken, loginWithCredentials]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

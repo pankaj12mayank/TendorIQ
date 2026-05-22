@@ -1,4 +1,4 @@
-"""Admin Service Management - Check user roles and service purchases"""
+﻿\"\"\"Admin Service Management - Check user roles and service purchases\"\"\"
 
 import logging
 from uuid import UUID
@@ -7,6 +7,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from ...core.models import Tenant, User, Subscription, Membership
 from ...core.database import get_db
@@ -43,18 +45,24 @@ class ServicePurchaseResponse(BaseModel):
 @router.get('/whoami', response_model=UserRoleResponse)
 async def whoami(
     current_user: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Check current user's role and permissions"""
-    
+    \"\"\"Check current user's role and permissions\"\"\"
     is_admin = current_user.role in ['super_admin', 'owner', 'admin', 'tenant_admin']
-    
+
+    plan = 'starter'
+    if current_user.tenant_id:
+        tenant = await db.get(Tenant, current_user.tenant_id)
+        if tenant and tenant.plan:
+            plan = tenant.plan
+
     return UserRoleResponse(
         user_id=current_user.user_id,
         email=current_user.email,
         role=current_user.role or 'user',
         membership_role=current_user.membership_role,
         tenant_id=str(current_user.tenant_id) if current_user.tenant_id else None,
-        plan='starter',  # Will be fetched from tenant
+        plan=plan,
         is_admin=is_admin,
     )
 
@@ -62,34 +70,26 @@ async def whoami(
 @router.get('/users')
 async def list_tenant_users(
     current_user: AuthContext = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """List all users in the current tenant (admin only)"""
-    
-    # Check if admin
+    \"\"\"List all users in the current tenant (admin only)\"\"\"
     if current_user.role not in ['super_admin', 'owner', 'admin', 'tenant_admin']:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required"
-        )
-    
+        raise HTTPException(status_code=403, detail='Admin access required')
+
     if not current_user.tenant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="No tenant context"
-        )
-    
-    # Get all members in tenant
-    from sqlalchemy import select
+        raise HTTPException(status_code=400, detail='No tenant context')
+
     from sqlalchemy.orm import selectinload
-    
-    stmt = select(Membership).where(
-        Membership.tenant_id == current_user.tenant_id
-    ).options(selectinload(Membership.user))
-    
+
+    stmt = (
+        select(Membership)
+        .where(Membership.tenant_id == current_user.tenant_id)
+        .options(selectinload(Membership.user))
+    )
+
     result = await db.execute(stmt)
     members = result.scalars().all()
-    
+
     users = []
     for member in members:
         users.append({
@@ -98,19 +98,15 @@ async def list_tenant_users(
             'membership_role': member.role,
             'joined_at': member.created_at.isoformat() if member.created_at else None,
         })
-    
-    return {
-        'users': users,
-        'total': len(users),
-    }
+
+    return {'users': users, 'total': len(users)}
 
 
 @router.get('/services')
 async def get_available_services(
     current_user: AuthContext = Depends(get_current_user),
 ):
-    """Get all available services for purchase"""
-    
+    \"\"\"Get all available services for purchase\"\"\"
     return {
         'services': [
             {
@@ -161,35 +157,22 @@ async def get_available_services(
 async def purchase_service(
     request: ServicePurchaseRequest,
     current_user: AuthContext = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Purchase a service for the tenant"""
-    
-    # Check if admin
+    \"\"\"Purchase a service for the tenant\"\"\"
     if current_user.role not in ['super_admin', 'owner', 'admin', 'tenant_admin']:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required to purchase services"
-        )
-    
+        raise HTTPException(status_code=403, detail='Admin access required to purchase services')
+
     if not current_user.tenant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="No tenant context"
-        )
-    
-    # In production, this would:
-    # 1. Create a Stripe checkout session
-    # 2. Process payment
-    # 3. Update tenant subscription
-    
-    purchase_id = f"purchase_{datetime.utcnow().timestamp()}"
-    
-    logger.info(f"Service purchase: {current_user.tenant_id} - {request.service_name} - {request.plan}")
-    
+        raise HTTPException(status_code=400, detail='No tenant context')
+
+    purchase_id = f'purchase_{datetime.utcnow().timestamp()}'
+
+    logger.info(f'Service purchase: {current_user.tenant_id} - {request.service_name} - {request.plan}')
+
     return ServicePurchaseResponse(
         success=True,
-        message=f"Successfully purchased {request.service_name} ({request.plan})",
+        message=f'Successfully purchased {request.service_name} ({request.plan})',
         purchase_id=purchase_id,
         services=[
             {
@@ -205,32 +188,32 @@ async def purchase_service(
 @router.get('/subscription')
 async def get_tenant_subscription(
     current_user: AuthContext = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get tenant subscription and services"""
-    
+    \"\"\"Get tenant subscription and services\"\"\"
     if not current_user.tenant_id:
-        raise HTTPException(
-            status_code=400,
-            detail="No tenant context"
-        )
-    
-    from sqlalchemy import select
-    
+        raise HTTPException(status_code=400, detail='No tenant context')
+
     tenant = await db.get(Tenant, current_user.tenant_id)
-    
+
     if not tenant:
-        raise HTTPException(
-            status_code=404,
-            detail="Tenant not found"
-        )
-    
+        raise HTTPException(status_code=404, detail='Tenant not found')
+
+    # Look up subscription for billing cycle
+    sub_result = await db.execute(
+        select(Subscription).where(
+            Subscription.tenant_id == current_user.tenant_id,
+            Subscription.status == 'active'
+        ).order_by(Subscription.created_at.desc())
+    )
+    subscription = sub_result.scalar_one_or_none()
+
     return {
         'tenant_id': str(tenant.id),
         'tenant_name': tenant.name,
         'plan': tenant.plan or 'starter',
-        'billing_cycle': tenant.billing_cycle or 'monthly',
-        'subscription_status': 'active',
+        'billing_cycle': subscription.billing_cycle if subscription else 'monthly',
+        'subscription_status': subscription.status if subscription else 'active',
         'services': [
             {'service': 'ai_analysis', 'status': 'active'},
             {'service': 'risk_detection', 'status': 'active'},
@@ -241,3 +224,4 @@ async def get_tenant_subscription(
 
 
 router_check = router
+

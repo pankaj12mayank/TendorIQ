@@ -143,11 +143,11 @@ export function withErrorBoundary<P extends object>(
 export class AsyncErrorBoundary extends Component<{ children: ReactNode }, State> {
   constructor(props: { children: ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error, errorInfo: null };
   }
 
   render(): ReactNode {

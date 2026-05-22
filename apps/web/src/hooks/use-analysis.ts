@@ -1,7 +1,44 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { z } from 'zod';
+import { api } from '@/lib/api-client';
+import { unwrapData, type ApiEnvelope } from '@/lib/api-envelope';
 import { useAnalysisStore } from '@/components/analysis/store';
 import { TenderAnalysis, AnalysisSection } from '@/components/analysis/types';
-import { MOCK_ANALYSIS } from '@/components/analysis/constants';
+
+const analysisSchema = z.object({
+  tenderId: z.string(),
+  summary: z.object({
+    confidence: z.object({ value: z.number(), label: z.string() }),
+    keyFindings: z.array(z.string()),
+    overallAssessment: z.string(),
+  }),
+  eligibility: z.object({
+    overallScore: z.number(),
+    criteria: z.array(z.object({ name: z.string(), status: z.string(), details: z.string() })),
+  }),
+  technical: z.object({
+    complianceRate: z.number(),
+    requirements: z.array(z.object({ id: z.string(), name: z.string(), status: z.string() })),
+  }),
+  financial: z.object({
+    totalValue: z.number(),
+    currency: z.string(),
+    items: z.array(z.any()),
+  }),
+  risks: z.object({
+    overallRiskScore: z.number(),
+    risks: z.array(z.object({ id: z.string(), title: z.string(), severity: z.string(), description: z.string() })),
+  }),
+  deadlines: z.object({
+    deadlines: z.array(z.object({ id: z.string(), title: z.string(), dueDate: z.string(), priority: z.string() })),
+  }),
+  mandatoryDocs: z.object({
+    overallCompletion: z.number(),
+    documents: z.array(z.object({ id: z.string(), name: z.string(), status: z.string() })),
+  }),
+  createdAt: z.string().optional().nullable(),
+  updatedAt: z.string().optional().nullable(),
+});
 
 interface UseAnalysisApiReturn {
   analysis: TenderAnalysis | null;
@@ -20,27 +57,52 @@ export function useAnalysisApi(tenderId?: string): UseAnalysisApiReturn {
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
+    if (!tenderId) {
+      setIsError(true);
+      setError('Missing tender ID');
+      return;
+    }
     setIsError(false);
     setError(null);
-    
+    useAnalysisStore.setState({ isLoading: true });
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setAnalysis(MOCK_ANALYSIS);
+      const raw = await api.get<ApiEnvelope<TenderAnalysis>>(
+        `/api/v1/analysis/tender/${tenderId}`
+      );
+      setAnalysis(analysisSchema.parse(unwrapData(raw)));
     } catch (err) {
       setIsError(true);
       setError('Failed to fetch analysis');
+    } finally {
+      useAnalysisStore.setState({ isLoading: false });
     }
-  }, [setAnalysis]);
+  }, [setAnalysis, tenderId]);
+
+  useEffect(() => {
+    if (tenderId) {
+      void refetch();
+    }
+  }, [tenderId, refetch]);
 
   const updateField = useCallback(async (
     section: AnalysisSection, 
     fieldId: string, 
     value: unknown
   ) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const store = useAnalysisStore.getState();
-    store.updateSection(section, { [fieldId]: value });
-  }, []);
+    try {
+      await api.patch(`/api/v1/analysis/tender/${tenderId}`, {
+        section,
+        field_id: fieldId,
+        value,
+      });
+      const store = useAnalysisStore.getState();
+      store.updateSection(section, { [fieldId]: value });
+    } catch (err) {
+      setIsError(true);
+      setError(err instanceof Error ? err.message : 'Failed to update field');
+    }
+  }, [tenderId]);
 
   const exportAnalysis = useCallback(async (format: 'pdf' | 'docx' | 'json' | 'csv') => {
     const store = useAnalysisStore.getState();
@@ -54,7 +116,7 @@ export function useAnalysisApi(tenderId?: string): UseAnalysisApiReturn {
 
   const getSectionData = useCallback((section: AnalysisSection): unknown => {
     if (!analysis) return null;
-    return analysis[section];
+    return (analysis as unknown as Record<string, unknown>)[section as string];
   }, [analysis]);
 
   return {

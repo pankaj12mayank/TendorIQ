@@ -10,21 +10,57 @@ import { roleNavGroups } from '@/design-system/icons';
 import type { AppRole } from '@/design-system/tokens';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/use-auth';
+import { getMembershipRole } from '@/lib/auth-user';
+import { hasPermission } from '@/lib/permissions';
 import { useTenantStore } from '@/stores/tenant-store';
 import { Button } from '@/components/ui/button';
 
-function resolveRole(role?: string): AppRole {
-  if (role === 'super_admin') return 'super_admin';
+/** Nav href → permission required (omit = visible to all authenticated tenant users). */
+const NAV_ITEM_PERMISSIONS: Record<string, string | undefined> = {
+  '/dashboard/upload': 'document:create',
+  '/dashboard/organizations': 'org:read',
+  '/dashboard/billing': 'settings:read',
+  '/dashboard/usage': 'analytics:view',
+  '/dashboard/settings': 'settings:read',
+  '/dashboard/review': 'tender:read',
+};
+
+function resolveRole(membershipRole?: string, platformRole?: string): AppRole {
+  if (platformRole === 'super_admin') return 'super_admin';
+  const role = membershipRole ?? platformRole;
   if (role === 'tenant_admin' || role === 'admin' || role === 'owner') return 'tenant_admin';
+  if (role === 'manager') return 'manager';
+  if (role === 'analyst') return 'analyst';
+  if (role === 'member') return 'member';
+  if (role === 'viewer') return 'viewer';
   return 'user';
+}
+
+function canSeeNavItem(
+  href: string,
+  membershipRole: string,
+  permissions?: string[]
+): boolean {
+  const base = href.split('?')[0] ?? href;
+  const required = NAV_ITEM_PERMISSIONS[base];
+  if (!required) return true;
+  return hasPermission(membershipRole, required, permissions);
 }
 
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const user = useCurrentUser();
-  const role = resolveRole(user?.role);
-  const groups = roleNavGroups[role];
+  const membershipRole = getMembershipRole(user);
+  const role = resolveRole(membershipRole, user?.role);
+  const groups = (roleNavGroups[role] ?? [])
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        canSeeNavItem(item.href, membershipRole, user?.permissions)
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
   const currentOrganization = useTenantStore((s) => s.currentOrganization);
   const [collapsed, setCollapsed] = useState(false);
 

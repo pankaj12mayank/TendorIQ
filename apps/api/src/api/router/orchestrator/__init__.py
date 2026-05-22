@@ -17,12 +17,17 @@ from ....core.orchestrator import (
     PromptType,
     ChainDefinition,
     ChainStep,
-    StepType,
 )
 from ....core.ai import ProviderType
+from ....core.auth import AuthContext
+from ...dependencies.rbac_deps import RequireAiAnalysis, require_tenant_member
 
 
-router = APIRouter(prefix='/orchestrator', tags=['orchestrator'])
+router = APIRouter(
+    prefix='/orchestrator',
+    tags=['orchestrator'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 class ExecuteRequest(BaseModel):
@@ -69,7 +74,10 @@ class CreateWorkflowRequest(BaseModel):
 
 
 @router.post('/execute', response_model=OrchestratorResponse)
-async def execute(request: ExecuteRequest):
+async def execute(
+    request: ExecuteRequest,
+    current_user: RequireAiAnalysis,
+):
     orchestrator = get_orchestrator()
     try:
         orch_request = OrchestratorRequest(

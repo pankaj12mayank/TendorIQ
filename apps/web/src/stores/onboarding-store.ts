@@ -52,7 +52,7 @@ const initialState = {
 
 export const useOnboardingStore = create<OnboardingState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...initialState,
 
       setCurrentStep: (step) => set({ currentStep: step }),
@@ -73,13 +73,14 @@ export const useOnboardingStore = create<OnboardingState>()(
       },
 
       setStepData: (step, data) => {
+        const state = get();
         const updates: Partial<OnboardingState> = {};
         switch (step) {
-          case 1: updates.step1Data = { ...updates.step1Data, ...data }; break;
-          case 2: updates.step2Data = { ...updates.step2Data, ...data }; break;
-          case 3: updates.step3Data = { ...updates.step3Data, ...data }; break;
-          case 4: updates.step4Data = { ...updates.step4Data, ...data }; break;
-          case 5: updates.step5Data = { ...updates.step5Data, ...data }; break;
+          case 1: updates.step1Data = { ...state.step1Data, ...data }; break;
+          case 2: updates.step2Data = { ...state.step2Data, ...data }; break;
+          case 3: updates.step3Data = { ...state.step3Data, ...data }; break;
+          case 4: updates.step4Data = { ...state.step4Data, ...data }; break;
+          case 5: updates.step5Data = { ...state.step5Data, ...data }; break;
         }
         set(updates);
       },
@@ -106,6 +107,7 @@ export const useOnboardingStore = create<OnboardingState>()(
         step5Data: state.step5Data ?? {},
         isCompleted: state.isCompleted ?? false,
         tenantId: state.tenantId ?? null,
+        tenantName: state.tenantName ?? null,
       }),
 
       reset: () => set(initialState),
@@ -119,11 +121,6 @@ export const useOnboardingStore = create<OnboardingState>()(
         step3Completed: state.step3Completed,
         step4Completed: state.step4Completed,
         step5Completed: state.step5Completed,
-        step1Data: state.step1Data,
-        step2Data: state.step2Data,
-        step3Data: state.step3Data,
-        step4Data: state.step4Data,
-        step5Data: state.step5Data,
         isCompleted: state.isCompleted,
         tenantId: state.tenantId,
         tenantName: state.tenantName,
@@ -132,23 +129,3 @@ export const useOnboardingStore = create<OnboardingState>()(
   )
 );
 
-export interface Plan {
-  id: string;
-  name: string;
-  description: string;
-  price_monthly: number;
-  price_yearly: number;
-  currency: string;
-  features: { name: string; included: boolean; limit?: string }[];
-  recommended: boolean;
-}
-
-export interface ExpertiseCategory {
-  expertise_areas: string[];
-  industries: string[];
-  company_sizes: string[];
-  annual_tender_volumes: string[];
-  average_contract_values: string[];
-  target_regions: { id: string; name: string }[];
-  certifications: string[];
-}

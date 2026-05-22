@@ -19,9 +19,15 @@ import {
   SESSION_MAX_AGE_MS,
   type AuthUser,
 } from '@/lib/auth-session';
+import {
+  fetchMeFromApi,
+  refreshAccessToken,
+  tokensFromLoginResponse,
+  userFromLoginResponse,
+} from '@/lib/auth-api';
 import { getPostLoginPath } from '@/lib/auth-redirect';
+import { buildApiAuthHeaders } from '@/lib/auth-user';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
-import { getRolePermissions } from '@/lib/permissions';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
@@ -54,26 +60,6 @@ function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: stri
   }, [isAuthenticated, isLoading, pathname, router, role]);
 }
 
-async function fetchMe(token: string): Promise<AuthUser | null> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  try {
-    const res = await fetch(`${apiUrl}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return {
-      id: data.user_id ?? data.email,
-      email: data.email,
-      name: data.email?.split('@')[0] ?? 'User',
-      role: data.role,
-      permissions: data.permissions,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function LocalAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,17 +78,46 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const me = await fetchMe(session.token);
+      let accessToken = session.token;
+      let refreshToken = session.refreshToken;
+
+      let { user: me, unauthorized } = await fetchMeFromApi(accessToken, session.user);
+
+      if (unauthorized && refreshToken) {
+        const refreshed = await refreshAccessToken(refreshToken);
+        if (refreshed) {
+          accessToken = refreshed.access_token;
+          refreshToken = refreshed.refresh_token ?? refreshToken;
+          const retry = await fetchMeFromApi(accessToken, session.user);
+          me = retry.user;
+          unauthorized = retry.unauthorized;
+        }
+      }
+
+      if (unauthorized) {
+        clearStoredSession();
+        if (!cancelled) {
+          setUser(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       const restored: AuthUser = me
-        ? { ...me, name: me.name || session.user.name }
-        : {
-            ...session.user,
-            permissions: getRolePermissions(session.user.role),
-          };
+        ? {
+            ...me,
+            name: me.name || session.user.name,
+            permissions: me.permissions?.length ? me.permissions : session.user.permissions,
+            membershipRole: me.membershipRole ?? session.user.membershipRole,
+            tenantId: me.tenantId ?? session.user.tenantId,
+          }
+        : session.user;
 
       if (!cancelled) {
         setUser(restored);
-        setStoredSession(session.token, restored);
+        setStoredSession(accessToken, restored, {
+          refreshToken,
+        });
         setIsLoading(false);
       }
 
@@ -119,9 +134,11 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    let notified = false;
     const interval = setInterval(() => {
       const session = getStoredSession();
-      if (!session) {
+      if (!session && !notified) {
+        notified = true;
         setUser(null);
         toast.error('Your session has expired. Please sign in again.');
         router.replace('/sign-in');
@@ -133,10 +150,25 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
   useRouteGuard(!!user, isLoading, user?.role);
 
   const signOut = useCallback(async () => {
+    const token = getStoredSession()?.token;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    if (token) {
+      try {
+        await fetch(`${apiUrl}/api/v1/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildApiAuthHeaders(token, user ?? undefined),
+          },
+        });
+      } catch {
+        // Clear local session even if revoke call fails
+      }
+    }
     clearStoredSession();
     setUser(null);
     router.push('/');
-  }, [router]);
+  }, [router, user]);
 
   const getToken = useCallback(async () => getStoredSession()?.token ?? null, []);
 
@@ -153,24 +185,50 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         throw new Error((err as { detail?: string }).detail || 'Login failed');
       }
       const data = await res.json();
-      const role = (data.user?.role as string) || 'user';
-      const authUser: AuthUser = {
-        id: data.user?.email ?? email,
-        email: data.user?.email ?? email,
-        name: data.user?.name ?? email.split('@')[0] ?? 'User',
-        role,
-        permissions: getRolePermissions(role),
-      };
-      setStoredSession(data.token, authUser);
+      const tokens = tokensFromLoginResponse(data);
+      const authUser = userFromLoginResponse(data);
+      setStoredSession(tokens.access_token, authUser, {
+        refreshToken: tokens.refresh_token,
+        expiresInSec: tokens.expires_in,
+      });
       setUser(authUser);
       toast.success('Signed in successfully');
       const params = new URLSearchParams(window.location.search);
       const redirectUrl = params.get('redirect_url');
+
       if (redirectUrl && redirectUrl.startsWith('/dashboard')) {
         router.push(redirectUrl);
-      } else {
-        router.push(getPostLoginPath(role));
+        return;
       }
+
+      const postLoginPath = getPostLoginPath(
+        authUser.role === 'super_admin'
+          ? authUser.role
+          : authUser.membershipRole ?? authUser.role
+      );
+      if (postLoginPath === '/onboarding') {
+        router.push('/onboarding');
+        return;
+      }
+
+      try {
+        const onboardingRes = await fetch(`${apiUrl}/api/v1/onboarding/status`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildApiAuthHeaders(tokens.access_token, authUser),
+          },
+        });
+        if (onboardingRes.ok) {
+          const onboardingData = await onboardingRes.json();
+          if (!onboardingData.is_completed) {
+            router.push('/onboarding');
+            return;
+          }
+        }
+      } catch {
+      }
+
+      router.push(postLoginPath);
     },
     [router]
   );

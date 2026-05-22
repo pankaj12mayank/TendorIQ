@@ -14,9 +14,15 @@ from ....core.extraction import (
     get_extraction_service,
     get_extraction_pipeline,
 )
+from ....core.auth import AuthContext
+from ...dependencies.rbac_deps import RequireAiAnalysis, require_tenant_member
 
 
-router = APIRouter(prefix='/extraction', tags=['extraction'])
+router = APIRouter(
+    prefix='/extraction',
+    tags=['extraction'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 class ExtractRequest(BaseModel):
@@ -48,7 +54,11 @@ class ExtractResponse(BaseModel):
 
 
 @router.post('/', response_model=ExtractResponse)
-async def extract(request: ExtractRequest, service: ExtractionService = Depends(get_extraction_service)):
+async def extract(
+    request: ExtractRequest,
+    current_user: RequireAiAnalysis,
+    service: ExtractionService = Depends(get_extraction_service),
+):
     try:
         extraction_req = ExtractionRequest(
             document_id=request.document_id,

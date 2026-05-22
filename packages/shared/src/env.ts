@@ -14,26 +14,26 @@ export const envSchema = z.object({
   APP_URL: z.string().url().default('http://localhost:3000'),
 
   // ===========================================
-  // DATABASE - PostgreSQL
+  // DATABASE - MySQL
   // ===========================================
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.string(),
   DATABASE_HOST: z.string().default('localhost'),
-  DATABASE_PORT: z.coerce.number().default(5432),
+  DATABASE_PORT: z.coerce.number().default(3306),
   DATABASE_NAME: z.string().default('tendoriq'),
-  DATABASE_USER: z.string().default('postgres'),
+  DATABASE_USER: z.string().default('root'),
   DATABASE_PASSWORD: z.string().optional(),
   DATABASE_POOL_SIZE: z.coerce.number().min(1).max(100).default(10),
   DATABASE_MAX_OVERFLOW: z.coerce.number().min(0).max(100).default(20),
   DATABASE_ECHO: z.coerce.boolean().default(false),
 
   // ===========================================
-  // REDIS - Queue & Cache
+  // REDIS - Queue & Cache (optional, removed from default stack)
   // ===========================================
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().min(1).max(65535).default(6379),
   REDIS_DB: z.coerce.number().min(0).max(15).default(0),
   REDIS_PASSWORD: z.string().optional(),
-  REDIS_URL: z.string().url().optional(),
+  REDIS_URL: z.string().optional(),
 
   // ===========================================
   // AUTH - Clerk (Primary) or Supabase (Alternative)
@@ -42,8 +42,8 @@ export const envSchema = z.object({
 
   // Clerk
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
-  CLERK_SECRET_KEY: z.string().optional(),
-  CLERK_WEBHOOK_SECRET: z.string().optional(),
+  CLERK_SECRET_KEY: z.string().min(1).optional(),
+  CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
   NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().default('/sign-in'),
   NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().default('/dashboard'),
@@ -177,9 +177,9 @@ function getDefaultValue(key: string): string | undefined {
     APP_NAME: 'TenderIQ',
     APP_URL: 'http://localhost:3000',
     DATABASE_HOST: 'localhost',
-    DATABASE_PORT: '5432',
+    DATABASE_PORT: '3306',
     DATABASE_NAME: 'tendoriq',
-    DATABASE_USER: 'postgres',
+    DATABASE_USER: 'root',
     DATABASE_POOL_SIZE: '10',
     DATABASE_MAX_OVERFLOW: '20',
     DATABASE_ECHO: 'false',
@@ -229,10 +229,6 @@ function getDefaultValue(key: string): string | undefined {
     VERCEL: 'false',
   };
 
-  if (key.startsWith('JWT_SECRET') || key === 'DATABASE_PASSWORD') {
-    return undefined;
-  }
-
   return defaults[key];
 }
 
@@ -242,49 +238,26 @@ function buildEnvData(): Record<string, unknown> {
   for (const key of Object.keys(envSchema.shape)) {
     const defaultValue = getDefaultValue(key);
 
-    if (key.startsWith('NEXT_PUBLIC_')) {
-      data[key] = process.env[key] ?? defaultValue ?? null;
-    } else if (key.startsWith('AWS_') || key.startsWith('SMTP_') || key === 'DATABASE_PASSWORD' || key === 'JWT_SECRET' || key === 'INTERNAL_API_KEY' || key === 'ENCRYPTION_KEY') {
-      data[key] = process.env[key] ?? defaultValue ?? null;
-    } else if (key.startsWith('FEATURE_')) {
-      data[key] = process.env[key] ?? defaultValue ?? null;
-    } else if (key.startsWith('RAILWAY_') || key.startsWith('VERCEL_')) {
-      data[key] = process.env[key] ?? defaultValue ?? null;
-    } else {
-      data[key] = process.env[key] ?? defaultValue ?? null;
-    }
+    data[key] = process.env[key] ?? defaultValue ?? null;
   }
 
   // Build DATABASE_URL from components if not provided
   if (!data.DATABASE_URL && data.DATABASE_HOST) {
-    const user = data.DATABASE_USER || 'postgres';
-    const password = data.DATABASE_PASSWORD ? `:${data.DATABASE_PASSWORD}` : '';
+    const user = data.DATABASE_USER || 'root';
+    const pwPart = data.DATABASE_PASSWORD ? `:${data.DATABASE_PASSWORD}` : '';
     const host = data.DATABASE_HOST;
-    const port = data.DATABASE_PORT || 5432;
+    const port = data.DATABASE_PORT || 3306;
     const name = data.DATABASE_NAME || 'tendoriq';
-    data.DATABASE_URL = `postgresql+asyncpg://${user}${password}@${host}:${port}/${name}`;
+    data.DATABASE_URL = `mysql+aiomysql://${user}${pwPart}@${host}:${port}/${name}?charset=utf8mb4`;
   }
 
-  // Build REDIS_URL from components
+  // Build REDIS_URL from components (optional)
   if (!data.REDIS_URL && data.REDIS_HOST) {
-    const password = data.REDIS_PASSWORD ? `:${data.REDIS_PASSWORD}@` : '';
+    const pwPart = data.REDIS_PASSWORD ? `:${data.REDIS_PASSWORD}@` : '';
     const host = data.REDIS_HOST;
     const port = data.REDIS_PORT || 6379;
     const db = data.REDIS_DB || 0;
-    data.REDIS_URL = `redis://${password}${host}:${port}/${db}`;
-  }
-
-  // Detect platform
-  if (process.env.RAILWAY_SERVICE_NAME) {
-    data.RAILWAY_SERVICE_NAME = process.env.RAILWAY_SERVICE_NAME;
-    data.RAILWAY_PUBLIC_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_SERVICE_URL;
-  }
-
-  if (process.env.VERCEL) {
-    data.VERCEL = true;
-    data.VERCEL_ENV = process.env.VERCEL_ENV;
-    data.VERCEL_GIT_COMMIT_REF = process.env.VERCEL_GIT_COMMIT_REF;
-    data.VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
+    data.REDIS_URL = `redis://${pwPart}${host}:${port}/${db}`;
   }
 
   return data;
@@ -299,19 +272,13 @@ export function getEnv(): Env {
   const result = envSchema.safeParse(envData);
 
   if (!result.success) {
+    const errors = result.error.flatten().fieldErrors;
     console.error('Environment validation failed:');
-    console.error(JSON.stringify(result.error.flatten().fieldErrors, null, 2));
-
-    const criticalErrors = Object.keys(result.error.flatten().fieldErrors || {}).filter(
-      (key) => key === 'JWT_SECRET' || key === 'DATABASE_URL'
-    );
-
-    if (criticalErrors.length > 0) {
-      throw new Error('Missing critical environment variables');
-    }
+    console.error(JSON.stringify(errors, null, 2));
+    throw new Error('Missing or invalid environment variables');
   }
 
-  _env = result.data as Env;
+  _env = result.data;
   return _env;
 }
 

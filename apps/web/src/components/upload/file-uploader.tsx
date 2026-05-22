@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 
 interface UploadedFile {
   id: string;
+  file: File;
   name: string;
   size: number;
   status: 'pending' | 'uploading' | 'completed' | 'error';
@@ -47,6 +48,7 @@ export function FileUploader({
 
     const newUploadFiles: UploadedFile[] = toAdd.map((file) => ({
       id: Math.random().toString(36).substr(2, 9),
+      file,
       name: file.name,
       size: file.size,
       status: 'pending' as const,
@@ -89,13 +91,11 @@ export function FileUploader({
     const results: UploadResult[] = [];
 
     for (const file of pendingFiles) {
-      const fileObj = new File([], file.name, { type: getMimeType(file.name) });
-
       setFiles((prev) =>
         prev.map((f) => (f.id === file.id ? { ...f, status: 'uploading' as const, progress: 0 } : f))
       );
 
-      const result = await uploadFile(fileObj, tenderId, category);
+      const result = await uploadFile(file.file, tenderId, category);
 
       if (result.success) {
         setFiles((prev) =>
@@ -125,8 +125,7 @@ export function FileUploader({
       prev.map((f) => (f.id === fileId ? { ...f, status: 'uploading' as const, progress: 0 } : f))
     );
 
-    const fileObj = new File([], file.name, { type: getMimeType(file.name) });
-    const result = await uploadFile(fileObj, tenderId, category);
+    const result = await uploadFile(file.file, tenderId, category);
 
     if (result.success) {
       setFiles((prev) =>

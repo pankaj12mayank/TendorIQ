@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { useOnboardingApi, Step3Data, ExpertiseCategory } from '@/hooks/use-onboarding';
+import { useOnboardingApi, Step3Data } from '@/hooks/use-onboarding';
+import type { ExpertiseCategory } from '@/types/onboarding';
 import { useOnboardingStore } from '@/stores/onboarding-store';
 import { AlertCircle, Target, Loader2, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';

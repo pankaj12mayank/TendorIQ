@@ -51,29 +51,37 @@ class EmailService:
                     'No Resend API key in environment; use Admin Console → Email System for SMTP/templates'
                 )
 
-    async def send(self, request: EmailRequest) -> EmailResponse:
+    async def send(self, request: EmailRequest, retries: int = 3) -> EmailResponse:
+        import asyncio
         start_time = datetime.utcnow()
+        last_error: Optional[str] = None
         
-        try:
-            if self._client:
-                result = await self._send_via_resend(request)
-            else:
-                result = await self._send_mock(request)
-            
-            return EmailResponse(
-                message_id=result.get('message_id', f'mock_{datetime.utcnow().timestamp()}'),
-                status=EmailStatus.SENT,
-                sent_at=datetime.utcnow(),
-                provider=self.provider.value,
-                metadata=result
-            )
-        except Exception as e:
-            logger.error(f'Failed to send email: {str(e)}')
-            return EmailResponse(
-                message_id=f'failed_{datetime.utcnow().timestamp()}',
-                status=EmailStatus.FAILED,
-                error=str(e)
-            )
+        for attempt in range(retries):
+            try:
+                if self._client:
+                    result = await self._send_via_resend(request)
+                else:
+                    result = await self._send_mock(request)
+                
+                return EmailResponse(
+                    message_id=result.get('message_id', f'mock_{datetime.utcnow().timestamp()}'),
+                    status=EmailStatus.SENT,
+                    sent_at=datetime.utcnow(),
+                    provider=self.provider.value,
+                    metadata=result
+                )
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f'Email send attempt {attempt + 1}/{retries} failed: {last_error}')
+                if attempt < retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+        
+        logger.error(f'Failed to send email after {retries} attempts: {last_error}')
+        return EmailResponse(
+            message_id=f'failed_{datetime.utcnow().timestamp()}',
+            status=EmailStatus.FAILED,
+            error=last_error or 'Unknown error'
+        )
 
     async def _send_via_resend(self, request: EmailRequest) -> dict:
         template = get_template(request.template_type) if request.template_type else None

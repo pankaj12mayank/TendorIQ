@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { CheckSquare, Loader, Download, FileText, File, FileSpreadsheet } from 'lucide-react';
-import { ExportFormat, ExportRequest, ExportJob, batchExport, downloadExport, getExportFilename, formatFileSize, cn } from '@/lib/export';
+import { ExportFormat, ExportRequest, ExportJob, batchExport, downloadExport, getExportFilename, formatFileSize } from '@/lib/export';
+import { cn } from '@/lib/utils';
 
 interface BatchExportItem {
   id: string;
@@ -79,15 +81,15 @@ export function BatchExport({ items, defaultFormat = 'pdf', onComplete, classNam
             URL.revokeObjectURL(link.href);
             
             await new Promise(resolve => setTimeout(resolve, 500));
-          } catch (err) {
-            console.error('Download failed for job:', job.job_id, err);
+          } catch {
+            toast.error(`Download failed for job ${job.job_id}`);
           }
         }
       }
       
       onComplete?.(batchResult.results);
-    } catch (error) {
-      console.error('Batch export failed:', error);
+    } catch {
+      toast.error('Batch export failed');
     } finally {
       setIsExporting(false);
     }

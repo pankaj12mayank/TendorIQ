@@ -1,5 +1,16 @@
 /** TenderIQ design tokens — programmatic access */
-export const roles = ['super_admin', 'tenant_admin', 'user'] as const;
+/** AppRole: tenant_admin is a UI alias for owner/admin (see resolveRole in app-sidebar). */
+export const roles = [
+  'super_admin',
+  'owner',
+  'admin',
+  'tenant_admin',
+  'manager',
+  'analyst',
+  'member',
+  'viewer',
+  'user',
+] as const;
 export type AppRole = (typeof roles)[number];
 
 export const statusTypes = [

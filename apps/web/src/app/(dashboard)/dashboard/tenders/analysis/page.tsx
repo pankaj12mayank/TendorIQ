@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useAnalysisStore } from '@/components/analysis/store';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useAnalysisApi } from '@/hooks/use-analysis';
 import { 
   AnalysisContent, 
@@ -21,16 +22,39 @@ import {
   ChevronLeft,
   MoreHorizontal
 } from 'lucide-react';
-import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 export default function TenderAnalysisPage() {
-  const { analysis, isLoading, exportAnalysis, refetch } = useAnalysisApi();
+  const searchParams = useSearchParams();
+  const tenderId = searchParams.get('tenderId') ?? undefined;
+  const { analysis, isLoading, isError, error, exportAnalysis, refetch } = useAnalysisApi(tenderId);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'docx' | 'json' | 'csv'>('pdf');
 
   const handleExport = async () => {
     await exportAnalysis(exportFormat);
   };
+
+  if (!tenderId) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+        <p className="text-muted-foreground">Select a tender to view analysis.</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/tenders">Back to tenders</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (isError && !analysis) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+        <p className="text-destructive">{error ?? 'Failed to load analysis'}</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading && !analysis) {
     return (

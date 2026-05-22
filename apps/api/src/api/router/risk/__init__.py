@@ -13,9 +13,15 @@ from ....core.risk_analysis import (
     CompleteRiskAnalysis,
     get_risk_engine,
 )
+from ....core.auth import AuthContext
+from ...dependencies.rbac_deps import RequireAiAnalysis, require_tenant_member
 
 
-router = APIRouter(prefix='/risk', tags=['risk_analysis'])
+router = APIRouter(
+    prefix='/risk',
+    tags=['risk_analysis'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 class AnalyzeRequest(BaseModel):
@@ -53,6 +59,7 @@ class AnalyzeResponse(BaseModel):
 @router.post('/analyze', response_model=AnalyzeResponse)
 async def analyze_risks(
     request: AnalyzeRequest,
+    current_user: RequireAiAnalysis,
     engine: RiskEngine = Depends(get_risk_engine),
 ):
     try:

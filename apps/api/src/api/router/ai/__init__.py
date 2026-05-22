@@ -6,12 +6,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ....core.ai.config import ProviderType, ModelCapability
+from ....core.ai.config import ProviderType
 from ....core.ai.service import AIService, get_ai_service
-from ....core.ai.base import AIResponse
+from ....core.auth import AuthContext
+from ...dependencies.rbac_deps import RequireAiAnalysis, RequireApiAccess, require_tenant_member
 
 
-router = APIRouter(prefix='/ai', tags=['ai'])
+router = APIRouter(
+    prefix='/ai',
+    tags=['ai'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 class CompletionRequest(BaseModel):
@@ -61,6 +66,7 @@ class ProviderStatusResponse(BaseModel):
 @router.post('/complete', response_model=CompletionResponse)
 async def complete(
     request: CompletionRequest,
+    current_user: RequireAiAnalysis,
     service: AIService = Depends(get_ai_service),
 ):
     try:

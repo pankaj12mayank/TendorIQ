@@ -20,11 +20,12 @@ from sqlalchemy import (
     Enum,
     func,
 )
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, DeclarativeBase
 
 from .db_types import JsonCol, UuidCol
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 
 def generate_uuid() -> str:
@@ -93,18 +94,25 @@ class Tenant(Base):
     used_storage_mb = Column(Integer, default=0)
     used_users = Column(Integer, default=0)
 
+    billing_cycle = Column(String(20), default='monthly')
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_tenant_status', 'status'),
+        Index('idx_tenant_plan', 'plan'),
+        Index('idx_tenant_created', 'created_at'),
         CheckConstraint("plan IN ('free', 'starter', 'professional', 'enterprise')", name='valid_plan'),
+        CheckConstraint("billing_cycle IN ('monthly', 'yearly')", name='valid_tenant_billing_cycle'),
     )
 
     memberships = relationship('Membership', back_populates='tenant', cascade='all, delete-orphan')
     users = relationship('User', secondary='memberships', back_populates='tenants')
     documents = relationship('Document', back_populates='tenant', cascade='all, delete-orphan')
     tenders = relationship('Tender', back_populates='tenant', cascade='all, delete-orphan')
+    subscriptions = relationship('Subscription', back_populates='tenant', cascade='all, delete-orphan')
+    onboarding_states = relationship('OnboardingState', back_populates='tenant', cascade='all, delete-orphan')
 
 
 class User(Base):
@@ -116,6 +124,7 @@ class User(Base):
     email = Column(String(500), nullable=False, unique=True, index=True)
     name = Column(String(255), nullable=True)
     avatar_url = Column(Text, nullable=True)
+    # Profile hint only; authorization uses memberships.role (never store super_admin here).
     role = Column(String(20), default='member')
 
     clerk_id = Column(String(255), nullable=True, unique=True, index=True)
@@ -129,13 +138,19 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
-        CheckConstraint("role IN ('owner', 'admin', 'member', 'viewer')", name='valid_user_role'),
+        Index('idx_user_email_verified', 'email_verified'),
+        Index('idx_user_role', 'role'),
+        Index('idx_user_created', 'created_at'),
+        CheckConstraint("role IN ('owner', 'admin', 'manager', 'analyst', 'member', 'viewer')", name='valid_user_role'),
     )
 
     memberships = relationship('Membership', back_populates='user', cascade='all, delete-orphan')
     tenants = relationship('Tenant', secondary='memberships', back_populates='users')
     audit_logs = relationship('AuditLog', back_populates='user', cascade='all, delete-orphan')
     onboarding_state = relationship('OnboardingState', back_populates='user', uselist=False, cascade='all, delete-orphan')
+    bids = relationship('Bid', back_populates='bidder')
+    proposals = relationship('Proposal', back_populates='bidder')
+    usage_logs = relationship('UsageLog', back_populates='user')
 
 
 class Membership(Base):
@@ -157,7 +172,7 @@ class Membership(Base):
         UniqueConstraint('user_id', 'tenant_id', name='unique_user_tenant'),
         Index('idx_membership_user', 'user_id'),
         Index('idx_membership_tenant', 'tenant_id'),
-        CheckConstraint("role IN ('owner', 'admin', 'member', 'viewer')", name='valid_membership_role'),
+        CheckConstraint("role IN ('owner', 'admin', 'manager', 'analyst', 'member', 'viewer')", name='valid_membership_role'),
         CheckConstraint("status IN ('pending', 'active', 'suspended')", name='valid_membership_status'),
     )
 
@@ -186,8 +201,6 @@ class Tender(Base, TenantMixin, TimestampMixin, SoftDeleteMixin, AuditMixin):
 
     ai_summary = Column(Text, nullable=True)
 
-    organization_id = Column(UuidCol, nullable=True)
-
     tender_type = Column(String(50), default='open')
     evaluation_criteria = Column(JsonCol, default=[])
 
@@ -198,15 +211,18 @@ class Tender(Base, TenantMixin, TimestampMixin, SoftDeleteMixin, AuditMixin):
         Index('idx_tender_tenant_status', 'tenant_id', 'status'),
         Index('idx_tender_tenant_created', 'tenant_id', 'created_at'),
         Index('idx_tender_closing', 'closing_date'),
+        Index('idx_tender_type', 'tender_type'),
         CheckConstraint("status IN ('draft', 'published', 'closed', 'cancelled', 'awarded')", name='valid_tender_status'),
     )
 
     tenant = relationship('Tenant', back_populates='tenders')
     bids = relationship('Bid', back_populates='tender', cascade='all, delete-orphan')
+    proposals = relationship('Proposal', back_populates='tender', cascade='all, delete-orphan')
     documents = relationship('Document', back_populates='tender', cascade='all, delete-orphan')
     checklists = relationship('Checklist', back_populates='tender', cascade='all, delete-orphan')
     risks = relationship('Risk', back_populates='tender', cascade='all, delete-orphan')
     notifications = relationship('Notification', back_populates='tender', cascade='all, delete-orphan')
+    analysis_results = relationship('AnalysisResult', back_populates='tender', cascade='all, delete-orphan')
 
 
 class Bid(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
@@ -240,10 +256,14 @@ class Bid(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
         Index('idx_bid_tender_status', 'tender_id', 'status'),
         Index('idx_bid_bidder', 'bidder_id'),
         Index('idx_bid_submitted', 'submitted_at'),
+        Index('idx_bid_tenant_tender', 'tenant_id', 'tender_id'),
+        Index('idx_bid_tenant_status', 'tenant_id', 'status'),
         CheckConstraint("status IN ('draft', 'submitted', 'under_review', 'accepted', 'rejected', 'withdrawn')", name='valid_bid_status'),
     )
 
     tender = relationship('Tender', back_populates='bids')
+    bidder = relationship('User', back_populates='bids')
+    analysis_results = relationship('AnalysisResult', back_populates='bid', cascade='all, delete-orphan')
 
 
 class Document(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
@@ -311,6 +331,8 @@ class Document(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     chunks = relationship('DocumentChunk', back_populates='document', cascade='all, delete-orphan')
     ocr_results = relationship('OCRResult', back_populates='document', cascade='all, delete-orphan')
     ocr_jobs = relationship('OCRJob', back_populates='document', cascade='all, delete-orphan')
+    analysis_results = relationship('AnalysisResult', back_populates='document', cascade='all, delete-orphan')
+    parsed_documents = relationship('ParsedDocument', back_populates='document', cascade='all, delete-orphan')
 
 
 class DocumentChunk(Base, TenantMixin, TimestampMixin):
@@ -378,6 +400,10 @@ class AnalysisResult(Base, TenantMixin, TimestampMixin):
         CheckConstraint("analysis_type IN ('tender_summary', 'bid_review', 'risk_assessment', 'compliance', 'scoring')", name='valid_analysis_type'),
     )
 
+    tender = relationship('Tender', back_populates='analysis_results')
+    bid = relationship('Bid', back_populates='analysis_results')
+    document = relationship('Document', back_populates='analysis_results')
+
 
 class Checklist(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     """Checklists for tender evaluation"""
@@ -430,7 +456,7 @@ class Risk(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     tender = relationship('Tender', back_populates='risks')
 
 
-class Proposal(Base, TenantMixin, TimestampMixin):
+class Proposal(Base, TenantMixin, TimestampMixin, AuditMixin):
     """Proposal/Quote submissions"""
 
     __tablename__ = 'proposals'
@@ -440,7 +466,7 @@ class Proposal(Base, TenantMixin, TimestampMixin):
 
     bidder_id = Column(UuidCol, ForeignKey('users.id'), nullable=False)
 
-    amount = Column(Float, nullable=False)
+    amount = Column(Float, nullable=True)
     currency = Column(String(3), default='USD')
 
     description = Column(Text, nullable=True)
@@ -453,7 +479,13 @@ class Proposal(Base, TenantMixin, TimestampMixin):
 
     __table_args__ = (
         Index('idx_proposal_tender', 'tender_id', 'status'),
+        Index('idx_proposal_bidder', 'bidder_id'),
+        Index('idx_proposal_tenant', 'tenant_id'),
+        Index('idx_proposal_tenant_tender', 'tenant_id', 'tender_id'),
     )
+
+    tender = relationship('Tender', back_populates='proposals')
+    bidder = relationship('User', back_populates='proposals')
 
 
 class PromptVersion(Base, TenantMixin, TimestampMixin):
@@ -521,6 +553,7 @@ class QueueJob(Base, TenantMixin, TimestampMixin):
     __table_args__ = (
         Index('idx_job_status_scheduled', 'status', 'scheduled_at'),
         Index('idx_job_type_status', 'job_type', 'status'),
+        Index('idx_job_tenant_status', 'tenant_id', 'status'),
         CheckConstraint("status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')", name='valid_job_status'),
     )
 
@@ -531,7 +564,7 @@ class UsageLog(Base, TenantMixin, TimestampMixin):
     __tablename__ = 'usage_logs'
 
     id = Column(UuidCol, primary_key=True, default=generate_uuid)
-    user_id = Column(UuidCol, ForeignKey('users.id'), nullable=True, index=True)
+    user_id = Column(UuidCol, ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
 
     action = Column(String(100), nullable=False, index=True)
     resource_type = Column(String(50), nullable=False, index=True)
@@ -551,7 +584,10 @@ class UsageLog(Base, TenantMixin, TimestampMixin):
         Index('idx_usage_tenant_created', 'tenant_id', 'created_at'),
         Index('idx_usage_user_created', 'user_id', 'created_at'),
         Index('idx_usage_action', 'action', 'created_at'),
+        Index('idx_usage_resource', 'resource_type', 'resource_id'),
     )
+
+    user = relationship('User', back_populates='usage_logs')
 
 
 class Subscription(Base, TenantMixin, TimestampMixin):
@@ -586,10 +622,14 @@ class Subscription(Base, TenantMixin, TimestampMixin):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
+        Index('idx_sub_tenant_plan', 'tenant_id', 'plan'),
+        Index('idx_sub_tenant_status', 'tenant_id', 'status'),
         CheckConstraint("plan IN ('free', 'starter', 'professional', 'enterprise')", name='valid_subscription_plan'),
         CheckConstraint("status IN ('active', 'trialing', 'past_due', 'cancelled', 'unpaid')", name='valid_subscription_status'),
         CheckConstraint("billing_cycle IN ('monthly', 'yearly')", name='valid_billing_cycle'),
     )
+
+    tenant = relationship('Tenant', back_populates='subscriptions')
 
 
 class AuditLog(Base, TenantMixin, TimestampMixin):
@@ -653,7 +693,9 @@ class Notification(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
 
     __table_args__ = (
         Index('idx_notification_user_read', 'user_id', 'is_read', 'created_at'),
+        Index('idx_notification_user_created', 'user_id', 'created_at'),
         Index('idx_notification_tender', 'tender_id', 'created_at'),
+        Index('idx_notification_tenant_created', 'tenant_id', 'created_at'),
     )
 
     tender = relationship('Tender', back_populates='notifications')
@@ -666,7 +708,7 @@ class OnboardingState(Base, TimestampMixin):
 
     id = Column(UuidCol, primary_key=True, default=generate_uuid)
     user_id = Column(UuidCol, ForeignKey('users.id'), nullable=False, unique=True, index=True)
-    tenant_id = Column(UuidCol, ForeignKey('tenants.id'), nullable=True, index=True)
+    tenant_id = Column(UuidCol, ForeignKey('tenants.id', ondelete='SET NULL'), nullable=True, index=True)
 
     current_step = Column(Integer, default=1)
     total_steps = Column(Integer, default=5)
@@ -698,7 +740,7 @@ class OnboardingState(Base, TimestampMixin):
     )
 
     user = relationship('User', back_populates='onboarding_state')
-    tenant = relationship('Tenant')
+    tenant = relationship('Tenant', back_populates='onboarding_states')
 
 
 class OCRResult(Base, TenantMixin):
@@ -737,6 +779,7 @@ class OCRResult(Base, TenantMixin):
         Index('idx_ocr_document', 'document_id'),
         Index('idx_ocr_tenant_created', 'tenant_id', 'created_at'),
         Index('idx_ocr_status', 'status'),
+        Index('idx_ocr_language', 'language'),
         Index('idx_ocr_confidence', 'confidence_score'),
     )
 
@@ -813,7 +856,48 @@ class ParsedDocument(Base, TenantMixin, TimestampMixin):
         Index('idx_parsed_status', 'status'),
     )
 
-    document = relationship('Document')
+    document = relationship('Document', back_populates='parsed_documents')
+
+
+# ---- Admin store tables (migrated from file store) ----
+
+
+class AIProvider(Base):
+    """Platform-level AI provider configuration (e.g., Ollama, OpenAI, Azure).
+    No tenant isolation — these are global platform settings.
+    """
+
+    __tablename__ = 'ai_providers'
+
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    provider_id = Column(String(100), unique=True, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    provider_type = Column(String(50), nullable=False, default='ollama')
+    base_url = Column(String(500), nullable=True)
+    api_key_enc = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
+    models = Column(JsonCol, default=list)
+    settings = Column(JsonCol, default=dict)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index('idx_ai_provider_type', 'provider_type'),
+    )
+
+
+class DismissedFailedJob(Base):
+    """Tracks failed-job IDs that admins have dismissed (hidden from the UI).
+    Covers both synthetic mock failures and real EmailQueueItem failures.
+    """
+
+    __tablename__ = 'dismissed_failed_jobs'
+
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    job_id = Column(String(255), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 # Email system tables (registered on Base.metadata for Alembic)

@@ -12,11 +12,13 @@ from .core.config import settings
 from .core.database import init_db, close_db
 from .core.logging import configure_logging, get_logger
 from .core.middleware import (
+    AuthMiddleware,
     RequestIDMiddleware,
     TimingMiddleware,
     SecurityHeadersMiddleware,
+    TenantMiddleware,
+    RateLimitMiddleware,
 )
-from .core.tenant_middleware import TenantMiddleware
 from .api.base import router as base_router
 from .api.routers.tenders import router as tenders_router
 from .api.routers.organizations import router as organizations_router
@@ -38,12 +40,15 @@ from .api.router.proposal import router as proposal_router
 from .api.router.export import router as export_router
 from .api.router.review import router as review_router
 from .api.router.email import router as email_router
+from .api.router.email_triggers import router as email_triggers_router
 from .api.router.audit import router as audit_router
+from .api.router.analysis import router as analysis_router
+from .api.router.notifications import router as notifications_router
 from .api.router.observability import router as observability_router
 from .api.router.billing import router as billing_router
 from .api.router.sso import router as sso_router
 from .api.router.admin_auth import router as admin_auth_router
-from .api.router.super_admin import router as super_admin_router
+
 from .api.router.admin_platform import router as admin_platform_router
 from .api.router.email_system import router as email_system_router
 
@@ -54,6 +59,9 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f'Starting TenderIQ API in {settings.NODE_ENV} mode')
+
+    from .core.observability.sentry import init_sentry
+    init_sentry()
 
     await init_db()
 
@@ -93,8 +101,10 @@ app.add_middleware(
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(TimingMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(TenantMiddleware)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(AuthMiddleware)
 
 
 @app.middleware('http')
@@ -153,7 +163,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(base_router, tags=['Base'])
-app.include_router(super_admin_router, prefix='/api/v1')
 app.include_router(admin_platform_router, prefix='/api/v1')
 app.include_router(auth_router, prefix='/api/v1')
 app.include_router(tenders_router, prefix='/api/v1')
@@ -175,6 +184,9 @@ app.include_router(proposal_router, prefix='/api/v1')
 app.include_router(export_router, prefix='/api/v1')
 app.include_router(review_router, prefix='/api/v1')
 app.include_router(email_router, prefix='/api/v1')
+app.include_router(email_triggers_router, prefix='/api/v1')
+app.include_router(analysis_router, prefix='/api/v1')
+app.include_router(notifications_router, prefix='/api/v1')
 app.include_router(audit_router, prefix='/api/v1')
 app.include_router(observability_router, prefix='/api/v1')
 app.include_router(billing_router, prefix='/api/v1')

@@ -8,7 +8,7 @@ import {
   RealTimeUsageUpdate,
   QuotaCheckResult
 } from './types';
-import { MOCK_QUOTA_STATUS, MOCK_ALERTS, MOCK_USAGE_SUMMARY } from './constants';
+
 
 interface UsageState {
   quotas: QuotaStatus[];
@@ -46,9 +46,9 @@ interface UsageState {
 }
 
 export const useUsageStore = create<UsageState>((set, get) => ({
-  quotas: MOCK_QUOTA_STATUS,
-  alerts: MOCK_ALERTS,
-  usageSummary: MOCK_USAGE_SUMMARY,
+  quotas: [],
+  alerts: [],
+  usageSummary: null,
   overrides: [],
   isLoading: false,
   isRealTimeActive: false,

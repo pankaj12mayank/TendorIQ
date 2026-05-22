@@ -13,9 +13,14 @@ from ..models import Tenant, Subscription, Document, User, Tender, QueueJob
 logger = logging.getLogger(__name__)
 
 
-async def get_usage_for_tenant(tenant_id: UUID) -> dict:
-    """Get AI usage for tenant - stub for now"""
-    return {'total_tokens': 0}
+async def get_usage_for_tenant(db: AsyncSession, tenant_id: UUID) -> dict:
+    """Sum AI token usage from usage_logs for the tenant."""
+    from ..models import UsageLog
+
+    total = await db.scalar(
+        select(func.coalesce(func.sum(UsageLog.tokens_used), 0)).where(UsageLog.tenant_id == tenant_id)
+    )
+    return {'total_tokens': int(total or 0)}
 
 
 class PlanLimits:
@@ -57,37 +62,27 @@ class PlanLimits:
         return cls.PLANS.get(plan, cls.PLANS['starter'])
 
     @classmethod
-    def get_current_usage(cls, db: AsyncSession, tenant_id: UUID, plan: str) -> dict:
+    async def get_current_usage(cls, db: AsyncSession, tenant_id: UUID, plan: str) -> dict:
         """Get current usage for all limit types"""
-        import asyncio
-        
         limits = cls.get_limits(plan)
         
         # Count users
-        user_count = asyncio.get_event_loop().run_until_complete(
-            db.scalar(
-                select(func.count(User.id)).where(User.tenant_id == tenant_id)
-            ) or 0
-        )
+        user_count = await db.scalar(
+            select(func.count(User.id)).where(User.tenant_id == tenant_id)
+        ) or 0
         
         # Count documents this month (would need proper date filtering)
-        doc_count = asyncio.get_event_loop().run_until_complete(
-            db.scalar(
-                select(func.count(Document.id)).where(Document.tenant_id == tenant_id)
-            ) or 0
-        )
+        doc_count = await db.scalar(
+            select(func.count(Document.id)).where(Document.tenant_id == tenant_id)
+        ) or 0
         
         # Count tenders
-        tender_count = asyncio.get_event_loop().run_until_complete(
-            db.scalar(
-                select(func.count(Tender.id)).where(Tender.tenant_id == tenant_id)
-            ) or 0
-        )
+        tender_count = await db.scalar(
+            select(func.count(Tender.id)).where(Tender.tenant_id == tenant_id)
+        ) or 0
         
         # Get AI usage
-        ai_usage = asyncio.get_event_loop().run_until_complete(
-            get_usage_for_tenant(tenant_id)
-        )
+        ai_usage = await get_usage_for_tenant(db, tenant_id)
         
         return {
             'users': user_count,
@@ -168,7 +163,7 @@ class BillingEnforcer:
         if limits['ai_tokens_per_month'] == -1:
             return True
         
-        current_usage = await get_usage_for_tenant(tenant_id)
+        current_usage = await get_usage_for_tenant(db, tenant_id)
         current_tokens = current_usage.get('total_tokens', 0)
         
         if current_tokens + tokens_to_add > limits['ai_tokens_per_month']:
@@ -236,12 +231,12 @@ class BillingService:
         limits = PlanLimits.get_limits(plan)
         
         # Get current usage
-        usage = PlanLimits.get_current_usage(db, tenant_id, plan)
+        usage = await PlanLimits.get_current_usage(db, tenant_id, plan)
         
         return {
             'plan': plan,
             'status': 'active',
-            'billing_cycle': tenant.billing_cycle,
+            'billing_cycle': getattr(tenant, 'billing_cycle', 'monthly'),
             'limits': {
                 'users': {'current': usage['users'], 'max': limits['users']},
                 'documents': {'current': usage['documents'], 'max': limits['documents_per_month']},

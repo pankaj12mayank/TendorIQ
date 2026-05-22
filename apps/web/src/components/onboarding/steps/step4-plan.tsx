@@ -1,103 +1,52 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { normalizeBillingCycle } from '@/lib/billing-plan-bridge';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { useOnboardingApi, Step4Data, Plan } from '@/hooks/use-onboarding';
+import { useOnboardingApi, Step4Data } from '@/hooks/use-onboarding';
+import type { Plan } from '@/types/onboarding';
 import { useOnboardingStore } from '@/stores/onboarding-store';
 import { AlertCircle, CreditCard, Loader2, ArrowLeft, Check, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const PLANS: Plan[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    description: 'Perfect for getting started with tender management',
-    price_monthly: 0,
-    price_yearly: 0,
-    currency: 'USD',
-    features: [
-      { name: 'Up to 3 tenders', included: true },
-      { name: 'Up to 5 bids', included: true },
-      { name: 'Basic analytics', included: true },
-      { name: 'Email support', included: true },
-      { name: 'AI-powered summaries', included: false },
-      { name: 'Advanced analytics', included: false },
-      { name: 'Priority support', included: false },
-    ],
-    recommended: false,
-  },
-  {
-    id: 'starter',
-    name: 'Starter',
-    description: 'Ideal for small teams and growing businesses',
-    price_monthly: 49,
-    price_yearly: 470,
-    currency: 'USD',
-    features: [
-      { name: 'Up to 25 tenders/month', included: true, limit: '25/month' },
-      { name: 'Up to 50 bids/month', included: true, limit: '50/month' },
-      { name: 'Basic analytics', included: true },
-      { name: 'Email support', included: true },
-      { name: 'AI-powered summaries', included: true, limit: '20/month' },
-      { name: 'Advanced analytics', included: false },
-      { name: 'Priority support', included: false },
-    ],
-    recommended: false,
-  },
-  {
-    id: 'professional',
-    name: 'Professional',
-    description: 'For established teams with advanced needs',
-    price_monthly: 149,
-    price_yearly: 1430,
-    currency: 'USD',
-    features: [
-      { name: 'Unlimited tenders', included: true },
-      { name: 'Unlimited bids', included: true },
-      { name: 'Basic analytics', included: true },
-      { name: 'Email support', included: true },
-      { name: 'AI-powered summaries', included: true, limit: '100/month' },
-      { name: 'Advanced analytics', included: true },
-      { name: 'Priority support', included: true },
-    ],
-    recommended: true,
-  },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    description: 'Custom solutions for large organizations',
-    price_monthly: 499,
-    price_yearly: 4790,
-    currency: 'USD',
-    features: [
-      { name: 'Unlimited tenders', included: true },
-      { name: 'Unlimited bids', included: true },
-      { name: 'Basic analytics', included: true },
-      { name: 'Email support', included: true },
-      { name: 'AI-powered summaries', included: true },
-      { name: 'Advanced analytics', included: true },
-      { name: 'Priority support', included: true, limit: '24/7' },
-      { name: 'Custom integrations', included: true },
-      { name: 'Dedicated account manager', included: true },
-    ],
-    recommended: false,
-  },
-];
-
 export function Step4Plan() {
   const router = useRouter();
   const store = useOnboardingStore();
-  const { submitStep4, loading, error } = useOnboardingApi();
+  const { submitStep4, fetchPlans, loading, error } = useOnboardingApi();
+
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
 
   const [selectedPlan, setSelectedPlan] = useState<string>(
     (store.step4Data.plan_id as string) || 'professional'
   );
   const [billingCycle, setBillingCycle] = useState<string>(
-    (store.step4Data.billing_cycle as string) || 'monthly'
+    normalizeBillingCycle((store.step4Data.billing_cycle as string) || 'monthly')
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const loaded = await fetchPlans();
+        if (!cancelled && loaded.length > 0) {
+          setPlans(loaded);
+          if (!loaded.some((p) => p.id === selectedPlan)) {
+            const fallback = loaded.find((p) => p.recommended)?.id ?? loaded[0].id;
+            setSelectedPlan(fallback);
+          }
+        }
+      } finally {
+        if (!cancelled) setPlansLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPlans, selectedPlan]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,8 +131,14 @@ export function Step4Plan() {
             </label>
           </div>
 
+          {plansLoading && plans.length === 0 && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
-            {PLANS.map((plan) => {
+            {plans.map((plan) => {
               const price = getPrice(plan);
               const isSelected = selectedPlan === plan.id;
 
@@ -252,9 +207,9 @@ export function Step4Plan() {
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || plansLoading || plans.length === 0}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Continue with {PLANS.find((p) => p.id === selectedPlan)?.name}
+              Continue with {plans.find((p) => p.id === selectedPlan)?.name ?? 'plan'}
             </Button>
           </div>
         </form>

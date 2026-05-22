@@ -7,7 +7,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from ..services.tenant_service import tenant_service
 from ..services.membership_service import membership_service
-from ...core.tenant_middleware import get_current_tenant_id
+from ...core.middleware import get_current_tenant_id
 from ...core.tenant_context import TenantQueryHelper as tenant_query
 from ...core.auth import AuthContext
 from .auth import get_current_user
@@ -51,7 +51,7 @@ async def get_tenant_context(
     auth: AuthContext = Depends(get_current_user),
 ) -> TenantContext:
     """Get tenant context from request"""
-    from ...core.tenant_middleware import get_tenant_context as get_ctx
+    from ...core.middleware import get_tenant_context as get_ctx
     
     ctx = get_ctx(request)
     
@@ -68,20 +68,22 @@ async def get_tenant_context(
     )
 
 
-async def get_tenant_id(
+async def require_tenant_id(
     request: Request,
     auth: AuthContext = Depends(get_current_user),
 ) -> str:
-    """Get tenant ID from request or raise error"""
-    tenant_id = get_current_tenant_id(request)
-    
+    """Require tenant ID from middleware or JWT (canonical dependency)."""
+    tenant_id = get_current_tenant_id(request) or auth.tenant_id
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Tenant ID is required',
         )
-    
-    return tenant_id
+    return str(tenant_id)
+
+
+# Backward-compatible alias
+get_tenant_id = require_tenant_id
 
 
 async def verify_tenant_access(

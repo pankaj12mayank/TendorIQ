@@ -2,8 +2,18 @@
 
 import { type ReactNode } from 'react';
 import { useAuthState } from '@/hooks/use-auth';
+import { getMembershipRole } from '@/lib/auth-user';
+import { hasPermission, isSuperAdmin } from '@/lib/permissions';
 
-type Role = 'super_admin' | 'tenant_admin' | 'user';
+type Role =
+  | 'super_admin'
+  | 'owner'
+  | 'admin'
+  | 'tenant_admin'
+  | 'manager'
+  | 'analyst'
+  | 'member'
+  | 'viewer';
 
 interface RoleGuardProps {
   children: ReactNode;
@@ -22,58 +32,24 @@ export function RoleGuard({ children, allowedRoles, fallback }: RoleGuardProps) 
     return fallback ?? null;
   }
 
-  const userRole = (user?.role || 'user') as Role;
+  const userRole = (getMembershipRole(user) || 'viewer') as Role;
+  const platformRole = user?.role;
+  const effectiveRoles = platformRole && isSuperAdmin(platformRole)
+    ? (['super_admin'] as Role[])
+    : ([userRole] as Role[]);
 
-  if (!allowedRoles.includes(userRole)) {
+  if (!allowedRoles.some((r) => effectiveRoles.includes(r))) {
     return fallback ?? null;
   }
 
   return <>{children}</>;
 }
 
-
 interface PermissionGuardProps {
   children: ReactNode;
   permission: string;
   fallback?: ReactNode;
 }
-
-const rolePermissions: Record<string, string[]> = {
-  super_admin: [
-    'tender:*',
-    'bid:*',
-    'document:*',
-    'org:*',
-    'user:*',
-    'settings:*',
-    'analytics:*',
-    'ai:*',
-    'api:*',
-  ],
-  tenant_admin: [
-    'tender:*',
-    'bid:*',
-    'document:*',
-    'org:*',
-    'user:*',
-    'settings:*',
-    'analytics:*',
-    'ai:*',
-    'api:*',
-  ],
-  user: [
-    'tender:read',
-    'tender:create',
-    'bid:read',
-    'bid:create',
-    'document:read',
-    'document:create',
-    'org:read',
-    'settings:read',
-    'analytics:read',
-    'ai:analysis',
-  ],
-};
 
 export function PermissionGuard({ children, permission, fallback }: PermissionGuardProps) {
   const { user, isAuthenticated, isLoading } = useAuthState();
@@ -86,25 +62,14 @@ export function PermissionGuard({ children, permission, fallback }: PermissionGu
     return fallback ?? null;
   }
 
-  const userRole = user?.role || 'user';
-  const permissions = rolePermissions[userRole] || [];
+  const allowed = hasPermission(getMembershipRole(user), permission, user?.permissions);
 
-  const hasPermission = permissions.some((p) => {
-    if (p === permission) return true;
-    if (p.endsWith(':*')) {
-      const prefix = p.slice(0, -1);
-      return permission.startsWith(prefix);
-    }
-    return false;
-  });
-
-  if (!hasPermission) {
+  if (!allowed) {
     return fallback ?? null;
   }
 
   return <>{children}</>;
 }
-
 
 export function CanCreateTender({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
   return (

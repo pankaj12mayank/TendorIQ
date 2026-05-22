@@ -1,7 +1,7 @@
 # TenderIQ API Documentation
 
 **Version:** 1.0.0
-**Base URL:** `https://api.tenderiq.com/v1`
+**Base URL:** `https://api.tenderiq.com/api/v1` (local: `http://localhost:8000/api/v1`)
 
 ---
 

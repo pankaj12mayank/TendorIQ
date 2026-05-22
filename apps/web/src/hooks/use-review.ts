@@ -1,16 +1,15 @@
 import { useCallback, useState } from 'react';
+import { api } from '@/lib/api-client';
 import { useReviewStore } from '@/components/review/store';
 import { 
   ReviewSession, 
   ReviewSection, 
-  EditFieldPayload, 
   ApprovalAction,
   ReviewComment,
   AuditEntry,
   ChangeRecord,
   SectionStatus
 } from '@/components/review/types';
-import { MOCK_REVIEW_SESSION } from '@/components/review/constants';
 
 interface UseReviewApiReturn {
   session: ReviewSession | null;
@@ -38,53 +37,59 @@ export function useReviewApi(tenderId?: string): UseReviewApiReturn {
     setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setSession(MOCK_REVIEW_SESSION);
+      const res = await api.get<ReviewSession>(`/api/v1/review/session/${tenderId}`);
+      setSession(res);
     } catch (err) {
       setIsError(true);
       setError('Failed to fetch review session');
     }
-  }, [setSession]);
+  }, [setSession, tenderId]);
 
   const submitApproval = useCallback(async (action: ApprovalAction, comments?: string) => {
-    await storeSubmitApproval(action, comments);
-  }, [storeSubmitApproval]);
+    setIsError(false);
+    setError(null);
+    try {
+      const res = await api.post<ReviewSession>(`/api/v1/review/session/${tenderId}/approval`, { action, comments });
+      setSession(res);
+    } catch (err) {
+      setIsError(true);
+      setError('Failed to submit approval');
+    }
+  }, [setSession, tenderId]);
 
   const requestChanges = useCallback(async (sections: string[], comments: string) => {
-    await storeRequestChanges(sections, comments);
-  }, [storeRequestChanges]);
+    setIsError(false);
+    setError(null);
+    try {
+      const res = await api.post<ReviewSession>(`/api/v1/review/session/${tenderId}/request-changes`, { sections, comments });
+      setSession(res);
+    } catch (err) {
+      setIsError(true);
+      setError('Failed to request changes');
+    }
+  }, [setSession, tenderId]);
 
   const regenerateSection = useCallback(async (section: ReviewSection, reason: string) => {
-    const store = useReviewStore.getState();
-    await store.regenerateSection({
-      section,
-      reason,
-      includeChanges: true,
-      priority: 'normal',
-    });
-  }, []);
+    try {
+      const res = await api.post<{ success: boolean }>(`/api/v1/review/session/${tenderId}/regenerate`, {
+        section,
+        reason,
+        includeChanges: true,
+        priority: 'normal',
+      });
+      if (res.success) {
+        await refetch();
+      }
+    } catch (err) {
+      setIsError(true);
+      setError('Failed to regenerate section');
+    }
+  }, [tenderId, refetch]);
 
   const getSectionData = useCallback((section: ReviewSection): unknown => {
     if (!session) return null;
-    
-    switch (section) {
-      case 'summary':
-        return { title: 'IT Infrastructure Modernization', reference: 'IIT-2026-001' };
-      case 'eligibility':
-        return { criteria: [] };
-      case 'technical':
-        return { requirements: [] };
-      case 'financial':
-        return { totalValue: '$2,500,000' };
-      case 'risks':
-        return { risks: [] };
-      case 'deadlines':
-        return { deadlines: [] };
-      case 'mandatory_docs':
-        return { documents: [] };
-      default:
-        return null;
-    }
+    const status = session.sectionStatuses.find(s => s.section === section);
+    return status || null;
   }, [session]);
 
   const getSectionStatus = useCallback((section: ReviewSection): SectionStatus | undefined => {

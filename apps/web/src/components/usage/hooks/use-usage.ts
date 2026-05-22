@@ -10,7 +10,8 @@ import {
   QuotaCheckResult,
   OverrideRequest
 } from '@/components/usage/types';
-import { MOCK_QUOTA_STATUS, MOCK_ALERTS, MOCK_USAGE_SUMMARY } from '@/components/usage/constants';
+import { api } from '@/lib/api-client';
+import { mapUsageQuotas, mapUsageSummary } from '@/lib/billing-api';
 
 interface UseUsageApiReturn {
   quotas: QuotaStatus[];
@@ -46,34 +47,59 @@ export function useUsageApi(): UseUsageApiReturn {
 
   const fetchQuotas = useCallback(async (): Promise<QuotaStatus[]> => {
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    store.setQuotas(MOCK_QUOTA_STATUS);
-    setLoading(false);
-    return MOCK_QUOTA_STATUS;
+    try {
+      const res = await api.get<{ quotas: QuotaStatus[]; quota?: QuotaStatus[] }>(
+        '/api/v1/billing/quota'
+      );
+      const quotas = mapUsageQuotas(res);
+      store.setQuotas(quotas);
+      setLoading(false);
+      return quotas;
+    } catch {
+      setLoading(false);
+      return [];
+    }
   }, []);
 
   const fetchAlerts = useCallback(async (): Promise<QuotaAlert[]> => {
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    store.setAlerts(MOCK_ALERTS);
-    setLoading(false);
-    return MOCK_ALERTS;
+    try {
+      const res = await api.get<{ alerts: QuotaAlert[] }>('/api/v1/notifications?type=quota');
+      store.setAlerts(res.alerts);
+      setLoading(false);
+      return res.alerts;
+    } catch {
+      setLoading(false);
+      return [];
+    }
   }, []);
 
   const fetchUsageSummary = useCallback(async (): Promise<UsageSummary> => {
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    store.setUsageSummary(MOCK_USAGE_SUMMARY);
-    setLoading(false);
-    return MOCK_USAGE_SUMMARY;
+    try {
+      const res = await api.get<UsageSummary>('/api/v1/billing/usage/summary');
+      const summary = mapUsageSummary(res);
+      store.setUsageSummary(summary);
+      setLoading(false);
+      return summary;
+    } catch {
+      setLoading(false);
+      return null as unknown as UsageSummary;
+    }
   }, []);
 
   const fetchOverrides = useCallback(async (): Promise<AdminQuotaOverride[]> => {
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    store.setOverrides([]);
-    setLoading(false);
-    return [];
+    try {
+      const res = await api.get<{ overrides: AdminQuotaOverride[] }>('/api/v1/admin/platform/quota-overrides');
+      store.setOverrides(res.overrides);
+      setLoading(false);
+      return res.overrides;
+    } catch {
+      store.setOverrides([]);
+      setLoading(false);
+      return [];
+    }
   }, []);
 
   const trackUsage = useCallback(async (
@@ -81,10 +107,10 @@ export function useUsageApi(): UseUsageApiReturn {
     quantity: number, 
     _metadata?: Record<string, unknown>
   ) => {
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    store.incrementUsage(featureKey, quantity);
-    setLoading(false);
+    try {
+      await api.post('/api/v1/billing/usage/track', { feature_key: featureKey, quantity, metadata: _metadata });
+      store.incrementUsage(featureKey, quantity);
+    } catch {}
   }, []);
 
   const getQuotaStatus = useCallback((featureKey: FeatureKey): QuotaStatus | undefined => {
@@ -112,7 +138,8 @@ export function useUsageApi(): UseUsageApiReturn {
     
     const interval = setInterval(() => {
       const featureKeys: FeatureKey[] = ['ai_tokens', 'api_requests', 'uploads'];
-      const randomFeature = featureKeys[Math.floor(Math.random() * featureKeys.length)];
+      const idx = Math.floor(Math.random() * featureKeys.length);
+      const randomFeature: FeatureKey = featureKeys[idx]!;
       const randomChange = Math.floor(Math.random() * 5) + 1;
       
       const currentQuota = store.quotas.find((q) => q.featureKey === randomFeature);
@@ -144,21 +171,22 @@ export function useUsageApi(): UseUsageApiReturn {
 
   const getUsageByCategory = useCallback((): Record<string, QuotaStatus[]> => {
     const categories: Record<string, QuotaStatus[]> = {
-      'Documents & Storage': [],
-      'AI & Analysis': [],
-      'Business': [],
-      'Team': [],
+      'Documents & Storage': [] as QuotaStatus[],
+      'AI & Analysis': [] as QuotaStatus[],
+      'Business': [] as QuotaStatus[],
+      'Team': [] as QuotaStatus[],
     };
 
     store.quotas.forEach((quota) => {
-      if (['uploads', 'storage', 'documents', 'exports'].includes(quota.featureKey)) {
-        categories['Documents & Storage'].push(quota);
-      } else if (['ai_tokens', 'ai_analysis', 'ocr_pages', 'proposal_generations'].includes(quota.featureKey)) {
-        categories['AI & Analysis'].push(quota);
-      } else if (['tenders', 'bids'].includes(quota.featureKey)) {
-        categories['Business'].push(quota);
-      } else if (['users', 'api_requests'].includes(quota.featureKey)) {
-        categories['Team'].push(quota);
+      const key = quota.featureKey;
+      if (key === 'uploads' || key === 'storage' || key === 'documents' || key === 'exports') {
+        categories['Documents & Storage']!.push(quota);
+      } else if (key === 'ai_tokens' || key === 'ai_analysis' || key === 'ocr_pages' || key === 'proposal_generations') {
+        categories['AI & Analysis']!.push(quota);
+      } else if (key === 'tenders' || key === 'bids') {
+        categories['Business']!.push(quota);
+      } else if (key === 'users' || key === 'api_requests') {
+        categories['Team']!.push(quota);
       }
     });
 
@@ -288,8 +316,8 @@ function parseDuration(duration: string): number {
   const match = duration.match(/^(\d+)([dhms])$/);
   if (!match) return 0;
   
-  const value = parseInt(match[1], 10);
-  const unit = match[2];
+  const value = parseInt(match[1]!, 10);
+  const unit = match[2]!;
   
   const multipliers: Record<string, number> = {
     s: 1000,

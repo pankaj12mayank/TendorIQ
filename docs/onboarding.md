@@ -88,7 +88,7 @@ Step 4: Export
 
 # Test API
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-  https://api.tenderiq.com/v1/tenders
+  https://api.tenderiq.com/api/v1/tenders
 ```
 
 ### 2. SDK Installation

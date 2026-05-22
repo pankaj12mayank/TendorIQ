@@ -220,9 +220,9 @@ export default function ReviewPage() {
 
         <div className="space-y-4">
           <ApprovalWorkflow
-            onApprove={(comments) => console.log('Approved with:', comments)}
-            onReject={(comments) => console.log('Rejected with:', comments)}
-            onRequestChanges={(sections, comments) => console.log('Changes requested:', sections, comments)}
+            onApprove={(comments) => { /* handled by ApprovalWorkflow */ }}
+            onReject={(comments) => { /* handled by ApprovalWorkflow */ }}
+            onRequestChanges={(sections, comments) => { /* handled by ApprovalWorkflow */ }}
           />
 
           <Card>

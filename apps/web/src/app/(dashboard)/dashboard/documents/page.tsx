@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { Upload, RefreshCw, Trash2, Archive } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Upload, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FileUploader } from '@/components/upload/file-uploader';
 import { DocumentStats } from '@/components/documents/document-stats';
 import { DocumentTable } from '@/components/documents/document-table';
 import { useDocumentsApi } from '@/hooks/use-documents';
-import { useEffect } from 'react';
+import { useDocumentStore } from '@/stores/document-store';
 import { toast } from 'sonner';
 
 export default function DocumentsPage() {
@@ -19,15 +19,27 @@ export default function DocumentsPage() {
   }, [fetchDocuments]);
 
   const handleRetryFailed = async () => {
-    if (!stats) return;
-    const failedIds: string[] = [];
-    // Would get from API, simplified here
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/documents/list?status=failed`);
-    const data = await res.json();
-    if (data.documents?.length > 0) {
-      await retryDocuments(data.documents.map((d: { id: string }) => d.id));
-      toast.success(`Retrying ${data.documents.length} documents`);
+    const failed = useDocumentStore
+      .getState()
+      .documents.filter((d) => d.processing_status === 'failed')
+      .map((d) => d.id);
+    if (failed.length === 0) {
+      useDocumentStore.getState().setFilters({ status: ['failed'] });
+      await fetchDocuments();
+      const refreshed = useDocumentStore
+        .getState()
+        .documents.filter((d) => d.processing_status === 'failed')
+        .map((d) => d.id);
+      if (refreshed.length === 0) {
+        toast.message('No failed documents to retry');
+        return;
+      }
+      await retryDocuments(refreshed);
+      toast.success(`Retrying ${refreshed.length} documents`);
+      return;
     }
+    await retryDocuments(failed);
+    toast.success(`Retrying ${failed.length} documents`);
   };
 
   return (

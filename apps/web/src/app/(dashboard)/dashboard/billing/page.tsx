@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useBillingStore } from '@/components/billing/store';
 import { useBillingApi, useQuotaEnforcement } from '@/hooks/use-billing';
 import { 
@@ -29,9 +29,18 @@ import { cn } from '@/lib/utils';
 
 export default function BillingPage() {
   const [activeTab, setActiveTab] = useState('plans');
-  const { currentSubscription, isProcessing, changePlan, cancelSubscription } = useBillingStore();
-  const { isLoading, changePlan: apiChangePlan, cancelSubscription: apiCancelSubscription } = useBillingApi();
-  const { getAllQuotaStatus, canPerformAction, getUpgradePrompt } = useQuotaEnforcement();
+  const { currentSubscription, isProcessing } = useBillingStore();
+  const {
+    isLoading,
+    changePlan,
+    cancelSubscription: apiCancelSubscription,
+    initialize,
+  } = useBillingApi();
+  const { getAllQuotaStatus, getUpgradePrompt } = useQuotaEnforcement();
+
+  useEffect(() => {
+    void initialize();
+  }, [initialize]);
 
   const quotaStatus = getAllQuotaStatus();
   const warningQuotas = quotaStatus.filter(q => 

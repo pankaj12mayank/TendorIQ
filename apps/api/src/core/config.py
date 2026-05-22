@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Monorepo root .env (run.bat / uvicorn cwd may be apps/api)
 import os
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _DOTENV_OVERRIDE = os.environ.get('DOTENV_PATH', '').strip()
 _ENV_FILE = (
     Path(_DOTENV_OVERRIDE)
@@ -48,9 +48,7 @@ class Settings(BaseSettings):
     # ===========================================
     # DATABASE
     # ===========================================
-    DATABASE_URL: str = (
-        'mysql+aiomysql://root:root@localhost:3306/tenderiq?charset=utf8mb4'
-    )
+    DATABASE_URL: str = ''  # Must be set in .env
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_ECHO: bool = False
@@ -79,7 +77,7 @@ class Settings(BaseSettings):
     CLERK_SECRET_KEY: str = ''
     CLERK_WEBHOOK_SECRET: str = ''
 
-    JWT_SECRET: str = 'dev-secret-change-in-production-min-32-chars'
+    JWT_SECRET: str = ''  # Must be set in .env (min 32 chars)
     JWT_ALGORITHM: str = 'HS256'
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -113,14 +111,16 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = 'noreply@tendoriq.com'
     EMAIL_FROM_NAME: str = 'TenderIQ'
     FRONTEND_URL: str = 'http://localhost:3000'
-    SUPER_ADMIN_EMAIL: str = 'admin@tenderiq.com'
-    SUPER_ADMIN_PASSWORD: str = 'SuperAdmin@123'
+    SUPER_ADMIN_EMAIL: str = ''  # Must be set in .env
+    SUPER_ADMIN_PASSWORD: str = ''  # Must be set in .env for production
 
     # Optional demo tenant login (development) — role-based JWT, no API keys
     DEMO_USER_EMAIL: str = ''
     DEMO_USER_PASSWORD: str = ''
     DEMO_USER_ROLE: str = 'admin'
     DEMO_USER_NAME: str = 'Demo User'
+    DEMO_TENANT_SLUG: str = 'demo'
+    DEMO_TENANT_NAME: str = 'Demo Organization'
 
     # SMTP
     SMTP_HOST: str = ''
@@ -231,18 +231,18 @@ class Settings(BaseSettings):
 
     @field_validator('JWT_SECRET')
     @classmethod
-    def validate_jwt_secret(cls, v):
-        if hasattr(v, '__str__'):
-            v = str(v)
+    def validate_jwt_secret(cls, v: str) -> str:
+        if not v:
+            raise ValueError('JWT_SECRET must be set in .env (min 32 characters)')
         if len(v) < 32:
             raise ValueError('JWT_SECRET must be at least 32 characters')
         return v
 
     @field_validator('DATABASE_URL')
     @classmethod
-    def validate_database_url(cls, v):
-        if hasattr(v, 'scheme'):
-            v = str(v)
+    def validate_database_url(cls, v: str) -> str:
+        if not v:
+            raise ValueError('DATABASE_URL must be set in .env')
         if not v.startswith(('mysql', 'mariadb')):
             raise ValueError(
                 'DATABASE_URL must be MySQL '

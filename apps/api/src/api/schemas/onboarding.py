@@ -2,7 +2,12 @@
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+from ..onboarding_helpers import (
+    normalize_onboarding_billing_cycle,
+    normalize_onboarding_plan_id,
+)
 
 
 class Step1OrganizationCreate(BaseModel):
@@ -63,6 +68,18 @@ class Step4PlanSelection(BaseModel):
     billing_cycle: str = Field(default='monthly', pattern=r'^(monthly|yearly)$')
     addons: list[str] = Field(default_factory=list)
 
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_plan_and_cycle(cls, value):
+        if not isinstance(value, dict):
+            return value
+        raw = dict(value)
+        if 'plan_id' in raw:
+            raw['plan_id'] = normalize_onboarding_plan_id(str(raw['plan_id']))
+        if 'billing_cycle' in raw:
+            raw['billing_cycle'] = normalize_onboarding_billing_cycle(str(raw['billing_cycle']))
+        return raw
+
 
 class DashboardWidget(BaseModel):
     id: str
@@ -100,8 +117,14 @@ class OnboardingStateResponse(BaseModel):
     step_5_data: dict = Field(default_factory=dict)
     is_completed: bool = False
     completed_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class OnboardingSessionTokens(BaseModel):
+    access_token: str
+    refresh_token: str
+    expires_in: int = 1800
 
 
 class Step1Response(BaseModel):
@@ -111,6 +134,7 @@ class Step1Response(BaseModel):
     tenant_id: str
     tenant_name: str
     onboarding_state: OnboardingStateResponse
+    session: Optional[OnboardingSessionTokens] = None
 
 
 class Step2Response(BaseModel):
@@ -142,6 +166,7 @@ class Step5Response(BaseModel):
     completed: bool = True
     is_onboarding_complete: bool = True
     onboarding_state: OnboardingStateResponse
+    session: Optional[OnboardingSessionTokens] = None
 
 
 class ExpertiseCategoryResponse(BaseModel):

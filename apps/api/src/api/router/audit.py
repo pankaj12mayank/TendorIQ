@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel, Field
+from sqlalchemy import select, func
 
 from ...core.models import AuditLog
 from ...core.database import get_db
@@ -82,128 +83,61 @@ class AuditStats(BaseModel):
     daily_trend: list
 
 
-MOCK_LOGS = [
-    {
-        'id': 'a1',
-        'action': 'FILE_UPLOADED',
-        'action_type': 'upload',
-        'resource_type': 'document',
-        'resource_id': 'doc-123',
-        'resource_name': 'tender_document.pdf',
-        'user_id': 'user-1',
-        'user_name': 'John Doe',
-        'user_email': 'john@example.com',
-        'user_role': 'analyst',
-        'tenant_id': 'tenant-1',
-        'changes': {'status': 'uploaded'},
-        'old_values': {},
-        'new_values': {'status': 'uploaded', 'size': 2048576},
-        'ip_address': '192.168.1.100',
-        'user_agent': 'Mozilla/5.0',
-        'request_id': 'req-123',
-        'created_at': '2026-05-19T10:30:00Z'
-    },
-    {
-        'id': 'a2',
-        'action': 'TENDER_EXPORTED',
-        'action_type': 'export',
-        'resource_type': 'tender',
-        'resource_id': 'tend-456',
-        'resource_name': 'IT Infrastructure Tender',
-        'user_id': 'user-2',
-        'user_name': 'Jane Smith',
-        'user_email': 'jane@example.com',
-        'user_role': 'manager',
-        'tenant_id': 'tenant-1',
-        'changes': {'format': 'pdf', 'pages': 45},
-        'old_values': {},
-        'new_values': {'export_format': 'pdf'},
-        'ip_address': '192.168.1.101',
-        'user_agent': 'Mozilla/5.0',
-        'request_id': 'req-124',
-        'created_at': '2026-05-19T11:00:00Z'
-    },
-    {
-        'id': 'a3',
-        'action': 'AI_ANALYSIS_COMPLETED',
-        'action_type': 'ai_generation',
-        'resource_type': 'analysis',
-        'resource_id': 'analysis-789',
-        'resource_name': 'Tender Analysis',
-        'user_id': 'user-1',
-        'user_name': 'John Doe',
-        'user_email': 'john@example.com',
-        'user_role': 'analyst',
-        'tenant_id': 'tenant-1',
-        'changes': {'confidence': 85, 'sections': 7},
-        'old_values': {'status': 'processing'},
-        'new_values': {'status': 'completed'},
-        'ip_address': '192.168.1.100',
-        'user_agent': 'Mozilla/5.0',
-        'request_id': 'req-125',
-        'created_at': '2026-05-19T11:30:00Z'
-    },
-    {
-        'id': 'a4',
-        'action': 'USER_ROLE_CHANGED',
-        'action_type': 'admin_action',
-        'resource_type': 'user',
-        'resource_id': 'user-3',
-        'resource_name': 'Bob Wilson',
-        'user_id': 'user-2',
-        'user_name': 'Jane Smith',
-        'user_email': 'jane@example.com',
-        'user_role': 'manager',
-        'tenant_id': 'tenant-1',
-        'changes': {'role': 'admin'},
-        'old_values': {'role': 'viewer'},
-        'new_values': {'role': 'admin'},
-        'ip_address': '192.168.1.101',
-        'user_agent': 'Mozilla/5.0',
-        'request_id': 'req-126',
-        'created_at': '2026-05-19T12:00:00Z'
-    },
-    {
-        'id': 'a5',
-        'action': 'SUBSCRIPTION_UPGRADED',
-        'action_type': 'billing',
-        'resource_type': 'subscription',
-        'resource_id': 'sub-001',
-        'resource_name': 'Pro Plan',
-        'user_id': 'user-2',
-        'user_name': 'Jane Smith',
-        'user_email': 'jane@example.com',
-        'user_role': 'manager',
-        'tenant_id': 'tenant-1',
-        'changes': {'plan': 'pro', 'billing': 'monthly'},
-        'old_values': {'plan': 'free'},
-        'new_values': {'plan': 'pro'},
-        'ip_address': '192.168.1.101',
-        'user_agent': 'Mozilla/5.0',
-        'request_id': 'req-127',
-        'created_at': '2026-05-19T12:30:00Z'
-    },
-    {
-        'id': 'a6',
-        'action': 'DOCUMENT_DELETED',
-        'action_type': 'delete',
-        'resource_type': 'document',
-        'resource_id': 'doc-999',
-        'resource_name': 'old_tender.pdf',
-        'user_id': 'user-1',
-        'user_name': 'John Doe',
-        'user_email': 'john@example.com',
-        'user_role': 'analyst',
-        'tenant_id': 'tenant-1',
-        'changes': {'status': 'deleted'},
-        'old_values': {'status': 'active'},
-        'new_values': {'status': 'deleted'},
-        'ip_address': '192.168.1.100',
-        'user_agent': 'Mozilla/5.0',
-        'request_id': 'req-128',
-        'created_at': '2026-05-19T13:00:00Z'
+def _log_to_entry(log: AuditLog) -> dict:
+    return {
+        'id': str(log.id),
+        'action': log.action,
+        'action_type': log.action_type,
+        'resource_type': log.resource_type,
+        'resource_id': str(log.resource_id) if log.resource_id else None,
+        'resource_name': log.resource_name,
+        'user_id': str(log.user_id) if log.user_id else '',
+        'user_name': '',
+        'user_email': '',
+        'user_role': '',
+        'tenant_id': str(log.tenant_id),
+        'changes': log.changes or {},
+        'old_values': log.old_values or {},
+        'new_values': log.new_values or {},
+        'ip_address': log.ip_address,
+        'user_agent': log.user_agent,
+        'request_id': log.request_id,
+        'created_at': log.created_at.isoformat() if log.created_at else '',
     }
-]
+
+
+def _build_filters(
+    tenant_id: UUID,
+    action: Optional[str] = None,
+    action_type: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    search: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+):
+    conditions = [AuditLog.tenant_id == tenant_id]
+    if action:
+        conditions.append(AuditLog.action == action)
+    if action_type:
+        conditions.append(AuditLog.action_type == action_type)
+    if resource_type:
+        conditions.append(AuditLog.resource_type == resource_type)
+    if resource_id:
+        conditions.append(AuditLog.resource_id == resource_id)
+    if user_id:
+        conditions.append(AuditLog.user_id == UUID(user_id))
+    if search:
+        search_lower = search.lower()
+        conditions.append(
+            func.lower(AuditLog.action).like(f'%{search_lower}%')
+        )
+    if start_date:
+        conditions.append(AuditLog.created_at >= start_date)
+    if end_date:
+        conditions.append(AuditLog.created_at <= end_date)
+    return conditions
 
 
 @router.get('/logs', response_model=list[AuditEntry])
@@ -222,82 +156,116 @@ async def get_audit_logs(
     db = Depends(get_db),
 ):
     """Get audit logs with filtering and search"""
-    
-    logs = MOCK_LOGS
-    
-    if action:
-        logs = [l for l in logs if l['action'] == action]
-    if action_type:
-        logs = [l for l in logs if l['action_type'] == action_type]
-    if resource_type:
-        logs = [l for l in logs if l['resource_type'] == resource_type]
-    if resource_id:
-        logs = [l for l in logs if l['resource_id'] == resource_id]
-    if user_id:
-        logs = [l for l in logs if l['user_id'] == user_id]
-    if search:
-        search_lower = search.lower()
-        logs = [l for l in logs if search_lower in l['user_name'].lower() or 
-                search_lower in l['resource_name'].lower() or 
-                search_lower in l['action'].lower()]
-    
-    return logs[offset:offset+limit]
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        if not tenant_id:
+            return []
+
+        conditions = _build_filters(
+            tenant_id, action, action_type, resource_type,
+            resource_id, user_id, search, start_date, end_date,
+        )
+        q = (
+            select(AuditLog)
+            .where(*conditions)
+            .order_by(AuditLog.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return [_log_to_entry(r) for r in rows]
+    except Exception:
+        logger.exception('Failed to fetch audit logs')
+        return []
 
 
 @router.get('/logs/{log_id}', response_model=AuditEntry)
 async def get_audit_log(
     log_id: str,
     current_user: AuthContext = Depends(get_current_user),
+    db = Depends(get_db),
 ):
     """Get a specific audit log entry"""
-    
-    for log in MOCK_LOGS:
-        if log['id'] == log_id:
-            return log
-    
-    raise HTTPException(status_code=404, detail='Audit log not found')
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        q = select(AuditLog).where(
+            AuditLog.id == log_id,
+            AuditLog.tenant_id == tenant_id,
+        )
+        row = (await db.execute(q)).scalar_one_or_none()
+        if not row:
+            raise HTTPException(status_code=404, detail='Audit log not found')
+        return _log_to_entry(row)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception('Failed to fetch audit log')
+        raise HTTPException(status_code=404, detail='Audit log not found')
 
 
 @router.get('/stats', response_model=AuditStats)
 async def get_audit_stats(
     days: int = Query(30, le=365),
     current_user: AuthContext = Depends(get_current_user),
+    db = Depends(get_db),
 ):
     """Get audit statistics"""
-    
-    entries_by_action = {}
-    entries_by_type = {}
-    entries_by_user = {}
-    
-    for log in MOCK_LOGS:
-        action = log['action']
-        entries_by_action[action] = entries_by_action.get(action, 0) + 1
-        
-        action_type = log['action_type']
-        entries_by_type[action_type] = entries_by_type.get(action_type, 0) + 1
-        
-        user = log['user_name']
-        entries_by_user[user] = entries_by_user.get(user, 0) + 1
-    
-    daily_trend = [
-        {'date': '2026-05-19', 'count': len(MOCK_LOGS)},
-        {'date': '2026-05-18', 'count': 12},
-        {'date': '2026-05-17', 'count': 8},
-    ]
-    
-    return AuditStats(
-        total_entries=len(MOCK_LOGS),
-        entries_by_action=entries_by_action,
-        entries_by_type=entries_by_type,
-        entries_by_user=entries_by_user,
-        daily_trend=daily_trend
-    )
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        if not tenant_id:
+            return AuditStats(total_entries=0, entries_by_action={}, entries_by_type={}, entries_by_user={}, daily_trend=[])
+
+        total_q = select(func.count(AuditLog.id)).where(AuditLog.tenant_id == tenant_id)
+        total = await db.scalar(total_q) or 0
+
+        action_rows = await db.execute(
+            select(AuditLog.action, func.count(AuditLog.id).label('cnt'))
+            .where(AuditLog.tenant_id == tenant_id)
+            .group_by(AuditLog.action)
+        )
+        entries_by_action = {row[0]: row[1] for row in action_rows.all()}
+
+        type_rows = await db.execute(
+            select(AuditLog.action_type, func.count(AuditLog.id).label('cnt'))
+            .where(AuditLog.tenant_id == tenant_id)
+            .group_by(AuditLog.action_type)
+        )
+        entries_by_type = {row[0]: row[1] for row in type_rows.all()}
+
+        user_rows = await db.execute(
+            select(AuditLog.user_id, func.count(AuditLog.id).label('cnt'))
+            .where(AuditLog.tenant_id == tenant_id)
+            .group_by(AuditLog.user_id)
+        )
+        entries_by_user = {str(row[0]): row[1] for row in user_rows.all() if row[0]}
+
+        since = datetime.utcnow() - timedelta(days=days)
+        trend_rows = await db.execute(
+            select(
+                func.date(AuditLog.created_at).label('day'),
+                func.count(AuditLog.id).label('cnt'),
+            )
+            .where(AuditLog.tenant_id == tenant_id, AuditLog.created_at >= since)
+            .group_by(func.date(AuditLog.created_at))
+            .order_by(func.date(AuditLog.created_at))
+        )
+        daily_trend = [{'date': str(row[0]), 'count': row[1]} for row in trend_rows.all()]
+
+        return AuditStats(
+            total_entries=total,
+            entries_by_action=entries_by_action,
+            entries_by_type=entries_by_type,
+            entries_by_user=entries_by_user,
+            daily_trend=daily_trend,
+        )
+    except Exception:
+        logger.exception('Failed to fetch audit stats')
+        return AuditStats(total_entries=0, entries_by_action={}, entries_by_type={}, entries_by_user={}, daily_trend=[])
 
 
 @router.get('/actions')
 async def get_audit_actions(current_user: AuthContext = Depends(get_current_user)):
     """Get available audit action types"""
-    
     return {
         'actions': [
             {'value': 'upload', 'label': 'Uploads', 'icon': 'Upload'},
@@ -320,25 +288,34 @@ async def get_audit_actions(current_user: AuthContext = Depends(get_current_user
 async def export_audit_logs(
     request: AuditExportRequest,
     current_user: AuthContext = Depends(get_current_user),
+    db = Depends(get_db),
 ):
     """Export audit logs in specified format"""
-    
-    logs = MOCK_LOGS
-    
-    if request.action_types:
-        logs = [l for l in logs if l['action_type'] in request.action_types]
-    if request.start_date:
-        logs = [l for l in logs if l['created_at'] >= request.start_date.isoformat()]
-    if request.end_date:
-        logs = [l for l in logs if l['created_at'] <= request.end_date.isoformat()]
-    
-    if request.format == 'csv':
-        csv_content = 'ID,Action,Type,Resource,User,Date\n'
-        for log in logs:
-            csv_content += f"{log['id']},{log['action']},{log['action_type']},{log['resource_name']},{log['user_name']},{log['created_at']}\n"
-        return {'content': csv_content, 'mime_type': 'text/csv'}
-    
-    return {'content': logs, 'mime_type': 'application/json'}
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        conditions = [AuditLog.tenant_id == tenant_id]
+
+        if request.action_types:
+            conditions.append(AuditLog.action_type.in_(request.action_types))
+        if request.start_date:
+            conditions.append(AuditLog.created_at >= request.start_date)
+        if request.end_date:
+            conditions.append(AuditLog.created_at <= request.end_date)
+
+        q = select(AuditLog).where(*conditions).order_by(AuditLog.created_at.desc())
+        rows = (await db.execute(q)).scalars().all()
+        logs = [_log_to_entry(r) for r in rows]
+
+        if request.format == 'csv':
+            csv_content = 'ID,Action,Type,Resource,User,Date\n'
+            for log in logs:
+                csv_content += f"{log['id']},{log['action']},{log['action_type']},{log['resource_name']},{log['user_name']},{log['created_at']}\n"
+            return {'content': csv_content, 'mime_type': 'text/csv'}
+
+        return {'content': logs, 'mime_type': 'application/json'}
+    except Exception:
+        logger.exception('Failed to export audit logs')
+        return {'content': [], 'mime_type': 'application/json'}
 
 
 @router.post('/track')
@@ -355,25 +332,25 @@ async def track_audit_event(
     db = Depends(get_db),
 ):
     """Track a custom audit event"""
-    
-    log_entry = {
-        'id': f'audit-{datetime.utcnow().timestamp()}',
-        'action': action,
-        'action_type': action_type,
-        'resource_type': resource_type,
-        'resource_id': resource_id,
-        'resource_name': resource_name,
-        'user_id': current_user.user_id,
-        'user_name': current_user.email,
-        'user_email': current_user.email,
-        'user_role': current_user.role,
-        'tenant_id': str(current_user.tenant_id) if hasattr(current_user, 'tenant_id') else 'unknown',
-        'changes': changes,
-        'old_values': old_values,
-        'new_values': new_values,
-        'created_at': datetime.utcnow().isoformat()
-    }
-    
-    MOCK_LOGS.insert(0, log_entry)
-    
-    return {'success': True, 'log_id': log_entry['id']}
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        log = AuditLog(
+            tenant_id=tenant_id,
+            user_id=UUID(current_user.user_id) if current_user.user_id else None,
+            action=action,
+            action_type=action_type,
+            resource_type=resource_type,
+            resource_id=UUID(resource_id) if resource_id else None,
+            resource_name=resource_name,
+            changes=changes or {},
+            old_values=old_values or {},
+            new_values=new_values or {},
+        )
+        db.add(log)
+        await db.commit()
+        await db.refresh(log)
+        return {'success': True, 'log_id': str(log.id)}
+    except Exception:
+        await db.rollback()
+        logger.exception('Failed to track audit event')
+        return {'success': False, 'log_id': None}

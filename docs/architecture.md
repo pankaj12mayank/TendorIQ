@@ -1,319 +1,160 @@
 # Architecture Overview
 
+> **Stack (current):** MySQL 8+, FastAPI, in-process asyncio job queue.  
+> Optional: Clerk + JWT auth, Sentry. Redis/PostgreSQL are **not** required for local or default deployment.  
+> See [AUDIT_STATUS.md](./AUDIT_STATUS.md) for remediation progress.
+
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Client (React)                           │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  Dashboard  │  │  Documents  │  │  Admin Panel            │ │
-│  └──────┬──────┘  └──────┬──────┘  └───────────┬─────────────┘ │
+│                   Client (React / Next.js 15)                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐   │
+│  │  Dashboard  │  │  Documents  │  │  Admin Panel            │   │
+│  └──────┬──────┘  └──────┬──────┘  └───────────┬─────────────┘   │
 └─────────┼────────────────┼─────────────────────┼──────────────┘
           │                │                     │
           ▼                ▼                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      API Gateway (FastAPI)                     │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Authentication │ Rate Limiting │ Tenant Isolation      │   │
-│  └──────────────────────────────────────────────────────────┘   │
+│              API (FastAPI) — prefix /api/v1                     │
+│  Auth (JWT / Clerk) │ Rate limit │ Tenant context (JWT/header)  │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
         ┌──────────────────────┼──────────────────────┐
         ▼                      ▼                      ▼
 ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-│  Core APIs    │    │   Queue       │    │   AI Service  │
-│  - Tenders    │    │   Workers     │    │   - OpenAI    │
-│  - Documents  │    │   - OCR       │    │   - Anthropic │
-│  - Bids       │    │   - Parsing   │    │   - Azure     │
-│  - Export     │    │   - Analysis  │    │   - Ollama    │
-└───────┬───────┘    └───────┬───────┘    └───────┬───────┘
-        │                    │                    │
-        ▼                    ▼                    ▼
-┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-│  PostgreSQL   │    │    Redis      │    │  Sentry/      │
-│  (Primary DB) │    │  (Queue+Cache)│    │  Monitoring   │
-└───────────────┘    └───────────────┘    └───────────────┘
+│  Core APIs    │    │ In-process    │    │  AI providers │
+│  tenders,     │    │ queue workers │    │  OpenAI, etc. │
+│  documents,   │    │ OCR, parse,   │    │               │
+│  analysis…    │    │ analysis jobs │    │               │
+└───────┬───────┘    └───────┬───────┘    └───────────────┘
+        │                    │
+        ▼                    ▼
+┌───────────────┐    ┌───────────────┐
+│  MySQL 8+     │    │  Local / S3   │
+│  (primary DB) │    │  file storage │
+└───────────────┘    └───────────────┘
+        │
+        ▼
+┌───────────────┐
+│ Sentry (opt)  │
+└───────────────┘
 ```
 
 ---
 
-## Components
+## Monorepo layout
 
-### Frontend (apps/web)
+| Path | Role |
+|------|------|
+| `apps/web` | Next.js frontend (`@tendoriq/web`) |
+| `apps/api` | FastAPI backend |
+| `packages/shared` | Shared TypeScript types and env helpers |
+| `docs/` | Setup, API, audit status |
 
-```
-web/
-├── app/
-│   ├── (auth)/          # Login, signup
-│   ├── (dashboard)/     # Main app
-│   │   ├── tenders/     # Tender management
-│   │   ├── documents/   # Document viewer
-│   │   ├── analytics/   # Reports
-│   │   └── admin/       # Admin panel
-│   └── api/             # API routes
-├── components/
-│   ├── ui/              # Base UI components
-│   ├── tenders/         # Tender-specific
-│   ├── documents/       # Document components
-│   └── admin/           # Admin components
-├── hooks/               # Custom React hooks
-└── lib/                 # Utilities
-```
-
-**Key Libraries:**
-- React 18 + Next.js 14
-- TanStack Query (data fetching)
-- TanStack Table (data tables)
-- React Hook Form + Zod
-- Tailwind CSS
+Orchestration: **pnpm workspaces** + **Turbo**. Root package name: `tenderiq`.
 
 ---
 
-### Backend (apps/api)
+## Frontend (`apps/web`)
+
+- App Router: `(auth)`, `(dashboard)`, `(onboarding)`, admin routes
+- Data: TanStack Query, Zustand stores
+- Auth: Clerk when configured; otherwise local JWT via `/api/v1/auth/login`
+- API client: `NEXT_PUBLIC_API_URL` + `/api/v1/...` paths
+
+**Libraries:** React 19, Next.js 15, Tailwind, Radix UI, Zod.
+
+---
+
+## Backend (`apps/api`)
 
 ```
 api/src/
-├── api/
-│   ├── routers/         # Route handlers
-│   │   ├── tenders.py
-│   │   ├── documents.py
-│   │   ├── ai.py
-│   │   ├── queue.py
-│   │   ├── billing.py
-│   │   └── audit.py
-│   ├── dependencies/    # FastAPI dependencies
-│   │   ├── auth.py
-│   │   ├── permissions.py
-│   │   └── audit.py
-│   └── schemas/         # Pydantic models
-├── core/
-│   ├── models.py        # SQLAlchemy models
-│   ├── auth.py          # JWT handling
-│   ├── rbac.py          # Role-based access
-│   ├── tenant_middleware.py
-│   ├── queue/           # ARQ queue
-│   ├── ai/              # AI providers
-│   └── export/          # Export handlers
-└── main.py              # Entry point
+├── api/routers/       # tenders, documents, auth, files, ocr, …
+├── api/router/        # analysis, billing, admin_platform, queue, …
+├── api/dependencies/  # auth, tenant, permissions
+├── core/              # models, rbac, database, queue, ai, middleware
+└── main.py
 ```
 
-**Key Libraries:**
-- FastAPI + Pydantic
-- SQLAlchemy + asyncpg
-- ARQ (Redis queue)
-- Sentry SDK
+**Libraries:** FastAPI, SQLAlchemy 2.x (async), Alembic, Pydantic, python-jose (JWT).
+
+Database driver: **MySQL** via `DATABASE_URL` (see `docs/MYSQL_SETUP.md`).
 
 ---
 
-## Data Flow
+## Background jobs
 
-### 1. Document Upload
+Jobs are processed **in-process** using asyncio (see `core/queue` and `QueueJob` model).  
+`QUEUE_*` settings in `config.py` apply; **Redis is optional** and only used if configured for rate limiting.
 
-```
-User → Frontend → API → Redis Queue → Worker → PostgreSQL
-                              ↓
-                         S3 Storage
-```
-
-1. User uploads file via frontend
-2. API validates and stores in Redis queue
-3. Worker picks up job, processes (OCR/parsing)
-4. Results stored in PostgreSQL
-5. User notified via WebSocket/polling
-
-### 2. AI Analysis
-
-```
-User → API → Queue → AI Worker → LLM API → Store Results
-              ↓
-         Sentry (error tracking)
-```
-
-1. User requests analysis
-2. Job queued in Redis
-3. Worker calls configured LLM
-4. Results stored in PostgreSQL
-5. Error tracking via Sentry
-
-### 3. Tenant Isolation
-
-```
-Request → Middleware → Extract Tenant ID → Validate → Query
-     ↓
-  Audit Log
-```
-
-1. Every request goes through TenantMiddleware
-2. tenant_id extracted from JWT
-3. All queries filtered by tenant_id
-4. All actions logged to audit_logs table
+Job types include OCR, parsing, and AI analysis. State is persisted in MySQL (`queue_jobs` table).
 
 ---
 
-## Security Architecture
+## Data flow
 
-### Authentication Flow
+### Document upload
 
-```
-┌──────────┐    ┌─────────┐    ┌──────────┐    ┌────────────┐
-│  Clerk   │───▶│  JWT    │───▶│  Verify  │───▶│  AuthCtx   │
-│  Login   │    │  Token  │    │  Token   │    │  Context   │
-└──────────┘    └─────────┘    └──────────┘    └────────────┘
-```
+1. Client uploads via `/api/v1/files` or document init endpoints  
+2. API stores metadata in MySQL and enqueues processing  
+3. Worker runs OCR/parsing pipeline  
+4. Status polled or surfaced in UI  
 
-### Authorization (RBAC)
+### Tenant isolation
 
-```
-User Role → Permission Matrix → Resource Access
-   ↓
-Permission Check
-```
-
-- 6 roles: super_admin, admin, manager, analyst, viewer
-- 20+ permissions across resources
+1. JWT carries `tenant_id` (and ideally `membership_role`) after login/onboarding  
+2. Optional header `X-Tenant-ID` for explicit tenant switch (validated against membership)  
+3. Queries filter by `tenant_id` on tenant-scoped models (`TenantMixin`)
 
 ---
 
-## Database Schema
+## Authentication
 
-### Key Models
+- **Local dev:** `SUPER_ADMIN_*` / `DEMO_USER_*` in `.env` → JWT from `/api/v1/auth/login`  
+- **Production option:** Clerk → session; exchange or parallel JWT for API calls  
+- **Platform admin:** `super_admin` role → `/api/v1/admin/platform/*` (requires `SuperAdmin` dependency)
 
-```
-users
-├── id (UUID)
-├── clerk_id
-├── email
-├── role
-└── tenant_id
-
-tenants
-├── id (UUID)
-├── name
-├── plan
-├── billing_cycle
-└── limits
-
-tenders
-├── id (UUID)
-├── tenant_id (FK)
-├── title
-├── status
-├── deadline
-└── created_by (FK)
-
-documents
-├── id (UUID)
-├── tender_id (FK)
-├── tenant_id (FK)
-├── file_path
-├── status (processing_status)
-└── metadata (JSONB)
-
-audit_logs
-├── id (UUID)
-├── tenant_id (FK)
-├── user_id (FK)
-├── action
-├── action_type
-├── resource_type
-└── changes (JSONB)
-```
+RBAC matrix: `core/rbac.py` (`Permission` enum). Enforcement is being expanded per [AUDIT_REPORT.md](../AUDIT_REPORT.md).
 
 ---
 
-## Queue Architecture
+## API surface
 
-### Queues
-
-| Queue | Purpose | Priority |
-|-------|---------|----------|
-| `ocr` | OCR processing | Normal |
-| `parsing` | Document parsing | Normal |
-| `analysis` | AI analysis | Normal |
-| `export` | Report generation | Low |
-| `notifications` | Email/push | High |
-
-### Job Lifecycle
-
-```
-Queued → Active → Completed
-       ↘ Failed → Retry (3x) → Dead Letter
-```
+- Base path: **`/api/v1`** (not `/v1` alone)  
+- Health: `/health`, `/health/ready` (outside version prefix in `api/base`)  
+- OpenAPI: `/docs` in development  
 
 ---
 
-## Monitoring Stack
+## Monitoring
 
 | Tool | Purpose |
 |------|---------|
-| Sentry | Error tracking |
-| Custom Metrics | API, queue, AI metrics |
-| Health Checks | Service availability |
-| Audit Logs | Security compliance |
+| Sentry | Error tracking (optional DSN) |
+| `/api/v1/observability/*` | Metrics and health summaries |
+| `audit_logs` table | Compliance / security trail |
 
 ---
 
-## Scaling Strategy
+## Deployment (typical)
 
-### Horizontal Scaling
+- **Web:** Vercel or static host for Next.js  
+- **API:** Railway, container, or VM running uvicorn  
+- **DB:** Managed MySQL  
+- **Files:** Local `./uploads` or object storage (configure in env)
 
-- Multiple API instances behind load balancer
-- Stateless design (all state in DB/Redis)
-- Sticky sessions for WebSocket
-
-### Vertical Scaling
-
-- Increase worker processes
-- Connection pooling
-- Redis caching
-
-### Database Scaling
-
-- Read replicas for queries
-- PgBouncer for connection pooling
-- Redis cache for hot data
+Horizontal scaling of workers may later introduce Redis or a dedicated worker process; not required for the default monorepo setup.
 
 ---
 
-## Deployment Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│                  Load Balancer                  │
-│                   (Cloudflare)                  │
-└────────────────────┬────────────────────────────┘
-                   │
-        ┌──────────┴──────────┐
-        ▼                     ▼
-   ┌─────────┐          ┌─────────┐
-   │  API 1  │          │  API 2  │
-   └────┬────┘          └────┬────┘
-        │                    │
-        └────────┬───────────┘
-                 ▼
-         ┌──────────────┐
-         │    Redis     │
-         │  (Queue +    │
-         │   Cache)     │
-         └──────────────┘
-                 │
-        ┌────────┴────────┐
-        ▼                 ▼
-   ┌─────────┐      ┌─────────┐
-   │  DB 1   │      │  DB 2   │
-   │(Primary)│      │(Replica)│
-   └─────────┘      └─────────┘
-```
-
----
-
-## Technology Decisions
+## Technology decisions (current)
 
 | Decision | Reason |
 |----------|--------|
-| FastAPI | High performance, async, auto-docs |
-| PostgreSQL | ACID, JSONB, full-text search |
-| Redis | Queue, caching, sessions |
-| Clerk | Secure, scalable auth |
-| TanStack Query | Caching, optimistic updates |
-| Tailwind | Rapid development, consistency |
+| FastAPI | Async API, OpenAPI, Pydantic v2 |
+| MySQL | Primary store per project config and models |
+| In-process queue | Simpler local/dev; jobs still persisted in DB |
+| Clerk (optional) | Hosted auth; JWT fallback for API |
+| pnpm + Turbo | Monorepo dev and build |

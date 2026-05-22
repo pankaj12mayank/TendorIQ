@@ -1,6 +1,7 @@
 export * from './env.js';
 export * from './constants/index.js';
 export * from './types/index.js';
+export * from './permissions.js';
 
 export type {
   User,

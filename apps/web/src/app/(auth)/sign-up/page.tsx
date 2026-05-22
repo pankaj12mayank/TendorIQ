@@ -29,8 +29,9 @@ export default function SignUpPage() {
             and invite your team — no API keys or separate admin logins required.
           </p>
           <p className="text-sm text-muted-foreground">
-            Already have an account? Use the same sign-in page for every role (admin, manager, or
-            platform owner).
+            Self-serve signup requires Clerk (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`). Without Clerk,
+            sign in with your demo or workspace credentials, then complete onboarding to create your
+            organization.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-3">

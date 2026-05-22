@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { api } from '@/lib/api';
+import { useCallback, useState, useRef, useEffect } from 'react';
+import { api } from '@/lib/api-client';
 
 export interface OCRStatus {
   document_id: string;
@@ -44,6 +44,11 @@ export interface QualityAssessment {
 export function useOCRApi() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    return () => { cancelledRef.current = true; };
+  }, []);
 
   const processDocument = useCallback(async (documentId: string, language = 'en') => {
     setLoading(true);
@@ -55,7 +60,7 @@ export function useOCRApi() {
         job_id: string;
         document_id: string;
         status: string;
-      }>(`/api/v1/ocr/process/${documentId}`, { language });
+      }>(`/api/v1/ocr/process/${documentId}?language=${encodeURIComponent(language)}`, {});
 
       return res;
     } catch (err: unknown) {
@@ -135,34 +140,47 @@ export function useOCRApi() {
     }
   }, []);
 
-  const pollStatus = useCallback(async (documentId: string, maxAttempts = 60, intervalMs = 5000) => {
-    let attempts = 0;
+  const delay = useCallback((ms: number) => {
+    return new Promise<void>((resolve) => {
+      if (cancelledRef.current) { resolve(); return; }
+      const timer = setTimeout(() => {
+        if (!cancelledRef.current) resolve();
+      }, ms);
+      const interval = setInterval(() => {
+        if (cancelledRef.current) {
+          clearTimeout(timer);
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }, []);
 
-    const poll = async (): Promise<OCRStatus> => {
-      if (attempts >= maxAttempts) {
-        throw new Error('OCR polling timeout');
+  const pollStatus = useCallback(async (documentId: string, maxAttempts = 60, intervalMs = 5000) => {
+    const poll = async (attempt = 0): Promise<OCRStatus> => {
+      if (cancelledRef.current || attempt >= maxAttempts) {
+        throw new Error(cancelledRef.current ? 'Polling cancelled' : 'OCR polling timeout');
       }
 
       try {
         const status = await getStatus(documentId);
-        attempts++;
 
         if (status.ocr_status === 'completed' || status.ocr_status === 'failed' || status.ocr_status === 'needs_review') {
           return status;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
-        return poll();
+        await delay(intervalMs);
+        return poll(attempt + 1);
       } catch (err) {
-        attempts++;
-        if (attempts >= maxAttempts) throw err;
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
-        return poll();
+        if (cancelledRef.current) throw new Error('Polling cancelled');
+        if (attempt + 1 >= maxAttempts) throw err;
+        await delay(intervalMs);
+        return poll(attempt + 1);
       }
     };
 
     return poll();
-  }, [getStatus]);
+  }, [getStatus, delay]);
 
   return {
     loading,

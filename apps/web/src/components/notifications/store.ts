@@ -26,40 +26,9 @@ interface NotificationState {
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
-  notifications: [
-    {
-      id: '1',
-      title: 'File Processing Complete',
-      message: 'Your uploaded tender document has been processed successfully.',
-      type: 'success',
-      isRead: false,
-      createdAt: new Date(Date.now() - 30 * 60000).toISOString(),
-      actionUrl: '/dashboard/tenders/analysis',
-      actionLabel: 'View Results'
-    },
-    {
-      id: '2',
-      title: 'Quota Warning',
-      message: 'You have used 80% of your AI analysis quota. Consider upgrading.',
-      type: 'warning',
-      isRead: false,
-      createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-      actionUrl: '/dashboard/billing',
-      actionLabel: 'Upgrade'
-    },
-    {
-      id: '3',
-      title: 'New Comment on Proposal',
-      message: 'Mike Chen commented on your submitted proposal.',
-      type: 'info',
-      isRead: true,
-      createdAt: new Date(Date.now() - 24 * 3600000).toISOString(),
-      actionUrl: '/dashboard/tenders/review',
-      actionLabel: 'View'
-    }
-  ],
+  notifications: [],
   isLoading: false,
-  unreadCount: 2,
+  unreadCount: 0,
 
   setNotifications: (notifications) => set({ 
     notifications,

@@ -10,7 +10,7 @@ import {
   ChangeRecord,
   SectionStatus
 } from './types';
-import { MOCK_REVIEW_SESSION } from './constants';
+
 
 interface EditState {
   section: ReviewSection | null;
@@ -64,7 +64,7 @@ interface ReviewState {
 }
 
 export const useReviewStore = create<ReviewState>((set, get) => ({
-  session: MOCK_REVIEW_SESSION,
+  session: null,
   isLoading: false,
   isSaving: false,
   editState: {

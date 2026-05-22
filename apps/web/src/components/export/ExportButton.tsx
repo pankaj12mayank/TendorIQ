@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Download, ChevronDown, FileText, FileSpreadsheet, Code, File } from 'lucide-react';
 import { ExportFormat, exportEntity, downloadExport, formatFileSize, triggerDownload, getExportFilename } from '@/lib/export';
 import { cn } from '@/lib/utils';
@@ -57,8 +58,8 @@ export function ExportButton({
       const blob = await downloadExport(job.export_id);
       const filename = getExportFilename(job, format);
       triggerDownload(blob, filename);
-    } catch (error) {
-      console.error('Export failed:', error);
+    } catch {
+      toast.error('Export failed');
     } finally {
       setIsLoading(false);
       setDownloadedFormat(null);

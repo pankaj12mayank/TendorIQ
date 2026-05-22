@@ -47,6 +47,7 @@ import { ADMIN_MODULES } from '@/components/admin/constants';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { AdminRouteGuard } from '@/components/auth/admin-route-guard';
+import { PlatformScopeBanner } from '@/components/admin/platform-scope-banner';
 import { useCurrentUser } from '@/hooks/use-auth';
 import { isSuperAdmin, hasPermission } from '@/lib/permissions';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -80,7 +81,7 @@ function RBACGuard({
       </div>
     );
   }
-  if (permission && !hasPermission(user?.role, permission)) {
+  if (permission && !hasPermission(user?.role, permission, user?.permissions)) {
     return (
       <div className="flex h-64 items-center justify-center">
         <p className="text-muted-foreground">You do not have permission for this section.</p>
@@ -207,6 +208,9 @@ function AdminConsoleContent() {
       </aside>
 
       <main className="flex-1 overflow-y-auto">
+        <div className="px-6 pt-4">
+          <PlatformScopeBanner />
+        </div>
         <div className="sticky top-0 z-10 border-b bg-background px-6 py-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">

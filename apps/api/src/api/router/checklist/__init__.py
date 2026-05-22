@@ -9,18 +9,19 @@ from pydantic import BaseModel, Field
 
 from ....core.checklist import (
     ChecklistEngine,
-    ChecklistExportConfig,
-    ChecklistExportFormat,
-    CompleteChecklist,
     ChecklistGenerationRequest,
     ChecklistGenerationResponse,
-    ChecklistUpdateRequest,
     get_checklist_engine,
-    DocumentStatus,
 )
+from ....core.auth import AuthContext
+from ...dependencies.rbac_deps import RequireAiAnalysis, require_tenant_member
 
 
-router = APIRouter(prefix='/checklist', tags=['compliance_checklist'])
+router = APIRouter(
+    prefix='/checklist',
+    tags=['compliance_checklist'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 class GenerateChecklistRequest(BaseModel):
@@ -48,6 +49,7 @@ class ExportRequest(BaseModel):
 @router.post('/generate', response_model=ChecklistGenerationResponse)
 async def generate_checklist(
     request: GenerateChecklistRequest,
+    current_user: RequireAiAnalysis,
     engine: ChecklistEngine = Depends(get_checklist_engine),
 ):
     try:

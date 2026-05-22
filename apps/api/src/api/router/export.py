@@ -1,43 +1,39 @@
 """Export Engine - API Router"""
 
 import logging
-import os
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Header
-from fastapi.responses import StreamingResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
+from ...core.auth import AuthContext
 from ...core.export.schemas import (
     ExportFormat,
     ExportRequest,
     ExportTemplate,
     ExportType,
-    ExportWatermark,
-    WatermarkPosition,
 )
 from ...core.export.service import ExportService, get_export_service
+from ..dependencies.rbac_deps import RequireApiAccess, require_tenant_member
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix='/exports', tags=['Export'])
-
-
-def get_current_user_id(x_user_id: str = Header(...)) -> str:
-    return x_user_id
-
-
-def get_current_org_id(x_org_id: str = Header(...)) -> str:
-    return x_org_id
+router = APIRouter(
+    prefix='/exports',
+    tags=['Export'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 @router.post('/export')
 async def create_export(
     request: ExportRequest,
+    current_user: RequireApiAccess,
     service: ExportService = Depends(get_export_service),
-    user_id: str = Depends(get_current_user_id),
-    organization_id: str = Depends(get_current_org_id),
 ):
+    user_id = current_user.user_id
+    organization_id = current_user.tenant_id or 'default'
     job = service.create_export(request, user_id, organization_id)
 
     processed_job = service.process_export(job.job_id)
@@ -60,6 +56,7 @@ async def create_export(
 async def download_export(
     export_id: str,
     service: ExportService = Depends(get_export_service),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     result = service.get_export_file(export_id)
     if not result:
@@ -82,6 +79,7 @@ async def download_export(
 async def get_job_status(
     job_id: str,
     service: ExportService = Depends(get_export_service),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     job = service.get_job_status(job_id)
     if not job:
@@ -105,6 +103,7 @@ async def get_job_status(
 async def create_template(
     template: ExportTemplate,
     service: ExportService = Depends(get_export_service),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     created = service.register_template(template)
     return created.model_dump()
@@ -113,6 +112,7 @@ async def create_template(
 @router.get('/templates')
 async def list_templates(
     service: ExportService = Depends(get_export_service),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     templates = service.list_templates()
     return [t.model_dump() for t in templates]
@@ -122,6 +122,7 @@ async def list_templates(
 async def get_template(
     template_id: str,
     service: ExportService = Depends(get_export_service),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     templates = service.list_templates()
     template = next((t for t in templates if t.template_id == template_id), None)
@@ -136,9 +137,10 @@ async def export_proposal(
     format: ExportFormat = Query(ExportFormat.PDF),
     template_id: Optional[str] = Query(None),
     service: ExportService = Depends(get_export_service),
-    user_id: str = Depends(get_current_user_id),
-    organization_id: str = Depends(get_current_org_id),
+    current_user: AuthContext = Depends(get_current_user),
 ):
+    user_id = current_user.user_id
+    organization_id = current_user.tenant_id or 'default'
     request = ExportRequest(
         export_type=ExportType.PROPOSAL,
         format=format,
@@ -168,9 +170,10 @@ async def export_checklist(
     format: ExportFormat = Query(ExportFormat.PDF),
     template_id: Optional[str] = Query(None),
     service: ExportService = Depends(get_export_service),
-    user_id: str = Depends(get_current_user_id),
-    organization_id: str = Depends(get_current_org_id),
+    current_user: AuthContext = Depends(get_current_user),
 ):
+    user_id = current_user.user_id
+    organization_id = current_user.tenant_id or 'default'
     request = ExportRequest(
         export_type=ExportType.CHECKLIST,
         format=format,
@@ -200,9 +203,10 @@ async def export_risk_analysis(
     format: ExportFormat = Query(ExportFormat.PDF),
     template_id: Optional[str] = Query(None),
     service: ExportService = Depends(get_export_service),
-    user_id: str = Depends(get_current_user_id),
-    organization_id: str = Depends(get_current_org_id),
+    current_user: AuthContext = Depends(get_current_user),
 ):
+    user_id = current_user.user_id
+    organization_id = current_user.tenant_id or 'default'
     request = ExportRequest(
         export_type=ExportType.RISK_ANALYSIS,
         format=format,
@@ -230,8 +234,9 @@ async def export_risk_analysis(
 async def get_export_history(
     limit: int = Query(50, ge=1, le=200),
     service: ExportService = Depends(get_export_service),
-    organization_id: str = Depends(get_current_org_id),
+    current_user: AuthContext = Depends(get_current_user),
 ):
+    organization_id = current_user.tenant_id or 'default'
     history = service.get_export_history(organization_id, limit)
     return {
         'exports': [
@@ -252,12 +257,13 @@ async def get_export_history(
 async def batch_export(
     exports: list[ExportRequest],
     service: ExportService = Depends(get_export_service),
-    user_id: str = Depends(get_current_user_id),
-    organization_id: str = Depends(get_current_org_id),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     if len(exports) > 10:
         raise HTTPException(status_code=400, detail='Maximum 10 exports per batch')
 
+    user_id = current_user.user_id
+    organization_id = current_user.tenant_id or 'default'
     results = []
     for export_req in exports:
         job = service.create_export(export_req, user_id, organization_id)
@@ -277,12 +283,13 @@ async def create_secure_export(
     request: ExportRequest,
     password: str = Query(...),
     service: ExportService = Depends(get_export_service),
-    user_id: str = Depends(get_current_user_id),
-    organization_id: str = Depends(get_current_org_id),
+    current_user: AuthContext = Depends(get_current_user),
 ):
     if len(password) < 8:
         raise HTTPException(status_code=400, detail='Password must be at least 8 characters')
 
+    user_id = current_user.user_id
+    organization_id = current_user.tenant_id or 'default'
     job = service.create_export(request, user_id, organization_id)
 
     return {

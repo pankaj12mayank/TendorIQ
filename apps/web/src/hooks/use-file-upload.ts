@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { api } from '@/lib/api-client';
 
 export interface UploadFile {
   name: string;
@@ -80,10 +81,39 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const authHeaders = api.getAuthHeaders() as Record<string, string>;
+
+      const params = new URLSearchParams({ category });
+      if (tenderId) params.set('tender_id', tenderId);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const directResponse = await fetch(
+        `${apiUrl}/api/v1/files/upload/direct?${params.toString()}`,
+        {
+          method: 'POST',
+          headers: authHeaders,
+          body: formData,
+        }
+      );
+
+      if (directResponse.ok) {
+        const directData = await directResponse.json();
+        setProgress({ loaded: file.size, total: file.size, percent: 100 });
+        const result: UploadResult = {
+          success: true,
+          document_id: directData.document_id,
+          storage_key: directData.storage_key,
+        };
+        onComplete?.(result);
+        setUploading(false);
+        return result;
+      }
 
       const initResponse = await fetch(`${apiUrl}/api/v1/files/upload/initiate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           file_name: file.name,
           file_size: file.size,
@@ -94,20 +124,17 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       });
 
       if (!initResponse.ok) {
-        const err = await initResponse.json();
-        throw new Error(err.detail || 'Failed to initiate upload');
+        const err = await initResponse.json().catch(() => ({}));
+        throw new Error((err as { detail?: string }).detail || 'Failed to initiate upload');
       }
 
       const initData = await initResponse.json();
-
-      const formData = new FormData();
-      formData.append('file', file);
 
       const uploadResponse = await fetch(initData.upload_url, {
         method: 'PUT',
         body: file,
         headers: {
-          'Content-Type': file.type,
+          'Content-Type': file.type || 'application/octet-stream',
         },
       });
 
@@ -117,15 +144,14 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
       setProgress({ loaded: file.size, total: file.size, percent: 100 });
 
-      const completeResponse = await fetch(`${apiUrl}/api/v1/files/upload/complete/${initData.document_id}`, {
-        method: 'POST',
-      });
+      const completeResponse = await fetch(
+        `${apiUrl}/api/v1/files/upload/complete/${initData.document_id}`,
+        { method: 'POST', headers: authHeaders }
+      );
 
       if (!completeResponse.ok) {
         throw new Error('Failed to complete upload');
       }
-
-      const completeData = await completeResponse.json();
 
       const result: UploadResult = {
         success: true,
@@ -136,7 +162,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       onComplete?.(result);
       setUploading(false);
       return result;
-
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Upload failed';
       setError(errorMessage);
@@ -144,7 +169,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       setUploading(false);
       return { success: false, error: errorMessage };
     }
-  }, [validateFile, onProgress, onComplete, onError]);
+  }, [validateFile, onComplete, onError]);
 
   const uploadFiles = useCallback(async (
     files: File[],

@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { FileText, File, Download, Clock, FileSpreadsheet, Code, Trash2, RefreshCw } from 'lucide-react';
-import { ExportJob, getExportHistory, downloadExport, getExportFilename, formatFileSize, ExportFormat, cn } from '@/lib/export';
+import { ExportJob, getExportHistory, downloadExport, getExportFilename, formatFileSize, ExportFormat } from '@/lib/export';
+import { cn } from '@/lib/utils';
 
 interface ExportHistoryProps {
   limit?: number;
@@ -37,7 +39,7 @@ export function ExportHistory({ limit = 50, onExportClick, className }: ExportHi
       const result = await getExportHistory(limit);
       setHistory(result.exports);
     } catch (error) {
-      console.error('Failed to load history:', error);
+      toast.error('Failed to load export history');
     } finally {
       setIsLoading(false);
     }
@@ -60,8 +62,8 @@ export function ExportHistory({ limit = 50, onExportClick, className }: ExportHi
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
-    } catch (error) {
-      console.error('Download failed:', error);
+    } catch {
+      toast.error('Download failed');
     } finally {
       setDownloadingId(null);
     }

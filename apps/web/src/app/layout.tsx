@@ -34,6 +34,13 @@ export const metadata: Metadata = {
   },
   description: 'Manage your tenders and bids efficiently with TenderIQ',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/icon.svg',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

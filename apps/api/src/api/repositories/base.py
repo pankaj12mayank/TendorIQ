@@ -1,4 +1,4 @@
-"""Base Repository Pattern"""
+﻿\"\"\"Base Repository Pattern\"\"\"
 
 from typing import Any, Generic, TypeVar, Optional
 from collections.abc import AsyncGenerator
@@ -17,7 +17,7 @@ UpdateSchemaType = TypeVar('UpdateSchemaType')
 
 
 class BaseRepository(Generic[ModelType]):
-    """Base repository with common CRUD operations"""
+    \"\"\"Base repository with common CRUD operations\"\"\"
 
     def __init__(self, model: type[ModelType], db: AsyncSession):
         self.model = model
@@ -86,3 +86,38 @@ class BaseRepository(Generic[ModelType]):
             select(func.count()).select_from(self.model).where(self.model.id == id)
         )
         return result.scalar_one() > 0
+
+    async def get_all_in_tenant(
+        self,
+        tenant_id: Any,
+        skip: int = 0,
+        limit: int = 100,
+        extra_filters: Optional[dict[str, Any]] = None,
+    ) -> list[ModelType]:
+        \"\"\"Get all records filtered by tenant_id, with optional extra filters\"\"\"
+        query = select(self.model).where(self.model.tenant_id == tenant_id)
+
+        if extra_filters:
+            for key, value in extra_filters.items():
+                if hasattr(self.model, key):
+                    query = query.where(getattr(self.model, key) == value)
+
+        query = query.offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def count_in_tenant(
+        self,
+        tenant_id: Any,
+        extra_filters: Optional[dict[str, Any]] = None,
+    ) -> int:
+        \"\"\"Count records filtered by tenant_id\"\"\"
+        query = select(func.count()).select_from(self.model).where(self.model.tenant_id == tenant_id)
+
+        if extra_filters:
+            for key, value in extra_filters.items():
+                if hasattr(self.model, key):
+                    query = query.where(getattr(self.model, key) == value)
+
+        result = await self.db.execute(query)
+        return result.scalar_one()

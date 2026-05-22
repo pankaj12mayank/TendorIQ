@@ -1,6 +1,14 @@
 import { useCallback, useState } from 'react';
-import { api } from '@/lib/api';
-import { useOnboardingStore, Plan, ExpertiseCategory } from '@/stores/onboarding-store';
+import { api } from '@/lib/api-client';
+import { useOnboardingStore } from '@/stores/onboarding-store';
+import type { Plan, ExpertiseCategory } from '@/types/onboarding';
+import {
+  applyOnboardingSession,
+  mapOnboardingState,
+  normalizeOnboardingStep4,
+  parsePlansResponse,
+  type OnboardingSessionPayload,
+} from '@/lib/onboarding-api';
 
 export interface Step1Data {
   name: string;
@@ -41,6 +49,7 @@ export interface Step5Data {
   timezone: string;
   currency: string;
   language: string;
+  widgets?: { id: string; type: string; enabled: boolean; position: number }[];
 }
 
 export interface OnboardingApiResponse {
@@ -69,6 +78,7 @@ export interface Step1Response {
   tenant_id: string;
   tenant_name: string;
   onboarding_state: OnboardingApiResponse;
+  session?: OnboardingSessionPayload;
 }
 
 export interface Step2Response {
@@ -100,6 +110,19 @@ export interface Step5Response {
   completed: boolean;
   is_onboarding_complete: boolean;
   onboarding_state: OnboardingApiResponse;
+  session?: OnboardingSessionPayload;
+}
+
+function syncFromApiState(
+  store: ReturnType<typeof useOnboardingStore.getState>,
+  state: OnboardingApiResponse,
+  extras?: { tenantName?: string }
+) {
+  const patch = mapOnboardingState(state);
+  store.syncFromServer({
+    ...patch,
+    tenantName: extras?.tenantName ?? patch.tenantName,
+  });
 }
 
 export function useOnboardingApi() {
@@ -112,21 +135,7 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.get<OnboardingApiResponse>('/api/v1/onboarding/status');
-      store.syncFromServer({
-        currentStep: res.current_step,
-        step1Completed: res.step_1_completed,
-        step2Completed: res.step_2_completed,
-        step3Completed: res.step_3_completed,
-        step4Completed: res.step_4_completed,
-        step5Completed: res.step_5_completed,
-        step1Data: res.step_1_data,
-        step2Data: res.step_2_data,
-        step3Data: res.step_3_data,
-        step4Data: res.step_4_data,
-        step5Data: res.step_5_data,
-        isCompleted: res.is_completed,
-        tenantId: res.tenant_id ?? null,
-      });
+      syncFromApiState(store, res);
       return res;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch onboarding status';
@@ -142,13 +151,8 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step1Response>('/api/v1/onboarding/step/1', data);
-      store.syncFromServer({
-        step1Completed: true,
-        currentStep: 2,
-        step1Data: data,
-        tenantId: res.tenant_id,
-        tenantName: res.tenant_name,
-      });
+      syncFromApiState(store, res.onboarding_state, { tenantName: res.tenant_name });
+      applyOnboardingSession(res.session, res.tenant_id);
       store.setStepCompleted(1, true);
       store.setTenantInfo(res.tenant_id, res.tenant_name);
       return res;
@@ -166,11 +170,7 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step2Response>('/api/v1/onboarding/step/2', data);
-      store.syncFromServer({
-        step2Completed: true,
-        currentStep: 3,
-        step2Data: data,
-      });
+      syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(2, true);
       return res;
     } catch (err: unknown) {
@@ -187,11 +187,7 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step3Response>('/api/v1/onboarding/step/3', data);
-      store.syncFromServer({
-        step3Completed: true,
-        currentStep: 4,
-        step3Data: data,
-      });
+      syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(3, true);
       return res;
     } catch (err: unknown) {
@@ -207,12 +203,9 @@ export function useOnboardingApi() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.post<Step4Response>('/api/v1/onboarding/step/4', data);
-      store.syncFromServer({
-        step4Completed: true,
-        currentStep: 5,
-        step4Data: data,
-      });
+      const payload = normalizeOnboardingStep4(data);
+      const res = await api.post<Step4Response>('/api/v1/onboarding/step/4', payload);
+      syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(4, true);
       return res;
     } catch (err: unknown) {
@@ -229,13 +222,10 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step5Response>('/api/v1/onboarding/step/5', data);
-      store.syncFromServer({
-        step5Completed: true,
-        isCompleted: true,
-        step5Data: data,
-      });
+      syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(5, true);
       store.setOnboardingComplete(true);
+      applyOnboardingSession(res.session, res.onboarding_state.tenant_id);
       return res;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to setup dashboard';
@@ -248,7 +238,7 @@ export function useOnboardingApi() {
 
   const fetchPlans = useCallback(async (): Promise<Plan[]> => {
     const res = await api.get<{ plans: Plan[] }>('/api/v1/onboarding/plans');
-    return res.plans;
+    return parsePlansResponse(res);
   }, []);
 
   const fetchExpertiseCategories = useCallback(async (): Promise<ExpertiseCategory> => {

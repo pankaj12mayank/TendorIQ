@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { FileText, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useOCRApi, OCRStatus } from '@/hooks/use-ocr';
-import { toast } from 'sonner';
-
 interface OCRStatusCardProps {
   documentId: string;
   documentName: string;
@@ -70,8 +69,8 @@ export function OCRStatusCard({
     try {
       const s = await getStatus(documentId);
       setStatus(s);
-    } catch (err) {
-      console.error('Failed to fetch OCR status:', err);
+    } catch {
+      toast.error('Failed to fetch OCR status');
     }
   };
 
@@ -85,7 +84,8 @@ export function OCRStatusCard({
     }
   };
 
-  const config = statusConfig[status?.ocr_status || 'uploaded'] || statusConfig.uploaded;
+  const statusKey = status?.ocr_status || 'uploaded';
+  const config = (statusConfig[statusKey] || statusConfig.uploaded)!;
   const Icon = config.icon;
 
   return (

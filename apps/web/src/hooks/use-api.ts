@@ -1,7 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
+import {
+  mapTenderFromApi,
+  mapTenderToApi,
+  parsePaginated,
+  unwrapData,
+  type ApiEnvelope,
+  type ApiTender,
+} from '@/lib/api-envelope';
 import { type QueryParams, type PaginatedResponse } from '@/lib/query-client';
-import { toast } from '@/stores/toast-store';
+import { toast } from 'sonner';
 
 export function useApiQuery<T>(key: string[], queryFn: () => Promise<T>, options?: {
   enabled?: boolean;
@@ -38,7 +46,7 @@ export function useApiMutation<TData, TVariables>(
       options?.onSuccess?.(data);
     },
     onError: (error: Error) => {
-      toast.error('Operation failed', error.message);
+      toast.error(`Operation failed: ${error.message}`);
       options?.onError?.(error);
     },
   });
@@ -60,15 +68,26 @@ export interface Tender {
 export function useTenders(params?: QueryParams) {
   return useQuery({
     queryKey: ['tenders', params],
-    queryFn: () =>
-      api.get<PaginatedResponse<Tender>>('/api/v1/tenders', { params: params as Record<string, string> }),
+    queryFn: async () => {
+      const raw = await api.get<ApiEnvelope<ApiTender[]>>('/api/v1/tenders', {
+        params: params as Record<string, string>,
+      });
+      const page = parsePaginated(raw);
+      return {
+        data: page.data.map(mapTenderFromApi),
+        meta: page.meta,
+      } satisfies PaginatedResponse<Tender>;
+    },
   });
 }
 
 export function useTender(id: string) {
   return useQuery({
     queryKey: ['tender', id],
-    queryFn: () => api.get<Tender>(`/api/v1/tenders/${id}`),
+    queryFn: async () => {
+      const raw = await api.get<ApiEnvelope<ApiTender>>(`/api/v1/tenders/${id}`);
+      return mapTenderFromApi(unwrapData(raw));
+    },
     enabled: !!id,
   });
 }
@@ -76,7 +95,13 @@ export function useTender(id: string) {
 export function useCreateTender() {
   return useApiMutation(
     ['tenders'],
-    (data: Partial<Tender>) => api.post<Tender>('/api/v1/tenders', data),
+    async (data: Partial<Tender>) => {
+      const raw = await api.post<ApiEnvelope<ApiTender>>(
+        '/api/v1/tenders',
+        mapTenderToApi(data)
+      );
+      return mapTenderFromApi(unwrapData(raw));
+    },
     { invalidate: ['tenders'] }
   );
 }
@@ -84,8 +109,13 @@ export function useCreateTender() {
 export function useUpdateTender() {
   return useApiMutation(
     ['tenders'],
-    ({ id, ...data }: Partial<Tender> & { id: string }) =>
-      api.patch<Tender>(`/api/v1/tenders/${id}`, data),
+    async ({ id, ...data }: Partial<Tender> & { id: string }) => {
+      const raw = await api.patch<ApiEnvelope<ApiTender>>(
+        `/api/v1/tenders/${id}`,
+        mapTenderToApi(data)
+      );
+      return mapTenderFromApi(unwrapData(raw));
+    },
     { invalidate: ['tenders', 'tender'] }
   );
 }

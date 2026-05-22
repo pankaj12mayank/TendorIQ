@@ -1,4 +1,4 @@
-"""Parsing API Router"""
+﻿"""Parsing API Router"""
 
 import re
 from datetime import datetime, timezone
@@ -7,6 +7,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, delete, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...core.database import get_db
 
 from ..dependencies.auth import CurrentUser
 from ..services.document_service import document_service
@@ -24,7 +27,7 @@ logger = get_logger('parsing_api')
 async def parse_document(
     document_id: str,
     current_user: CurrentUser,
-    db=None,
+    db: AsyncSession = Depends(get_db),
     chunk: bool = Query(True),
     strategy: str = Query('hybrid'),
 ):
@@ -140,7 +143,7 @@ async def parse_document(
 async def get_parsing_status(
     document_id: str,
     current_user: CurrentUser,
-    db=None,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get document parsing status"""
     if not current_user.tenant_id:
@@ -181,7 +184,7 @@ async def get_parsing_status(
 async def get_parsed_result(
     document_id: str,
     current_user: CurrentUser,
-    db=None,
+    db: AsyncSession = Depends(get_db),
     include_chunks: bool = Query(False),
 ):
     """Get parsed document result"""
@@ -246,7 +249,7 @@ async def get_parsed_result(
 async def preview_parsing(
     document_id: str,
     current_user: CurrentUser,
-    db=None,
+    db: AsyncSession = Depends(get_db),
     max_chars: int = Query(5000, ge=100, le=50000),
 ):
     """Preview parsed text"""
@@ -283,7 +286,7 @@ async def preview_parsing(
 async def delete_parsing_result(
     document_id: str,
     current_user: CurrentUser,
-    db=None,
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete parsing result and chunks"""
     if not current_user.tenant_id:

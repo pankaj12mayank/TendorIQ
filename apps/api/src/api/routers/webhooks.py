@@ -1,11 +1,15 @@
 """Webhook Router - Clerk and External Webhooks"""
 
-from fastapi import APIRouter, Header, Request, HTTPException, status
+from fastapi import APIRouter, Depends, Header, Request, HTTPException, status
 from pydantic import BaseModel
 import hmac
 import hashlib
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...core.clerk_bootstrap import ensure_clerk_user
 from ...core.config import settings
+from ...core.database import get_db
 from ...core.logging import get_logger
 
 logger = get_logger('webhooks')
@@ -38,6 +42,7 @@ def verify_clerk_signature(payload: bytes, signature: str) -> bool:
 async def clerk_webhook(
     request: Request,
     clerk_signature: str = Header(None, alias='clerk-signature'),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Handle Clerk webhooks"""
     body = await request.body()
@@ -71,9 +76,9 @@ async def clerk_webhook(
     logger.info('Clerk webhook received', type=event_type, data_id=data.get('id'))
 
     if event_type == 'user.created':
-        await handle_user_created(data)
+        await handle_user_created(data, db)
     elif event_type == 'user.updated':
-        await handle_user_updated(data)
+        await handle_user_updated(data, db)
     elif event_type == 'user.deleted':
         await handle_user_deleted(data)
     elif event_type == 'user.email_address_created':
@@ -86,16 +91,22 @@ async def clerk_webhook(
     return {'status': 'received'}
 
 
-async def handle_user_created(data: dict) -> None:
-    """Handle new user creation"""
+async def handle_user_created(data: dict, db: AsyncSession) -> None:
+    """Handle new user creation — link Clerk id to application user."""
     logger.info('New user created', user_id=data.get('id'))
-    # Create user in database if needed
+    try:
+        await ensure_clerk_user(db, data)
+    except ValueError as exc:
+        logger.warning('Clerk user.created bootstrap skipped: %s', exc)
 
 
-async def handle_user_updated(data: dict) -> None:
-    """Handle user update"""
+async def handle_user_updated(data: dict, db: AsyncSession) -> None:
+    """Handle user update — refresh Clerk linkage."""
     logger.info('User updated', user_id=data.get('id'))
-    # Update user in database
+    try:
+        await ensure_clerk_user(db, data)
+    except ValueError as exc:
+        logger.warning('Clerk user.updated bootstrap skipped: %s', exc)
 
 
 async def handle_user_deleted(data: dict) -> None:

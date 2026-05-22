@@ -77,7 +77,10 @@ export function UsageAnalytics() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Usage Analytics</h2>
+          <h2 className="text-2xl font-bold">Platform Usage Analytics</h2>
+          <p className="text-sm text-muted-foreground">
+            Aggregated across all tenants. Organization usage is under Dashboard → Usage.
+          </p>
           <p className="text-muted-foreground">Track usage metrics and trends</p>
         </div>
         <div className="flex items-center gap-2">

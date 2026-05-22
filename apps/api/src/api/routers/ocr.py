@@ -4,9 +4,14 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dependencies.auth import CurrentUser
+from ..dependencies.rbac_deps import (
+    RequireDocumentCreate,
+    RequireDocumentRead,
+    require_tenant_member,
+)
 from ..services.document_service import document_service
 from ...core.storage import storage_service
 from ...core.ocr.paddle_ocr import paddle_ocr_service
@@ -20,22 +25,31 @@ from ..schemas.ocr import (
     OCRRetryResponse,
     QualityAssessmentResponse,
 )
+from ...core.database import get_db
 
-router = APIRouter(prefix='/ocr', tags=['ocr'])
+router = APIRouter(
+    prefix='/ocr',
+    tags=['ocr'],
+    dependencies=[Depends(require_tenant_member)],
+)
 logger = get_logger('ocr_api')
 
 
 @router.post('/process/{document_id}')
 async def process_document_ocr(
     document_id: str,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
     language: str = Query('en', max_length=10),
     priority: int = Query(0, ge=0, le=10),
+    body: Optional[dict] = Body(None),
 ):
     """Trigger OCR processing for a document"""
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Tenant context required')
+
+    if body and body.get('language'):
+        language = str(body['language'])[:10]
 
     doc = await document_service.get_document(
         db, UUID(document_id), UUID(current_user.tenant_id)
@@ -82,8 +96,8 @@ async def process_document_ocr(
 @router.get('/status/{document_id}', response_model=OCRStatusResponse)
 async def get_ocr_status(
     document_id: str,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get OCR status for a document"""
     if not current_user.tenant_id:
@@ -103,14 +117,20 @@ async def get_ocr_status(
 
     result_row = await db.execute(
         select(OCRResult)
-        .where(OCRResult.document_id == UUID(document_id))
+        .where(
+            OCRResult.document_id == UUID(document_id),
+            OCRResult.tenant_id == UUID(current_user.tenant_id),
+        )
         .order_by(OCRResult.created_at.desc())
     )
     ocr_result_row = result_row.scalar_one_or_none()
 
     job_row = await db.execute(
         select(OCRJob)
-        .where(OCRJob.document_id == UUID(document_id))
+        .where(
+            OCRJob.document_id == UUID(document_id),
+            OCRJob.tenant_id == UUID(current_user.tenant_id),
+        )
         .order_by(OCRJob.created_at.desc())
     )
     ocr_job_row = job_row.scalar_one_or_none()
@@ -174,8 +194,8 @@ async def get_ocr_status(
 @router.get('/result/{document_id}')
 async def get_ocr_result(
     document_id: str,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get OCR result text for a document"""
     if not current_user.tenant_id:
@@ -186,7 +206,10 @@ async def get_ocr_result(
 
     result = await db.execute(
         select(OCRResult)
-        .where(OCRResult.document_id == UUID(document_id))
+        .where(
+            OCRResult.document_id == UUID(document_id),
+            OCRResult.tenant_id == UUID(current_user.tenant_id),
+        )
         .order_by(OCRResult.created_at.desc())
     )
     ocr_result = result.scalar_one_or_none()
@@ -218,8 +241,8 @@ async def get_ocr_result(
 @router.post('/retry', response_model=OCRRetryResponse)
 async def retry_ocr(
     data: OCRRetryRequest,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
 ):
     """Retry OCR for failed documents"""
     if not current_user.tenant_id:
@@ -275,8 +298,8 @@ async def retry_ocr(
 @router.get('/quality/{document_id}', response_model=QualityAssessmentResponse)
 async def assess_document_quality(
     document_id: str,
-    current_user: CurrentUser,
-    db=None,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """Assess document quality for OCR readiness"""
     if not current_user.tenant_id:
@@ -338,9 +361,9 @@ async def assess_document_quality(
 
 @router.get('/batch-status')
 async def get_batch_ocr_status(
-    current_user: CurrentUser,
+    current_user: RequireDocumentRead,
     document_ids: str = Query(...),
-    db=None,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get OCR status for multiple documents"""
     if not current_user.tenant_id:
@@ -364,7 +387,10 @@ async def get_batch_ocr_status(
 
             ocr_result = await db.execute(
                 select(OCRResult)
-                .where(OCRResult.document_id == UUID(doc_id))
+                .where(
+                    OCRResult.document_id == UUID(doc_id),
+                    OCRResult.tenant_id == UUID(current_user.tenant_id),
+                )
                 .order_by(OCRResult.created_at.desc())
             )
             ocr = ocr_result.scalar_one_or_none()

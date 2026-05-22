@@ -29,12 +29,20 @@ export function useAdminUsersApi() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchUsers = useCallback(
-    async (_filters?: AdvancedFilter[]) => {
+    async (filters?: AdvancedFilter[]) => {
       setIsError(false);
       setError(null);
       setLoading(true);
       try {
-        const res = await api.get<{ users: User[] }>('/api/v1/admin/platform/users');
+        const params: Record<string, string | number | boolean> = {};
+        if (filters?.length) {
+          filters.forEach((f, i) => {
+            params[`filter_${i}_field`] = f.field;
+            params[`filter_${i}_op`] = f.operator;
+            params[`filter_${i}_value`] = Array.isArray(f.value) ? f.value.join(',') : f.value;
+          });
+        }
+        const res = await api.get<{ users: User[] }>('/api/v1/admin/platform/users', { params });
         setUsers(res.users);
       } catch (err) {
         setIsError(true);
@@ -336,7 +344,7 @@ export function usePromptsApi() {
     setLoading(true);
     try {
       const res = await api.get<{ items?: unknown[]; prompts?: unknown[] } | unknown[]>(
-        '/api/v1/prompts/'
+        '/api/v1/prompts'
       );
       const list = Array.isArray(res)
         ? res
@@ -353,7 +361,7 @@ export function usePromptsApi() {
     async (data: Partial<PromptTemplate>) => {
       setLoading(true);
       try {
-        await api.post('/api/v1/prompts/', {
+        await api.post('/api/v1/prompts', {
           name: data.name,
           description: data.description,
           prompt_type: data.category || 'custom',
@@ -474,23 +482,36 @@ export function useQueueApi() {
 
   const cancelJob = useCallback(
     async (id: string) => {
-      setJobs((prev) => prev.filter((j) => j.id !== id));
-      toast.success('Job removed from view');
+      try {
+        await api.post(`/api/v1/admin/platform/queue/jobs/${id}/cancel`);
+        toast.success('Job cancelled');
+        await refreshJobs();
+      } catch (err) {
+        handleApiError(err, 'Failed to cancel job');
+      }
     },
-    []
+    [refreshJobs]
   );
 
   const pauseJob = useCallback(async (id: string) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === id ? { ...j, status: 'pending' as const } : j))
-    );
-  }, []);
+    try {
+      await api.post(`/api/v1/admin/platform/queue/jobs/${id}/pause`);
+      toast.success('Job paused');
+      await refreshJobs();
+    } catch (err) {
+      handleApiError(err, 'Failed to pause job');
+    }
+  }, [refreshJobs]);
 
   const resumeJob = useCallback(async (id: string) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === id ? { ...j, status: 'processing' as const } : j))
-    );
-  }, []);
+    try {
+      await api.post(`/api/v1/admin/platform/queue/jobs/${id}/resume`);
+      toast.success('Job resumed');
+      await refreshJobs();
+    } catch (err) {
+      handleApiError(err, 'Failed to resume job');
+    }
+  }, [refreshJobs]);
 
   return { jobs, isLoading, refreshJobs, retryJob, cancelJob, pauseJob, resumeJob };
 }
@@ -525,7 +546,7 @@ export function useAuditLogApi() {
   const fetchLogs = useCallback(async (_filters?: AdvancedFilter[]) => {
     setLoading(true);
     try {
-      const res = await api.get<Record<string, unknown>[]>('/api/v1/audit/logs?limit=100');
+      const res = await api.get<Record<string, unknown>[]>('/api/v1/audit/logs', { params: { limit: 100 } });
       setLogs(res.map((r) => mapAuditLog(r)));
     } catch (err) {
       handleApiError(err, 'Failed to load audit logs');
@@ -539,7 +560,7 @@ export function useAuditLogApi() {
       setLoading(true);
       try {
         const res = await api.post<{ content: string; mime_type: string }>('/api/v1/audit/export', {
-          format: format === 'pdf' ? 'json' : format,
+          format,
         });
         const blob = new Blob([typeof res.content === 'string' ? res.content : JSON.stringify(res.content)], {
           type: res.mime_type || 'text/csv',
@@ -547,7 +568,7 @@ export function useAuditLogApi() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `audit-logs.${format === 'pdf' ? 'json' : format}`;
+        a.download = `audit-logs.${format}`;
         a.click();
         URL.revokeObjectURL(url);
         toast.success('Audit log export started');
@@ -602,9 +623,7 @@ export function useFailedJobsApi() {
 
   const retryAll = useCallback(async () => {
     const retryable = jobs.filter((j) => j.retryable);
-    for (const j of retryable) {
-      await retryJob(j.id);
-    }
+    await Promise.allSettled(retryable.map((j) => retryJob(j.id)));
   }, [jobs, retryJob]);
 
   const deleteJob = useCallback(
@@ -621,9 +640,7 @@ export function useFailedJobsApi() {
   );
 
   const clearAll = useCallback(async () => {
-    for (const j of jobs) {
-      await api.delete(`/api/v1/admin/platform/failed-jobs/${j.id}`);
-    }
+    await Promise.allSettled(jobs.map((j) => api.delete(`/api/v1/admin/platform/failed-jobs/${j.id}`)));
     setJobs([]);
     toast.success('Failed jobs cleared');
   }, [jobs]);

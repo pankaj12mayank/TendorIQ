@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { api } from './api-client';
 
 export type ExportFormat = 'pdf' | 'docx' | 'html' | 'markdown' | 'json' | 'csv';
 export type ExportType = 'proposal' | 'checklist' | 'risk_analysis' | 'tender_document' | 'report';
@@ -74,18 +74,7 @@ export const WATERMARK_PRESETS: WatermarkPreset[] = [
 ];
 
 export async function createExport(request: ExportRequest): Promise<ExportJob> {
-  const response = await fetch(`${API_URL}/api/v1/exports/export`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || 'Export creation failed');
-  }
-
-  return response.json();
+  return api.post('/api/v1/exports/export', request);
 }
 
 export async function exportEntity(
@@ -94,24 +83,16 @@ export async function exportEntity(
   format: ExportFormat = 'pdf',
   templateId?: string
 ): Promise<ExportJob> {
-  const endpoint = `/api/v1/exports/export/${entityType}/${entityId}`;
-  const params = new URLSearchParams({ format });
-  if (templateId) params.append('template_id', templateId);
-
-  const response = await fetch(`${API_URL}${endpoint}?${params}`, {
-    method: 'POST',
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || 'Export failed');
-  }
-
-  return response.json();
+  const params: Record<string, string | number | boolean> = { format };
+  if (templateId) params.template_id = templateId;
+  return api.post(`/api/v1/exports/export/${entityType}/${entityId}`, undefined, { params });
 }
 
 export async function downloadExport(exportId: string): Promise<Blob> {
-  const response = await fetch(`${API_URL}/api/v1/exports/${exportId}/download`);
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/exports/${exportId}/download`,
+    { headers: api.getAuthHeaders() as Record<string, string> }
+  );
 
   if (!response.ok) {
     throw new Error('Download failed');
@@ -121,71 +102,27 @@ export async function downloadExport(exportId: string): Promise<Blob> {
 }
 
 export async function getJobStatus(jobId: string): Promise<ExportJob> {
-  const response = await fetch(`${API_URL}/api/v1/exports/jobs/${jobId}`);
-
-  if (!response.ok) {
-    throw new Error('Failed to get job status');
-  }
-
-  return response.json();
+  return api.get(`/api/v1/exports/jobs/${jobId}`);
 }
 
 export async function getExportTemplates(): Promise<ExportTemplate[]> {
-  const response = await fetch(`${API_URL}/api/v1/exports/templates`);
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch templates');
-  }
-
-  return response.json();
+  return api.get('/api/v1/exports/templates');
 }
 
 export async function createExportTemplate(template: Partial<ExportTemplate>): Promise<ExportTemplate> {
-  const response = await fetch(`${API_URL}/api/v1/exports/templates`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(template),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to create template');
-  }
-
-  return response.json();
+  return api.post('/api/v1/exports/templates', template);
 }
 
 export async function getExportFormats(): Promise<{ formats: Array<{ id: string; name: string; description: string }> }> {
-  const response = await fetch(`${API_URL}/api/v1/exports/formats`);
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch formats');
-  }
-
-  return response.json();
+  return api.get('/api/v1/exports/formats');
 }
 
 export async function batchExport(exports: ExportRequest[]): Promise<{ batch_id: string; results: ExportJob[] }> {
-  const response = await fetch(`${API_URL}/api/v1/exports/batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(exports),
-  });
-
-  if (!response.ok) {
-    throw new Error('Batch export failed');
-  }
-
-  return response.json();
+  return api.post('/api/v1/exports/batch', exports);
 }
 
 export async function getExportHistory(limit = 50): Promise<{ exports: ExportJob[]; total: number }> {
-  const response = await fetch(`${API_URL}/api/v1/exports/history?limit=${limit}`);
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch history');
-  }
-
-  return response.json();
+  return api.get('/api/v1/exports/history', { params: { limit } });
 }
 
 export function getExportFilename(job: ExportJob, format: ExportFormat): string {

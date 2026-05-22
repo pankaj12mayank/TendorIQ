@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main, develop]
   schedule:
-    - cron: '0 2 * * *'  # Daily at 2am
+    - cron: '0 2 * * *'
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
       - name: Install dependencies
         run: |
           cd apps/api
@@ -60,28 +62,32 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:15
+      mysql:
+        image: mysql:8
         env:
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: test
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "mysqladmin ping -h localhost"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
         ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
+          - 3306:3306
     steps:
       - uses: actions/checkout@v4
-      - name: Run integration tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
         run: |
           cd apps/api
           uv sync
+      - name: Run integration tests
+        run: |
+          cd apps/api
           uv run pytest tests/integration -v
 
   e2e-tests:
@@ -100,10 +106,11 @@ jobs:
       - name: Build
         run: pnpm build:web
       - name: Start preview
-        run: pnpm preview &
-        sleep 10
+        run: |
+          pnpm preview &
+          sleep 10
       - name: Run E2E tests
-        run: pnpm --filter @tendoriq/web e2e || true
+        run: pnpm --filter @tendoriq/web e2e
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,24 +129,31 @@ jobs:
       - name: Run Lighthouse CI
         run: |
           npm install -g @lhci/cli
-          lhci autorun --upload.target=temporary-public-storage || true
+          lhci autorun --upload.target=temporary-public-storage
 
   security-tests:
     name: Security Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run dependency audit
-        run: |
-          pnpm audit --audit-level=high || true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run pnpm audit
+        run: pnpm audit --audit-level=high
       - name: Run Bandit
         run: |
           pip install bandit
-          bandit -r apps/api/src -f json || true
+          bandit -r apps/api/src -f json
       - name: Run npm audit
         run: |
           cd apps/web
-          npm audit --audit-level=high || true
+          npm audit --audit-level=high
 
   test-summary:
     name: Test Summary
@@ -151,19 +165,19 @@ jobs:
         run: |
           echo "## Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           api_result="${{ needs.unit-tests-api.result }}"
           web_result="${{ needs.unit-tests-web.result }}"
           integ_result="${{ needs.integration-tests.result }}"
           e2e_result="${{ needs.e2e-tests.result }}"
-          
+
           echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| API Unit Tests | $api_result |" >> $GITHUB_STEP_SUMMARY
           echo "| Web Unit Tests | $web_result |" >> $GITHUB_STEP_SUMMARY
           echo "| Integration Tests | $integ_result |" >> $GITHUB_STEP_SUMMARY
           echo "| E2E Tests | $e2e_result |" >> $GITHUB_STEP_SUMMARY
-          
+
           if [[ "$api_result" == "success" && "$web_result" == "success" ]]; then
-            echo "All critical tests passed! 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "All critical tests passed!" >> $GITHUB_STEP_SUMMARY
           fi

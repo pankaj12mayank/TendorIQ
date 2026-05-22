@@ -31,7 +31,7 @@ TenderIQ is an enterprise-grade SaaS platform for managing tender documents, bid
 
 | Layer | Technology |
 |-------|-------------|
-| Frontend | React 18, Next.js 14, TypeScript, Tailwind |
+| Frontend | React 19, Next.js 15, TypeScript, Tailwind |
 | Backend | FastAPI, Python 3.12, Pydantic |
 | Database | MySQL 8+ |
 | Background jobs | In-process (asyncio) |
@@ -78,6 +78,8 @@ uvicorn src.main:app --reload --port 8000   # terminal 2, from apps/api
 ### Environment Variables
 
 See [Environment Configuration](docs/environment-config.md) for details.
+
+**Remediation tracking:** [docs/AUDIT_STATUS.md](docs/AUDIT_STATUS.md) · Full audit: [AUDIT_REPORT.md](AUDIT_REPORT.md)
 
 ---
 
@@ -133,16 +135,18 @@ See [API Documentation](docs/api-docs.md) for full endpoint reference.
 
 ### Base URL
 
+All REST routes are mounted under `/api/v1`:
+
 ```
-Production: https://api.tenderiq.com/v1
-Staging:    https://api-staging.tenderiq.com/v1
-Local:      http://localhost:8000/v1
+Production: https://api.tenderiq.com/api/v1
+Staging:    https://api-staging.tenderiq.com/api/v1
+Local:      http://localhost:8000/api/v1
 ```
 
 ### Authentication
 
 ```bash
-curl -H "Authorization: Bearer <JWT>" https://api.tenderiq.com/v1/tenders
+curl -H "Authorization: Bearer <JWT>" https://api.tenderiq.com/api/v1/tenders
 ```
 
 ---
@@ -164,7 +168,7 @@ pnpm railway:deploy
 
 - **Health**: `GET /health`
 - **Ready**: `GET /health/ready`
-- **Metrics**: `GET /observability/metrics/summary`
+- **Metrics**: `GET /api/v1/observability/metrics/summary`
 - **Sentry**: Configure DSN in environment
 
 ---

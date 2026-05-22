@@ -16,11 +16,18 @@ export const HTTP_STATUS = {
 } as const;
 
 export const USER_ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  OWNER: 'owner',
   ADMIN: 'admin',
   MANAGER: 'manager',
-  USER: 'user',
+  ANALYST: 'analyst',
+  MEMBER: 'member',
   VIEWER: 'viewer',
 } as const;
+
+export const USER_ROLE_VALUES = Object.values(USER_ROLES) as readonly string[];
+
+export type UserRole = (typeof USER_ROLES)[keyof typeof USER_ROLES];
 
 export const TENDER_STATUS = {
   DRAFT: 'draft',

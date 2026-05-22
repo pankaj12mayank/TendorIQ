@@ -3,16 +3,27 @@
 from typing import Annotated, Optional
 
 from fastapi import Depends, Header, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...core.auth import AuthService, AuthContext, ClerkAuthService
-from ...core.config import settings
+from ...core.auth import AuthContext
+from ...core.auth_resolver import resolve_auth_from_token
+from ...core.database import get_db
+from ...core.middleware import get_current_tenant_id
 from ...core.rbac import RBACService, Permission
 
 ClerkUser = dict
 
 
-async def get_current_user(authorization: Annotated[Optional[str], Header()] = None) -> AuthContext:
-    """Get current authenticated user from JWT token or Clerk"""
+async def get_current_user(
+    request: Request,
+    authorization: Annotated[Optional[str], Header()] = None,
+    db: AsyncSession = Depends(get_db),
+) -> AuthContext:
+    """Get current authenticated user (reuse middleware auth when present)."""
+    existing = getattr(request.state, 'auth', None)
+    if existing:
+        return existing
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -27,56 +38,47 @@ async def get_current_user(authorization: Annotated[Optional[str], Header()] = N
             headers={'WWW-Authenticate': 'Bearer'},
         )
 
-    token = authorization.replace('Bearer ', '')
-
-    clerk_key = settings.CLERK_SECRET_KEY or ''
-    clerk_ready = (
-        settings.AUTH_PROVIDER == 'clerk'
-        and clerk_key
-        and 'placeholder' not in clerk_key.lower()
-        and len(clerk_key) > 20
-    )
-
-    # Try Clerk first only when properly configured
-    if clerk_ready:
-        clerk_user = await ClerkAuthService.verify_token(token)
-        if clerk_user:
-            return AuthContext(
-                user_id=clerk_user.get('id', ''),
-                email=clerk_user.get('email_addresses', [{}])[0].get('email_address'),
-                role=clerk_user.get('public_metadata', {}).get('role', 'user'),
-            )
-
-    # Fall back to JWT verification
-    auth_service = AuthService()
-    token_payload = auth_service.verify_token(token)
-
-    if not token_payload:
+    token = authorization.replace('Bearer ', '').strip()
+    auth = await resolve_auth_from_token(token, db)
+    if not auth:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Invalid or expired token',
             headers={'WWW-Authenticate': 'Bearer'},
         )
-
-    return AuthContext(
-        user_id=token_payload.sub,
-        email=token_payload.email,
-        role=token_payload.role,
-        tenant_id=token_payload.tenant_id,
-    )
+    request.state.auth = auth
+    return auth
 
 
-async def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[AuthContext]:
+async def get_optional_user(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[AuthContext]:
     """Get current user if authenticated, otherwise return None"""
     try:
-        return await get_current_user(authorization)
+        return await get_current_user(request, authorization, db)
     except HTTPException:
         return None
 
 
-def get_tenant_id(request: Request) -> Optional[str]:
-    """Get tenant ID from request state or header"""
-    return getattr(request.state, 'tenant_id', None)
+def get_optional_tenant_id(request: Request) -> Optional[str]:
+    """Tenant id bound by TenantMiddleware (preferred) or None."""
+    return get_current_tenant_id(request)
+
+
+async def resolve_tenant_id(
+    request: Request,
+    auth: AuthContext = Depends(get_current_user),
+) -> str:
+    """Resolved tenant for route handlers — middleware state, then JWT."""
+    tenant_id = get_current_tenant_id(request) or auth.tenant_id
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Tenant context required',
+        )
+    return str(tenant_id)
 
 
 def require_tenant_access(auth: AuthContext = Depends(get_current_user)) -> AuthContext:
@@ -91,7 +93,7 @@ def require_tenant_access(auth: AuthContext = Depends(get_current_user)) -> Auth
 
 def require_super_admin(auth: AuthContext = Depends(get_current_user)) -> AuthContext:
     """Require user to be super admin"""
-    if auth.role != 'super_admin':
+    if not auth.is_super_admin():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Super admin access required',
@@ -99,28 +101,16 @@ def require_super_admin(auth: AuthContext = Depends(get_current_user)) -> AuthCo
     return auth
 
 
-def check_permission(auth: AuthContext, permission: Permission) -> bool:
-    """Check if user has specific permission"""
+def check_permission(auth: AuthContext, permission: Permission | str) -> bool:
+    """Check if user has specific permission (service-layer helper)."""
     role = auth.membership_role or auth.role
     return RBACService.has_permission(role, permission)
 
 
-def require_permission(permission: Permission):
-    """Dependency for requiring specific permission"""
-
-    def permission_checker(auth: AuthContext = Depends(get_current_user)) -> AuthContext:
-        role = auth.membership_role or auth.role
-        if not RBACService.has_permission(role, permission):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f'Permission denied: {permission.value}',
-            )
-        return auth
-
-    return permission_checker
-
+from .permissions import require_tenant_permission as require_permission
 
 CurrentUser = Annotated[AuthContext, Depends(get_current_user)]
 OptionalUser = Annotated[Optional[AuthContext], Depends(get_optional_user)]
-TenantID = Annotated[Optional[str], Depends(get_tenant_id)]
+TenantID = Annotated[str, Depends(resolve_tenant_id)]
+OptionalTenantID = Annotated[Optional[str], Depends(get_optional_tenant_id)]
 SuperAdmin = Annotated[AuthContext, Depends(require_super_admin)]

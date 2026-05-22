@@ -15,8 +15,9 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
-    "db:studio": "prisma studio",
-    "clean": "rm -rf .next .turbo node_modules/.cache"
+    "e2e": "playwright test",
+    
+    "clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true}); require('fs').rmSync('.turbo',{recursive:true,force:true}); require('fs').rmSync('node_modules/.cache',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@clerk/nextjs": "^5.7.2",

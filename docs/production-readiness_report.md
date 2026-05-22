@@ -1,7 +1,10 @@
 # Production Readiness Report
 
-**Generated:** 2026-05-19
-**Overall Status:** 🟡 READY WITH CONDITIONS
+> **⚠️ Historical snapshot (2026-05-19).** Infrastructure and scores below referenced PostgreSQL/Redis and are **out of date**.  
+> **Current stack:** MySQL 8+, in-process queue. **Active remediation:** [AUDIT_REPORT.md](../AUDIT_REPORT.md) · [AUDIT_STATUS.md](./AUDIT_STATUS.md)
+
+**Generated:** 2026-05-19  
+**Overall Status (original):** 🟡 READY WITH CONDITIONS — **superseded by 2026-05-22 audit**
 
 ---
 
@@ -21,11 +24,11 @@ The system is **92% production ready**. Critical fixes required for billing enfo
 
 ## Pre-Flight Checklist
 
-### Infrastructure
-- [x] PostgreSQL 15+ configured
-- [x] Redis 7+ configured
-- [x] Environment variables set
-- [x] Secrets rotated
+### Infrastructure (updated 2026-05-22)
+- [ ] MySQL 8+ configured (`DATABASE_URL`, see `MYSQL_SETUP.md`)
+- [ ] Optional Redis only if enabling distributed rate limit / future workers
+- [x] Environment variables documented (`environment-config.md`)
+- [ ] Secrets rotated for production (no defaults in `.env`)
 
 ### Security
 - [x] JWT validation working

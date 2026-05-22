@@ -10,22 +10,26 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select
 
-from ...core.admin_store import (
-    create_ai_provider,
-    create_platform_user,
-    delete_ai_provider,
-    dismiss_failed_job,
-    list_ai_providers,
-    list_dismissed_failed_jobs,
-    list_platform_users,
-    soft_delete_platform_user,
-    update_ai_provider,
-    update_platform_user,
+from ...core import admin_store
+from ...core.admin_store import dismiss_failed_job, list_dismissed_failed_jobs
+from ...core.platform_metrics import (
+    append_email_failed_jobs,
+    append_email_queue_jobs,
+    load_platform_failed_jobs,
+    load_platform_queue_jobs,
+    platform_analytics_summary,
 )
 from ...core.database import get_db
-from ...core.models import Tenant, User
+from ...core.models import (
+    AIProvider,
+    DismissedFailedJob,
+    Membership,
+    Tenant,
+    User,
+)
+from ...core.roles import coerce_membership_role, MEMBERSHIP_ROLES
 from ..dependencies.auth import SuperAdmin
 
 logger = logging.getLogger(__name__)
@@ -51,12 +55,18 @@ class PlatformUserPatch(BaseModel):
     organization: Optional[str] = None
 
 
-def _map_db_user(u: User, tenant_name: str = '—') -> dict:
+def _map_db_user(
+    u: User,
+    tenant_name: str = '—',
+    membership_role: Optional[str] = None,
+) -> dict:
+    role = membership_role or (u.role if u.role in MEMBERSHIP_ROLES else 'member')
     return {
         'id': str(u.id),
         'name': u.name or u.email.split('@')[0],
         'email': u.email,
-        'role': u.role if u.role != 'member' else 'viewer',
+        'role': role,
+        'membership_role': role,
         'status': 'active',
         'organization': tenant_name,
         'permissions': [],
@@ -72,14 +82,24 @@ async def list_users(
     db=Depends(get_db),
 ):
     users: list[dict] = []
-    try:
-        result = await db.execute(select(User).order_by(User.created_at.desc()).limit(500))
-        db_users = result.scalars().all()
-        for u in db_users:
-            users.append(_map_db_user(u))
-    except Exception as exc:
-        logger.warning('DB users unavailable, using file store: %s', exc)
-        users = [u for u in list_platform_users() if not u.get('deleted')]
+    result = await db.execute(select(User).order_by(User.created_at.desc()).limit(500))
+    db_users = result.scalars().all()
+    for u in db_users:
+        mem_result = await db.execute(
+            select(Membership)
+            .where(Membership.user_id == u.id, Membership.status == 'active')
+            .order_by(Membership.joined_at.desc())
+            .limit(1)
+        )
+        mem = mem_result.scalar_one_or_none()
+        tenant_name = '—'
+        mem_role: Optional[str] = None
+        if mem:
+            mem_role = mem.role
+            t = await db.get(Tenant, mem.tenant_id)
+            if t:
+                tenant_name = t.name
+        users.append(_map_db_user(u, tenant_name, mem_role))
 
     if search:
         q = search.lower()
@@ -94,27 +114,18 @@ async def list_users(
 @router.post('/users', status_code=201)
 async def create_user(body: PlatformUserBody, _admin: SuperAdmin, db=Depends(get_db)):
     email = body.email.strip().lower()
-    try:
-        existing = await db.execute(select(User).where(User.email == email))
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail='Email already exists')
-        user = User(
-            email=email,
-            name=body.name,
-            role=body.role if body.role in ('owner', 'admin', 'member', 'viewer') else 'viewer',
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-        return _map_db_user(user, body.organization or '—')
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning('DB create user failed, file store: %s', exc)
-        try:
-            return create_platform_user(body.model_dump())
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+    existing = await db.execute(select(User).where(User.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail='Email already exists')
+    user = User(
+        email=email,
+        name=body.name,
+        role=coerce_membership_role(body.role, default='viewer'),
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return _map_db_user(user, body.organization or '—')
 
 
 @router.patch('/users/{user_id}')
@@ -127,39 +138,32 @@ async def patch_user(
     data = body.model_dump(exclude_unset=True)
     try:
         uid = UUID(user_id)
-        user = await db.get(User, uid)
-        if not user:
-            raise HTTPException(status_code=404, detail='User not found')
-        for k, v in data.items():
-            if k == 'role' and v in ('owner', 'admin', 'member', 'viewer', 'manager', 'analyst'):
-                user.role = 'member' if v in ('manager', 'analyst') else v
-            elif hasattr(user, k):
-                setattr(user, k, v)
-        await db.commit()
-        await db.refresh(user)
-        return _map_db_user(user, data.get('organization', '—'))
-    except HTTPException:
-        raise
-    except Exception:
-        updated = update_platform_user(user_id, data)
-        if not updated:
-            raise HTTPException(status_code=404, detail='User not found')
-        return updated
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='Invalid user id') from exc
+    user = await db.get(User, uid)
+    if not user:
+        raise HTTPException(status_code=404, detail='User not found')
+    for k, v in data.items():
+        if k == 'role' and v in ('owner', 'admin', 'member', 'viewer', 'manager', 'analyst'):
+            user.role = 'member' if v in ('manager', 'analyst') else v
+        elif hasattr(user, k):
+            setattr(user, k, v)
+    await db.commit()
+    await db.refresh(user)
+    return _map_db_user(user, data.get('organization', '—'))
 
 
 @router.delete('/users/{user_id}', status_code=204)
 async def delete_user(user_id: str, _admin: SuperAdmin, db=Depends(get_db)):
     try:
         uid = UUID(user_id)
-        user = await db.get(User, uid)
-        if user:
-            await db.delete(user)
-            await db.commit()
-            return None
-    except Exception:
-        pass
-    if not soft_delete_platform_user(user_id):
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='Invalid user id') from exc
+    user = await db.get(User, uid)
+    if not user:
         raise HTTPException(status_code=404, detail='User not found')
+    await db.delete(user)
+    await db.commit()
     return None
 
 
@@ -253,37 +257,38 @@ class AIProviderPatch(BaseModel):
 
 
 @router.get('/ai-providers')
-async def get_ai_providers(_admin: SuperAdmin):
-    return {'providers': list_ai_providers()}
+async def get_ai_providers(_admin: SuperAdmin, db=Depends(get_db)):
+    providers = await admin_store.list_ai_providers_db(db)
+    return {'providers': providers}
 
 
 @router.post('/ai-providers', status_code=201)
-async def add_ai_provider(body: AIProviderBody, _admin: SuperAdmin):
-    return create_ai_provider(body.model_dump())
+async def add_ai_provider(body: AIProviderBody, _admin: SuperAdmin, db=Depends(get_db)):
+    return await admin_store.create_ai_provider_db(db, body.model_dump())
 
 
 @router.patch('/ai-providers/{provider_id}')
-async def patch_ai_provider(provider_id: str, body: AIProviderPatch, _admin: SuperAdmin):
-    updated = update_ai_provider(provider_id, body.model_dump(exclude_unset=True))
+async def patch_ai_provider(provider_id: str, body: AIProviderPatch, _admin: SuperAdmin, db=Depends(get_db)):
+    updated = await admin_store.update_ai_provider_db(db, provider_id, body.model_dump(exclude_unset=True))
     if not updated:
         raise HTTPException(status_code=404, detail='Provider not found')
     return updated
 
 
 @router.delete('/ai-providers/{provider_id}', status_code=204)
-async def remove_ai_provider(provider_id: str, _admin: SuperAdmin):
+async def remove_ai_provider(provider_id: str, _admin: SuperAdmin, db=Depends(get_db)):
     if provider_id == 'ollama':
         raise HTTPException(status_code=400, detail='Cannot delete default Ollama provider')
-    if not delete_ai_provider(provider_id):
+    deleted = await admin_store.delete_ai_provider_db(db, provider_id)
+    if not deleted:
         raise HTTPException(status_code=404, detail='Provider not found')
     return None
 
 
 @router.post('/ai-providers/{provider_id}/test')
-async def test_ai_provider(provider_id: str, _admin: SuperAdmin):
-    from ...core.admin_store import _find_provider
-
-    provider = _find_provider(provider_id)
+async def test_ai_provider(provider_id: str, _admin: SuperAdmin, db=Depends(get_db)):
+    providers = await admin_store.list_ai_providers_db(db, public=False)
+    provider = next((p for p in providers if p.get('id') == provider_id), None)
     if not provider:
         raise HTTPException(status_code=404, detail='Provider not found')
 
@@ -304,69 +309,8 @@ async def test_ai_provider(provider_id: str, _admin: SuperAdmin):
 
 @router.get('/queue/jobs')
 async def list_queue_jobs(_admin: SuperAdmin, db=Depends(get_db)):
-    from .observability import MOCK_QUEUE_METRICS
-
-    jobs: list[dict] = []
-    now = datetime.now(timezone.utc).isoformat()
-    for m in MOCK_QUEUE_METRICS:
-        for i in range(min(m['pending'], 5)):
-            jobs.append(
-                {
-                    'id': f'{m["queue_name"]}-pending-{i}',
-                    'name': f'{m["queue_name"].title()} job',
-                    'status': 'pending',
-                    'progress': 0,
-                    'priority': 'normal',
-                    'queue': m['queue_name'],
-                    'attempts': 0,
-                    'maxAttempts': 3,
-                    'createdAt': now,
-                    'payload': {},
-                }
-            )
-        if m['active']:
-            jobs.append(
-                {
-                    'id': f'{m["queue_name"]}-active-0',
-                    'name': f'{m["queue_name"].title()} processing',
-                    'status': 'processing',
-                    'progress': 50,
-                    'priority': 'high',
-                    'queue': m['queue_name'],
-                    'worker': 'worker-1',
-                    'attempts': 1,
-                    'maxAttempts': 3,
-                    'createdAt': now,
-                    'startedAt': now,
-                    'payload': {},
-                }
-            )
-
-    try:
-        from ...core.email.db_models import EmailQueueItem
-
-        result = await db.execute(
-            select(EmailQueueItem).order_by(EmailQueueItem.created_at.desc()).limit(50)
-        )
-        for item in result.scalars().all():
-            jobs.append(
-                {
-                    'id': str(item.id),
-                    'name': f'Email: {item.event_key or "notification"}',
-                    'status': item.status,
-                    'progress': 100 if item.status == 'completed' else 0,
-                    'priority': 'normal',
-                    'queue': 'email',
-                    'attempts': item.retry_count or 0,
-                    'maxAttempts': item.max_retries or 5,
-                    'createdAt': (item.created_at or datetime.now(timezone.utc)).isoformat(),
-                    'error': item.last_error,
-                    'payload': {'recipient': item.recipient_email},
-                }
-            )
-    except Exception as exc:
-        logger.debug('Email queue load skipped: %s', exc)
-
+    jobs = await load_platform_queue_jobs(db)
+    await append_email_queue_jobs(db, jobs)
     return {'jobs': jobs}
 
 
@@ -385,69 +329,42 @@ async def retry_queue_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
             return {'success': True}
     except Exception:
         pass
-    return {'success': True, 'message': 'Retry scheduled (synthetic job)'}
+    raise HTTPException(status_code=404, detail='Job not found or not retryable')
 
 
 # --- Failed jobs ---
 
 @router.get('/failed-jobs')
 async def list_failed_jobs(_admin: SuperAdmin, db=Depends(get_db)):
-    from .observability import MOCK_FAILURES
-
-    dismissed = list_dismissed_failed_jobs()
-    jobs = [
-        {
-            'id': f['id'],
-            'jobName': f.get('type', 'Job').replace('_', ' ').title(),
-            'queue': f.get('queue', 'unknown'),
-            'failedAt': f.get('occurred_at'),
-            'error': f.get('message'),
-            'attemptCount': f.get('retry_count', 0),
-            'lastAttemptAt': f.get('occurred_at'),
-            'retryable': True,
-            'payload': {},
-        }
-        for f in MOCK_FAILURES
-        if f['id'] not in dismissed
-    ]
-
+    dismissed: set[str] = set()
     try:
-        from ...core.email.db_models import EmailQueueItem
-
-        result = await db.execute(
-            select(EmailQueueItem).where(EmailQueueItem.status.in_(('failed', 'dead_letter'))).limit(100)
-        )
-        for item in result.scalars().all():
-            jid = str(item.id)
-            if jid in dismissed:
-                continue
-            jobs.append(
-                {
-                    'id': jid,
-                    'jobName': f'Email: {item.event_key}',
-                    'queue': 'email',
-                    'failedAt': (item.updated_at or item.created_at).isoformat(),
-                    'error': item.last_error or 'Delivery failed',
-                    'attemptCount': item.retry_count or 0,
-                    'lastAttemptAt': (item.updated_at or item.created_at).isoformat(),
-                    'retryable': item.status != 'dead_letter',
-                    'payload': {'recipient': item.recipient_email},
-                }
-            )
+        dismissed = await admin_store.list_dismissed_failed_jobs_db(db)
     except Exception as exc:
-        logger.debug('Email failed jobs skipped: %s', exc)
-
+        logger.warning('DB dismissed jobs unavailable, using file store: %s', exc)
+        dismissed = list_dismissed_failed_jobs()
+    jobs = await load_platform_failed_jobs(db, dismissed)
+    await append_email_failed_jobs(db, jobs, dismissed)
     return {'jobs': jobs}
 
 
 @router.delete('/failed-jobs/{job_id}', status_code=204)
-async def delete_failed_job(job_id: str, _admin: SuperAdmin):
-    dismiss_failed_job(job_id)
+async def delete_failed_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
+    try:
+        await admin_store.dismiss_failed_job_db(db, job_id)
+    except Exception as exc:
+        logger.warning('DB dismiss failed job, using file store: %s', exc)
+        dismiss_failed_job(job_id)
     return None
 
 
 @router.post('/failed-jobs/clear-dismissed')
-async def clear_dismissed(_admin: SuperAdmin):
+async def clear_dismissed(_admin: SuperAdmin, db=Depends(get_db)):
+    try:
+        from sqlalchemy import delete
+        await db.execute(delete(DismissedFailedJob))
+        await db.commit()
+    except Exception:
+        pass
     from ...core.admin_store import _DISMISSED_FILE
 
     if _DISMISSED_FILE.is_file():
@@ -459,26 +376,4 @@ async def clear_dismissed(_admin: SuperAdmin):
 
 @router.get('/analytics/summary')
 async def analytics_summary(_admin: SuperAdmin, db=Depends(get_db)):
-    from .observability import MOCK_AI_METRICS, MOCK_API_METRICS, MOCK_QUEUE_METRICS
-
-    user_count = 0
-    try:
-        user_count = await db.scalar(select(func.count()).select_from(User)) or 0
-    except Exception:
-        user_count = len([u for u in list_platform_users() if not u.get('deleted')])
-
-    total_api = sum(m['requests'] for m in MOCK_API_METRICS.values())
-    total_cost = sum(m['cost'] for m in MOCK_AI_METRICS)
-    active_jobs = sum(m['active'] for m in MOCK_QUEUE_METRICS)
-    failed = sum(m['failed'] for m in MOCK_QUEUE_METRICS)
-    completed = sum(m['completed'] for m in MOCK_QUEUE_METRICS)
-    failure_rate = failed / max(completed + failed, 1)
-
-    return {
-        'totalUsers': user_count,
-        'apiCallsToday': total_api,
-        'activeJobs': active_jobs,
-        'errorRate': round(failure_rate * 100, 1),
-        'monthlyCost': round(total_cost, 2),
-        'usage': [],
-    }
+    return await platform_analytics_summary(db)

@@ -1,7 +1,7 @@
 """Authentication Service - JWT Management and Token Handling"""
 
-from datetime import datetime, timedelta
-from typing import Any, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, ClassVar, Optional
 from uuid import uuid4
 
 import httpx
@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 
 from .config import settings
 from .logging import get_logger
+from .roles import normalize_membership_role
 
 logger = get_logger('auth')
 
@@ -25,6 +26,7 @@ class TokenPayload:
         email: Optional[str] = None,
         role: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        membership_role: Optional[str] = None,
     ):
         self.sub = sub
         self.exp = exp
@@ -33,6 +35,7 @@ class TokenPayload:
         self.email = email
         self.role = role
         self.tenant_id = tenant_id
+        self.membership_role = membership_role
 
     @classmethod
     def from_dict(cls, data: dict) -> 'TokenPayload':
@@ -44,11 +47,14 @@ class TokenPayload:
             email=data.get('email'),
             role=data.get('role'),
             tenant_id=data.get('tenant_id'),
+            membership_role=data.get('membership_role'),
         )
 
 
 class AuthService:
     """Authentication service for JWT management"""
+
+    _revoked_jtis: ClassVar[set[str]] = set()
 
     def __init__(self):
         self.secret_key = settings.JWT_SECRET
@@ -62,42 +68,64 @@ class AuthService:
         email: Optional[str] = None,
         role: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        membership_role: Optional[str] = None,
     ) -> tuple[str, datetime]:
         """Create JWT access token"""
         jti = str(uuid4())
-        iat = datetime.utcnow()
+        iat = datetime.now(timezone.utc)
         exp = iat + timedelta(minutes=self.access_token_expire)
 
         payload = {
             'sub': user_id,
             'jti': jti,
-            'iat': iat.timestamp(),
-            'exp': exp.timestamp(),
+            'iat': int(iat.timestamp()),
+            'exp': int(exp.timestamp()),
             'type': 'access',
             'email': email,
             'role': role,
             'tenant_id': tenant_id,
+            'membership_role': membership_role,
         }
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
         return token, exp
 
-    def create_refresh_token(self, user_id: str) -> tuple[str, datetime]:
-        """Create refresh token"""
+    def create_refresh_token(
+        self,
+        user_id: str,
+        *,
+        email: Optional[str] = None,
+        role: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        membership_role: Optional[str] = None,
+    ) -> tuple[str, datetime]:
+        """Create refresh token (carries session claims for access token re-issue)."""
         jti = str(uuid4())
-        iat = datetime.utcnow()
+        iat = datetime.now(timezone.utc)
         exp = iat + timedelta(days=self.refresh_token_expire)
 
         payload = {
             'sub': user_id,
             'jti': jti,
-            'iat': iat.timestamp(),
-            'exp': exp.timestamp(),
+            'iat': int(iat.timestamp()),
+            'exp': int(exp.timestamp()),
             'type': 'refresh',
+            'email': email,
+            'role': role,
+            'tenant_id': tenant_id,
+            'membership_role': membership_role,
         }
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
         return token, exp
+
+    def revoke_token(self, jti: Optional[str]) -> None:
+        """Invalidate a token by jti (logout). In-memory for single-process dev."""
+        if jti:
+            self._revoked_jtis.add(jti)
+
+    def is_token_revoked(self, jti: Optional[str]) -> bool:
+        return bool(jti and jti in self._revoked_jtis)
 
     def verify_token(self, token: str) -> Optional[TokenPayload]:
         """Verify and decode JWT token"""
@@ -107,7 +135,11 @@ class AuthService:
                 self.secret_key,
                 algorithms=[self.algorithm],
             )
-            return TokenPayload.from_dict(payload)
+            token_payload = TokenPayload.from_dict(payload)
+            if self.is_token_revoked(token_payload.jti):
+                logger.info('Rejected revoked token jti=%s', token_payload.jti)
+                return None
+            return token_payload
         except JWTError as e:
             logger.warning(f'Token verification failed: {e}')
             return None
@@ -212,7 +244,8 @@ class AuthContext:
         return self.role == 'super_admin'
 
     def is_tenant_admin(self) -> bool:
-        return self.membership_role in ('owner', 'admin')
+        effective = normalize_membership_role(self.membership_role) or normalize_membership_role(self.role)
+        return effective in ('owner', 'admin')
 
     def can_access_tenant(self, tenant_id: str) -> bool:
         if self.is_super_admin():

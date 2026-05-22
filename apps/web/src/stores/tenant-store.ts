@@ -6,7 +6,7 @@ export interface Organization {
   name: string;
   slug: string;
   logo?: string;
-  role: 'admin' | 'manager' | 'member' | 'viewer';
+  role: 'owner' | 'admin' | 'manager' | 'analyst' | 'member' | 'viewer';
 }
 
 interface TenantState {

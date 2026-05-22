@@ -1,8 +1,11 @@
 # Production QA Audit Report
 
-**Date:** 2026-05-19
-**Status:** Production Ready (with optimizations)
-**Overall Score:** 92/100
+> **⚠️ Historical snapshot (2026-05-19).** Do not use the 92/100 score for go/no-go.  
+> **Authoritative audit:** [AUDIT_REPORT.md](../AUDIT_REPORT.md) · **Fix progress:** [AUDIT_STATUS.md](./AUDIT_STATUS.md)
+
+**Date:** 2026-05-19  
+**Status (original):** Production Ready (with optimizations) — **superseded**  
+**Overall Score (original):** 92/100
 
 ---
 

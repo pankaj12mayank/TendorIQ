@@ -1,14 +1,18 @@
+"""Review API — backed by AnalysisResult model and AuditLog."""
+
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dependencies.auth import get_current_user
 from ..dependencies.audit import audit_logger
-from ...core.models import User
+from ...core.models import AnalysisResult, AuditLog, User
 from ...core.database import get_db
+from ...core.auth import AuthContext
 
 router = APIRouter(prefix='/review', tags=['Review'])
 
@@ -119,82 +123,95 @@ class RegenerateRequest(BaseModel):
     priority: str = 'normal'
 
 
-MOCK_REVIEW_SESSION = {
-    'id': 'RS-2026-001',
-    'tender_id': 'IIT-2026-001',
-    'workflow': {
-        'id': 'WF-2026-001',
-        'tender_id': 'IIT-2026-001',
-        'status': 'in_review',
-        'current_step': 1,
-        'priority': 'high',
-        'created_at': '2026-05-18T08:00:00Z',
-        'updated_at': '2026-05-18T14:30:00Z',
-        'deadline': '2026-05-25T17:00:00Z',
-        'steps': [
-            {'id': 'step-1', 'name': 'Initial Review', 'role': 'analyst', 'status': 'completed', 'approver': {'id': '1', 'name': 'Sarah Johnson'}, 'completed_at': '2026-05-18T10:00:00Z'},
-            {'id': 'step-2', 'name': 'Manager Approval', 'role': 'manager', 'status': 'in_progress', 'approver': {'id': '2', 'name': 'Mike Chen'}},
-            {'id': 'step-3', 'name': 'Director Sign-off', 'role': 'director', 'status': 'pending'},
-        ]
-    },
-    'reviewers': [
-        {'id': '1', 'name': 'Sarah Johnson', 'email': 'sarah@company.com', 'role': 'analyst'},
-        {'id': '2', 'name': 'Mike Chen', 'email': 'mike@company.com', 'role': 'manager'},
-    ],
-    'comments': [
-        {'id': 'c1', 'reviewer_id': '1', 'reviewer_name': 'Sarah Johnson', 'reviewer_role': 'Analyst', 'content': 'Financial section looks good', 'section': 'financial', 'created_at': '2026-05-18T09:00:00Z', 'is_resolved': False, 'replies': []}
-    ],
-    'changes': [],
-    'audit_log': [
-        {'id': 'a1', 'action': 'REVIEW_STARTED', 'performed_by': '1', 'performed_by_name': 'Sarah Johnson', 'performed_by_role': 'Analyst', 'timestamp': '2026-05-18T08:00:00Z', 'details': 'Review initiated'}
-    ],
-    'section_statuses': [
-        {'section': 'summary', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'approved'},
-        {'section': 'eligibility', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'pending'},
-        {'section': 'technical', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'pending'},
-        {'section': 'financial', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'pending'},
-        {'section': 'risks', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'pending'},
-        {'section': 'deadlines', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'pending'},
-        {'section': 'mandatory_docs', 'is_edited': False, 'has_changes': False, 'edit_count': 0, 'approval_status': 'pending'},
-    ],
-    'created_at': '2026-05-18T08:00:00Z',
-    'updated_at': '2026-05-18T14:30:00Z',
-}
+def _analysis_to_session(tenant_id: str, tender_id: str, results: list[AnalysisResult]) -> dict:
+    now = datetime.utcnow()
+    return {
+        'id': str(uuid4()),
+        'tender_id': tender_id,
+        'workflow': {
+            'id': str(uuid4()),
+            'tender_id': tender_id,
+            'status': 'in_review' if results else 'pending',
+            'current_step': 1,
+            'priority': 'normal',
+            'created_at': now.isoformat(),
+            'updated_at': now.isoformat(),
+            'deadline': None,
+            'steps': [],
+        },
+        'reviewers': [],
+        'comments': [],
+        'changes': [],
+        'audit_log': [],
+        'section_statuses': [
+            {
+                'section': r.analysis_type,
+                'is_edited': False,
+                'has_changes': False,
+                'edit_count': 0,
+                'last_edited_at': r.created_at.isoformat() if r.created_at else None,
+                'last_edited_by': None,
+                'approval_status': 'completed' if r.score is not None else 'pending',
+            }
+            for r in results
+        ],
+        'created_at': results[0].created_at.isoformat() if results else now.isoformat(),
+        'updated_at': results[-1].created_at.isoformat() if results else now.isoformat(),
+    }
 
 
 @router.get('/session/{tender_id}', response_model=dict)
 async def get_review_session(
     tender_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get review session for a tender"""
-    await audit_logger.log_action(
-        db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
-        action='REVIEW_SESSION_ACCESSED',
-        resource_type='ReviewSession',
-        details=f'Accessed review session for tender {tender_id}',
-    )
-    return {'success': True, 'data': MOCK_REVIEW_SESSION}
+    try:
+        tenant_id = current_user.tenant_id
+        q = (
+            select(AnalysisResult)
+            .where(
+                AnalysisResult.tenant_id == UUID(tenant_id),
+                AnalysisResult.tender_id == UUID(tender_id),
+            )
+            .order_by(AnalysisResult.created_at.desc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+
+        await audit_logger.log_action(
+            db=db,
+            tenant_id=UUID(tenant_id),
+            user_id=UUID(current_user.user_id),
+            action='REVIEW_SESSION_ACCESSED',
+            action_type='access',
+            resource_type='ReviewSession',
+            resource_id=UUID(tender_id),
+            new_values={'tender_id': tender_id},
+        )
+
+        data = _analysis_to_session(tenant_id, tender_id, list(rows))
+        return {'success': True, 'data': data}
+    except Exception:
+        raise HTTPException(status_code=500, detail='Failed to get review session')
 
 
 @router.post('/session/{tender_id}/approval')
 async def submit_approval(
     tender_id: str,
     request: ApprovalRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Submit approval decision"""
     await audit_logger.log_action(
         db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=UUID(current_user.tenant_id),
+        user_id=UUID(current_user.user_id),
         action=f'REVIEW_{request.action.upper()}',
+        action_type='admin_action',
         resource_type='ReviewSession',
-        resource_id=tender_id,
+        resource_id=UUID(tender_id),
         new_values={'action': request.action, 'comments': request.comments},
         changes={'action': request.action},
     )
@@ -208,26 +225,28 @@ async def submit_approval(
 async def add_comment(
     tender_id: str,
     request: CommentRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Add a comment to the review"""
-    comment_id = f'comment-{datetime.utcnow().timestamp()}'
-    
+    comment_id = str(uuid4())
+
     await audit_logger.log_action(
         db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=UUID(current_user.tenant_id),
+        user_id=UUID(current_user.user_id),
         action='COMMENT_ADDED',
+        action_type='admin_action',
         resource_type='ReviewComment',
+        resource_id=UUID(tender_id),
         new_values={'content': request.content, 'section': request.section},
     )
-    
+
     return {
         'success': True,
         'data': {
             'id': comment_id,
-            'reviewer_id': str(current_user.id),
+            'reviewer_id': current_user.user_id,
             'reviewer_name': current_user.email,
             'reviewer_role': 'reviewer',
             'content': request.content,
@@ -242,15 +261,16 @@ async def add_comment(
 @router.put('/comments/{comment_id}/resolve')
 async def resolve_comment(
     comment_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Resolve a comment"""
     await audit_logger.log_action(
         db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=UUID(current_user.tenant_id),
+        user_id=UUID(current_user.user_id),
         action='COMMENT_RESOLVED',
+        action_type='admin_action',
         resource_type='ReviewComment',
         resource_id=comment_id,
     )
@@ -261,28 +281,29 @@ async def resolve_comment(
 async def edit_field(
     tender_id: str,
     request: EditFieldRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Edit a field in a section"""
     await audit_logger.log_action(
         db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=UUID(current_user.tenant_id),
+        user_id=UUID(current_user.user_id),
         action='SECTION_EDITED',
+        action_type='admin_action',
         resource_type='ReviewSection',
-        resource_id=tender_id,
+        resource_id=UUID(tender_id),
         new_values={request.field: request.new_value},
         changes={request.field: {'old': 'previous', 'new': request.new_value}},
     )
-    
+
     return {
         'success': True,
         'data': {
             'section': request.section,
             'field': request.field,
             'new_value': request.new_value,
-            'changed_by': str(current_user.id),
+            'changed_by': current_user.user_id,
             'changed_at': datetime.utcnow().isoformat(),
         },
     }
@@ -292,20 +313,21 @@ async def edit_field(
 async def regenerate_section(
     tender_id: str,
     request: RegenerateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Regenerate a section using AI"""
     await audit_logger.log_action(
         db=db,
-        tenant_id=current_user.tenant_id,
-        user_id=current_user.id,
+        tenant_id=UUID(current_user.tenant_id),
+        user_id=UUID(current_user.user_id),
         action='SECTION_REGENERATED',
+        action_type='admin_action',
         resource_type='ReviewSection',
-        resource_id=tender_id,
+        resource_id=UUID(tender_id),
         new_values={'section': request.section, 'reason': request.reason},
     )
-    
+
     return {
         'success': True,
         'message': f'Regeneration of {request.section} started',
@@ -316,24 +338,69 @@ async def regenerate_section(
 @router.get('/session/{tender_id}/audit')
 async def get_audit_log(
     tender_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get audit log for a review session"""
-    return {
-        'success': True,
-        'data': MOCK_REVIEW_SESSION['audit_log'],
-    }
+    try:
+        q = (
+            select(AuditLog)
+            .where(
+                AuditLog.tenant_id == UUID(current_user.tenant_id),
+                AuditLog.resource_id == UUID(tender_id),
+            )
+            .order_by(AuditLog.created_at.desc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        audit_entries = []
+        for log in rows:
+            audit_entries.append({
+                'id': str(log.id),
+                'action': log.action,
+                'performed_by': str(log.user_id) if log.user_id else '',
+                'performed_by_name': '',
+                'performed_by_role': '',
+                'timestamp': log.created_at.isoformat() if log.created_at else '',
+                'details': log.action,
+                'previous_state': log.old_values,
+                'new_state': log.new_values,
+            })
+        return {'success': True, 'data': audit_entries}
+    except Exception:
+        return {'success': True, 'data': []}
 
 
 @router.get('/session/{tender_id}/changes')
 async def get_change_history(
     tender_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get change history for a review session"""
-    return {
-        'success': True,
-        'data': MOCK_REVIEW_SESSION['changes'],
-    }
+    try:
+        q = (
+            select(AuditLog)
+            .where(
+                AuditLog.tenant_id == UUID(current_user.tenant_id),
+                AuditLog.resource_id == UUID(tender_id),
+                AuditLog.action.in_(['SECTION_EDITED', 'COMMENT_ADDED', 'REVIEW_STARTED']),
+            )
+            .order_by(AuditLog.created_at.desc())
+        )
+        rows = (await db.execute(q)).scalars().all()
+        changes = []
+        for log in rows:
+            changes.append({
+                'id': str(log.id),
+                'section': log.resource_type,
+                'field': '',
+                'previous_value': '',
+                'new_value': '',
+                'changed_by': str(log.user_id) if log.user_id else '',
+                'changed_by_name': '',
+                'changed_at': log.created_at.isoformat() if log.created_at else '',
+                'reason': None,
+            })
+        return {'success': True, 'data': changes}
+    except Exception:
+        return {'success': True, 'data': []}

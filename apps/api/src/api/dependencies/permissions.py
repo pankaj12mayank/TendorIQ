@@ -1,7 +1,6 @@
-"""Permission Enforcement - Tenant-Aware Permission Checks"""
+"""Permission enforcement — FastAPI dependencies (tenant-aware)."""
 
-from typing import Callable, Optional
-from functools import wraps
+from typing import Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -10,19 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.rbac import Permission, RBACService
 from ...core.auth import AuthContext
 from .auth import get_current_user
-from .tenant import get_tenant_context, verify_tenant_access
+from .tenant import verify_tenant_access
 from .audit import audit_logger
 
 
 class TenantPermissionChecker:
-    """Tenant-aware permission checking"""
+    """Tenant-aware permission checking using membership role."""
 
     @staticmethod
-    def has_tenant_permission(
-        auth: AuthContext,
-        permission: Permission,
-    ) -> bool:
-        """Check if user has permission in their tenant context"""
+    def has_tenant_permission(auth: AuthContext, permission: Permission | str) -> bool:
         role = auth.membership_role or auth.role
         return RBACService.has_permission(role, permission)
 
@@ -31,7 +26,6 @@ class TenantPermissionChecker:
         auth: AuthContext,
         permissions: list[Permission],
     ) -> bool:
-        """Check if user has any of the specified permissions"""
         role = auth.membership_role or auth.role
         return RBACService.has_any_permission(role, permissions)
 
@@ -40,18 +34,26 @@ class TenantPermissionChecker:
         auth: AuthContext,
         permissions: list[Permission],
     ) -> bool:
-        """Check if user has all of the specified permissions"""
         role = auth.membership_role or auth.role
         return RBACService.has_all_permissions(role, permissions)
 
 
 def require_tenant_permission(permission: Permission):
-    """Dependency to require specific permission in tenant context"""
+    """Dependency: authenticated tenant member with a specific permission."""
 
     async def permission_checker(
         auth: AuthContext = Depends(get_current_user),
-        request: Request = None,
     ) -> AuthContext:
+        if auth.is_super_admin():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Platform super_admin must use /api/v1/admin/platform routes',
+            )
+        if not auth.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Tenant context required',
+            )
         if not TenantPermissionChecker.has_tenant_permission(auth, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -63,12 +65,21 @@ def require_tenant_permission(permission: Permission):
 
 
 def require_tenant_any_permission(permissions: list[Permission]):
-    """Dependency to require any of the specified permissions"""
+    """Dependency: require any of the listed permissions."""
 
     async def permission_checker(
         auth: AuthContext = Depends(get_current_user),
-        request: Request = None,
     ) -> AuthContext:
+        if auth.is_super_admin():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Platform super_admin must use /api/v1/admin/platform routes',
+            )
+        if not auth.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Tenant context required',
+            )
         if not TenantPermissionChecker.has_any_tenant_permission(auth, permissions):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -80,12 +91,21 @@ def require_tenant_any_permission(permissions: list[Permission]):
 
 
 def require_tenant_all_permissions(permissions: list[Permission]):
-    """Dependency to require all of the specified permissions"""
+    """Dependency: require all listed permissions."""
 
     async def permission_checker(
         auth: AuthContext = Depends(get_current_user),
-        request: Request = None,
     ) -> AuthContext:
+        if auth.is_super_admin():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Platform super_admin must use /api/v1/admin/platform routes',
+            )
+        if not auth.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Tenant context required',
+            )
         if not TenantPermissionChecker.has_all_tenant_permissions(auth, permissions):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -97,13 +117,18 @@ def require_tenant_all_permissions(permissions: list[Permission]):
 
 
 def require_tenant_role(allowed_roles: list[str]):
-    """Dependency to require specific tenant role"""
+    """Dependency: require specific tenant membership role."""
 
     async def role_checker(
         auth: AuthContext = Depends(get_current_user),
     ) -> AuthContext:
+        if auth.is_super_admin():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='Platform super_admin must use /api/v1/admin/platform routes',
+            )
         role = auth.membership_role or auth.role
-        
+
         if role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -121,9 +146,9 @@ async def check_tenant_and_permission(
     permission: Permission,
     request: Optional[Request] = None,
 ) -> bool:
-    """Check both tenant access and permission"""
+    """Check tenant access and permission (for service-layer calls)."""
     valid, error = await verify_tenant_access(db, auth.user_id, tenant_id)
-    
+
     if not valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -140,7 +165,7 @@ async def check_tenant_and_permission(
 
 
 class ProtectedTenantEndpoint:
-    """Mixin for protected tenant endpoints with audit logging"""
+    """Service-layer helpers with audit logging."""
 
     @staticmethod
     async def require_create(
@@ -153,7 +178,7 @@ class ProtectedTenantEndpoint:
         await check_tenant_and_permission(
             db, auth, tenant_id, Permission.TENDER_CREATE, request
         )
-        
+
         await audit_logger.log_action(
             db,
             UUID(tenant_id),

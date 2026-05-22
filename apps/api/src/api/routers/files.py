@@ -6,9 +6,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 import io
 
-from ..dependencies.auth import CurrentUser
+from ...core.database import get_db
+
+from ..dependencies.rbac_deps import (
+    RequireDocumentCreate,
+    RequireDocumentDelete,
+    RequireDocumentRead,
+    require_tenant_member,
+)
 from ..services.file_service import file_service
 from ..services.tenant_service import tenant_service
 from ...core.storage import storage_service
@@ -28,7 +36,11 @@ from ..schemas.storage import (
     FileValidationError,
 )
 
-router = APIRouter(prefix='/files', tags=['files'])
+router = APIRouter(
+    prefix='/files',
+    tags=['files'],
+    dependencies=[Depends(require_tenant_member)],
+)
 logger = get_logger('files_api')
 
 
@@ -59,8 +71,8 @@ def _doc_to_response(doc) -> DocumentResponse:
 @router.post('/upload/initiate', response_model=FileUploadResponse)
 async def initiate_upload(
     data: FileUploadRequest,
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
 ):
     """Initiate a file upload - generates storage key and signed URL"""
     if not current_user.tenant_id:
@@ -123,8 +135,8 @@ async def initiate_upload(
 @router.post('/upload/complete/{document_id}')
 async def complete_upload(
     document_id: str,
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
 ):
     """Mark upload as complete and verify file exists"""
     if not current_user.tenant_id:
@@ -148,13 +160,28 @@ async def complete_upload(
         checksum=meta.get('etag', doc.checksum),
     )
 
-    return {'success': True, 'document_id': document_id, 'verified': True}
+    from ..services.document_service import document_service as doc_svc
+
+    await doc_svc.update_processing_status(
+        db,
+        UUID(document_id),
+        UUID(current_user.tenant_id),
+        status='processing',
+        metadata={'uploaded_by': current_user.user_id},
+    )
+
+    return {
+        'success': True,
+        'document_id': document_id,
+        'verified': True,
+        'processing_status': 'processing',
+    }
 
 
 @router.post('/upload/direct')
 async def direct_upload(
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
     tender_id: Optional[str] = Query(None),
     category: str = Query('documents'),
@@ -208,19 +235,30 @@ async def direct_upload(
         created_by_id=UUID(current_user.user_id),
     )
 
+    from ..services.document_service import document_service as doc_svc
+
+    await doc_svc.update_processing_status(
+        db,
+        doc.id,
+        UUID(current_user.tenant_id),
+        status='processing',
+        metadata={'uploaded_by': current_user.user_id},
+    )
+
     return {
         'success': True,
         'document_id': str(doc.id),
         'storage_key': storage_key,
         'file_size': len(contents),
         'checksum': result.get('checksum'),
+        'processing_status': 'processing',
     }
 
 
 @router.get('/download/{document_id}', response_model=FileDownloadResponse)
 async def download_file(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: RequireDocumentRead,
     db,
     expires_seconds: int = Query(3600, ge=60, le=86400),
 ):
@@ -260,7 +298,7 @@ async def download_file(
 
 @router.get('/list', response_model=FileListResponse)
 async def list_files(
-    current_user: CurrentUser,
+    current_user: RequireDocumentRead,
     db,
     tender_id: Optional[str] = Query(None),
     file_type: Optional[str] = Query(None),
@@ -299,8 +337,8 @@ async def list_files(
 @router.get('/{document_id}')
 async def get_file(
     document_id: str,
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get file metadata"""
     if not current_user.tenant_id:
@@ -319,7 +357,7 @@ async def get_file(
 @router.delete('/{document_id}', response_model=FileDeleteResponse)
 async def delete_file(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: RequireDocumentDelete,
     db,
     permanently: bool = Query(False),
 ):
@@ -357,8 +395,8 @@ async def delete_file(
 @router.post('/signed-url', response_model=SignedUrlResponse)
 async def generate_signed_url(
     data: SignedUrlRequest,
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentCreate,
+    db: AsyncSession = Depends(get_db),
 ):
     """Generate a signed URL for upload or download"""
     if not current_user.tenant_id:
@@ -401,7 +439,7 @@ async def generate_signed_url(
 
 @router.post('/validate')
 async def validate_file(
-    current_user: CurrentUser,
+    current_user: RequireDocumentRead,
     file_name: str = Query(...),
     file_size: int = Query(..., ge=1),
     content_type: Optional[str] = Query(None),
@@ -422,8 +460,8 @@ async def validate_file(
 
 @router.get('/stats/storage')
 async def get_storage_stats(
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentRead,
+    db: AsyncSession = Depends(get_db),
 ):
     """Get storage usage statistics for tenant"""
     if not current_user.tenant_id:
@@ -445,8 +483,8 @@ async def get_storage_stats(
 @router.post('/batch-delete')
 async def batch_delete_files(
     document_ids: list[str],
-    current_user: CurrentUser,
-    db,
+    current_user: RequireDocumentDelete,
+    db: AsyncSession = Depends(get_db),
     permanently: bool = Query(False),
 ):
     """Batch delete multiple files"""

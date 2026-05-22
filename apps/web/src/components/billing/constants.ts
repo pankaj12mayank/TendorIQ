@@ -1,4 +1,4 @@
-import { Plan, Subscription, Invoice, Payment, QuotaStatus, UsageRecord } from './types';
+import { Plan, Invoice, Payment, QuotaStatus, UsageRecord } from './types';
 
 export const PLANS: Plan[] = [
   {
@@ -89,21 +89,6 @@ export const PLANS: Plan[] = [
     ],
   },
 ];
-
-export const MOCK_SUBSCRIPTION: Subscription = {
-  id: 'sub_1a2b3c4d5e6f',
-  userId: 'user_123',
-  planId: 'plan_pro',
-  plan: PLANS.find(p => p.id === 'plan_pro'),
-  status: 'active',
-  billingInterval: 'monthly',
-  stripeSubscriptionId: 'sub_stripe_123',
-  stripeCustomerId: 'cus_stripe_456',
-  currentPeriodStart: '2026-05-01T00:00:00Z',
-  currentPeriodEnd: '2026-06-01T00:00:00Z',
-  createdAt: '2026-01-15T10:30:00Z',
-  updatedAt: '2026-05-01T00:00:00Z',
-};
 
 export const MOCK_INVOICES: Invoice[] = [
   {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useUsageStore } from '@/components/usage/store';
 import { useUsageApi, useQuotaEnforcement } from '@/components/usage/hooks/use-usage';
 import { 
@@ -84,8 +85,8 @@ export default function UsagePage() {
                   {criticalAlerts.length} feature(s) approaching or exceeding limits
                 </p>
               </div>
-              <Button size="sm" onClick={() => window.location.href = '/dashboard/billing'}>
-                Upgrade Plan
+              <Button size="sm" asChild>
+                <Link href="/dashboard/billing">Upgrade Plan</Link>
               </Button>
             </div>
           </CardContent>
@@ -242,8 +243,8 @@ export default function UsagePage() {
                   You've used {showUpgradePrompt}% of your quota
                 </p>
               </div>
-              <Button size="sm" onClick={() => window.location.href = '/dashboard/billing'}>
-                Upgrade
+              <Button size="sm" asChild>
+                <Link href="/dashboard/billing">Upgrade</Link>
               </Button>
             </div>
           </CardContent>

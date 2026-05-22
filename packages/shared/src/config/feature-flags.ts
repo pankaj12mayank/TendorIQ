@@ -3,10 +3,12 @@
  * Centralized control for feature enablement across environments
  */
 
-import { env, isDev, isProd, isStaging, features } from '../env.js';
+import { env, isDev, isStaging, features } from '../env.js';
+
+export type FeatureFlagName = 'ai_analysis' | 'document_ocr' | 'advanced_analytics' | 'webhooks' | 'api_access' | 'custom_domains' | 'sso';
 
 export interface FeatureFlag {
-  name: string;
+  name: FeatureFlagName;
   description: string;
   enabled: boolean;
   environments: ('development' | 'staging' | 'production')[];
@@ -14,7 +16,7 @@ export interface FeatureFlag {
   dependencies?: string[];
 }
 
-export const featureFlags: FeatureFlag[] = [
+const initialFlags: FeatureFlag[] = [
   {
     name: 'ai_analysis',
     description: 'AI-powered tender analysis and bid scoring',
@@ -59,7 +61,29 @@ export const featureFlags: FeatureFlag[] = [
   },
 ];
 
-export function isFeatureAvailable(flagName: string): boolean {
+let featureFlags: FeatureFlag[] = [...initialFlags];
+let lastRefresh = Date.now();
+const TTL_MS = 60_000;
+
+function refreshFlags(): void {
+  if (Date.now() - lastRefresh > TTL_MS) {
+    featureFlags = [...initialFlags];
+    lastRefresh = Date.now();
+  }
+}
+
+function isFlagEnabledForRollout(flagName: string, percentage: number): boolean {
+  let hash = 0;
+  for (let i = 0; i < flagName.length; i++) {
+    const char = flagName.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return (Math.abs(hash) % 100) < percentage;
+}
+
+export function isFeatureAvailable(flagName: FeatureFlagName): boolean {
+  refreshFlags();
   const flag = featureFlags.find((f) => f.name === flagName);
 
   if (!flag) {
@@ -78,17 +102,18 @@ export function isFeatureAvailable(flagName: string): boolean {
   }
 
   if (flag.rolloutPercentage !== undefined) {
-    const random = Math.random() * 100;
-    return random <= flag.rolloutPercentage;
+    return isFlagEnabledForRollout(flagName, flag.rolloutPercentage);
   }
 
   return true;
 }
 
 export function getEnabledFeatures(): FeatureFlag[] {
+  refreshFlags();
   return featureFlags.filter((f) => isFeatureAvailable(f.name));
 }
 
 export function getAllFeatures(): FeatureFlag[] {
+  refreshFlags();
   return featureFlags;
 }

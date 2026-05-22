@@ -4,14 +4,12 @@ import { Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { UploadTracker } from '@/components/dashboard';
 import { useDashboardStore } from '@/stores/dashboard-store';
-import { useToastStore } from '@/stores/toast-store';
+import { toast } from 'sonner';
 
 export default function UploadPage() {
   const addActivity = useDashboardStore((state) => state.addActivity);
-  const addToast = useToastStore((state) => state.addToast);
-
   const handleUploadComplete = (results: unknown[]) => {
-    addToast('success', 'Upload Complete', `${results.length} files processed successfully`);
+    toast.success(`Upload Complete: ${results.length} files processed successfully`);
     addActivity({
       id: `activity-${Date.now()}`,
       type: 'complete',

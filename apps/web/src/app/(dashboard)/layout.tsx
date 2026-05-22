@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useAuth, useCurrentUser } from '@/hooks/use-auth';
 import { useRouter, usePathname } from 'next/navigation';
-import { canAccessAdminConsole } from '@/lib/permissions';
+import { canAccessAdminConsole, canAccessTenantDashboard, isSuperAdmin } from '@/lib/permissions';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
@@ -62,8 +62,14 @@ export default function DashboardLayout({
   useEffect(() => {
     if (isAdminConsole && user && !canAccessAdminConsole(user.role)) {
       router.replace('/dashboard');
+      return;
+    }
+    if (!isAdminConsole && user && isSuperAdmin(user.role)) {
+      router.replace('/dashboard/admin');
     }
   }, [isAdminConsole, user, router]);
+
+  const tenantDashboardAllowed = user ? canAccessTenantDashboard(user.role) : true;
 
   if (!mounted || !isLoaded || !checkedOnboarding) {
     return (
@@ -75,6 +81,14 @@ export default function DashboardLayout({
 
   if (!userId) {
     return null;
+  }
+
+  if (!isAdminConsole && user && !tenantDashboardAllowed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingState message="Redirecting to admin console..." />
+      </div>
+    );
   }
 
   if (isAdminConsole && user && !canAccessAdminConsole(user.role)) {

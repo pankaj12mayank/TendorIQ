@@ -1,6 +1,7 @@
 import type { ZodSchema } from 'zod';
 
-import { clearStoredSession } from '@/lib/auth-session';
+import { clearStoredSession, getAuthToken } from '@/lib/auth-session';
+import { getSessionRequestHeaders } from '@/lib/api-headers';
 
 export class ApiError extends Error {
   constructor(
@@ -17,6 +18,7 @@ export class ApiError extends Error {
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
   schema?: ZodSchema;
+  timeout?: number;
 }
 
 class ApiClient {
@@ -26,14 +28,13 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private getAuthHeaders(): HeadersInit {
-    const cookieToken = document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('__session='))
-      ?.split('=')[1];
-    const storedToken =
-      typeof window !== 'undefined' ? localStorage.getItem('tenderiq_auth_token') : null;
-    const token = cookieToken || storedToken;
+  getAuthHeaders(): HeadersInit {
+    if (typeof window === 'undefined') return {};
+    const sessionHeaders = getSessionRequestHeaders();
+    if (Object.keys(sessionHeaders).length > 0) {
+      return sessionHeaders;
+    }
+    const token = getAuthToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
@@ -48,58 +49,74 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { params, schema, ...fetchOptions } = options;
+    const { params, schema, timeout = 30000, ...fetchOptions } = options;
 
-    const response = await fetch(this.buildUrl(endpoint, params), {
-      ...fetchOptions,
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.getAuthHeaders(),
-        ...fetchOptions.headers,
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    if (!response.ok) {
-      if (response.status === 401 && typeof window !== 'undefined') {
-        clearStoredSession();
-        const path = window.location.pathname + window.location.search;
-        if (path.startsWith('/dashboard')) {
-          window.location.href = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
+    try {
+      const response = await fetch(this.buildUrl(endpoint, params), {
+        ...fetchOptions,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
+          ...fetchOptions.headers,
+        },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 401 && typeof window !== 'undefined') {
+          clearStoredSession();
+          const path = window.location.pathname + window.location.search;
+          if (path.startsWith('/dashboard')) {
+            window.location.href = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
+          } else if (path.startsWith('/admin')) {
+            window.location.href = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
+          }
         }
+
+        let errorData: Record<string, unknown> = {};
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { message: response.statusText };
+        }
+
+        const message =
+          (errorData.detail as string) ||
+          (errorData.error as string) ||
+          (errorData.message as string) ||
+          'An error occurred';
+
+        throw new ApiError(
+          response.status,
+          typeof message === 'object' ? JSON.stringify(message) : String(message),
+          (errorData.code as string) || 'UNKNOWN_ERROR',
+          errorData.details as Record<string, unknown> | undefined
+        );
       }
 
-      let errorData: Record<string, unknown> = {};
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { message: response.statusText };
+      if (response.status === 204) {
+        return undefined as T;
       }
 
-      const message =
-        (errorData.detail as string) ||
-        (errorData.error as string) ||
-        (errorData.message as string) ||
-        'An error occurred';
+      const data = await response.json();
 
-      throw new ApiError(
-        response.status,
-        typeof message === 'object' ? JSON.stringify(message) : String(message),
-        (errorData.code as string) || 'UNKNOWN_ERROR',
-        errorData.details as Record<string, unknown> | undefined
-      );
+      if (schema) {
+        return schema.parse(data) as T;
+      }
+
+      return data as T;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new ApiError(408, 'Request timed out', 'TIMEOUT');
+      }
+      throw err;
     }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-
-    const data = await response.json();
-
-    if (schema) {
-      return schema.parse(data) as T;
-    }
-
-    return data as T;
   }
 
   get<T>(endpoint: string, options?: RequestOptions): Promise<T> {

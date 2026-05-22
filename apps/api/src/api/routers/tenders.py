@@ -1,37 +1,46 @@
-"""Tenders API Router"""
+﻿"""Tenders API Router"""
 
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dependencies.auth import CurrentUser, TenantID
+from ..dependencies.rbac_deps import (
+    RequireTenderCreate,
+    RequireTenderDelete,
+    RequireTenderRead,
+    RequireTenderUpdate,
+    require_tenant_member,
+)
 from ..schemas.base import (
-    create_error_response,
     create_response,
     PaginatedResponse,
     PaginationMeta,
 )
 from ..schemas.tender import (
     TenderCreate,
-    TenderListResponse,
-    TenderResponse,
     TenderUpdate,
 )
 from ..services.tender_service import TenderService
+from ...core.database import get_db
 
-router = APIRouter(prefix='/tenders', tags=['Tenders'])
+router = APIRouter(
+    prefix='/tenders',
+    tags=['Tenders'],
+    dependencies=[Depends(require_tenant_member)],
+)
 
 
 @router.get('', response_model=PaginatedResponse)
 async def list_tenders(
-    current_user: CurrentUser,
-    tenant_id: TenantID,
+    current_user: RequireTenderRead,
+    db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
 ) -> dict:
-    service = TenderService(tenant_id=tenant_id)
+    service = TenderService(db=db, tenant_id=current_user.tenant_id)
 
     filters = {}
     if status:
@@ -56,10 +65,10 @@ async def list_tenders(
 @router.get('/{tender_id}', response_model=dict)
 async def get_tender(
     tender_id: str,
-    current_user: CurrentUser,
-    tenant_id: TenantID,
+    current_user: RequireTenderRead,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    service = TenderService(tenant_id=tenant_id)
+    service = TenderService(db=db, tenant_id=current_user.tenant_id)
     tender = await service.get_tender(tender_id)
 
     if not tender:
@@ -74,12 +83,14 @@ async def get_tender(
 @router.post('', response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_tender(
     tender_data: TenderCreate,
-    current_user: CurrentUser,
-    tenant_id: TenantID,
+    current_user: RequireTenderCreate,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    service = TenderService(tenant_id=tenant_id, user_id=current_user['id'])
+    service = TenderService(db=db, tenant_id=current_user.tenant_id, user_id=current_user.user_id)
 
-    tender = await service.create_tender(tender_data.model_dump())
+    payload = tender_data.model_dump(exclude_none=True)
+    payload.pop('organization_id', None)
+    tender = await service.create_tender(payload)
     return create_response(tender)
 
 
@@ -87,10 +98,10 @@ async def create_tender(
 async def update_tender(
     tender_id: str,
     tender_data: TenderUpdate,
-    current_user: CurrentUser,
-    tenant_id: TenantID,
+    current_user: RequireTenderUpdate,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    service = TenderService(tenant_id=tenant_id, user_id=current_user['id'])
+    service = TenderService(db=db, tenant_id=current_user.tenant_id, user_id=current_user.user_id)
 
     tender = await service.update_tender(tender_id, tender_data.model_dump(exclude_unset=True))
 
@@ -106,10 +117,10 @@ async def update_tender(
 @router.delete('/{tender_id}', status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tender(
     tender_id: str,
-    current_user: CurrentUser,
-    tenant_id: TenantID,
+    current_user: RequireTenderDelete,
+    db: AsyncSession = Depends(get_db),
 ) -> None:
-    service = TenderService(tenant_id=tenant_id, user_id=current_user['id'])
+    service = TenderService(db=db, tenant_id=current_user.tenant_id, user_id=current_user.user_id)
 
     success = await service.delete_tender(tender_id)
 

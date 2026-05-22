@@ -1,4 +1,8 @@
-import { useCallback, useState, useEffect } from 'react';
+/**
+ * Platform-wide analytics for the super-admin console only.
+ * Tenant usage lives at `/api/v1/billing/usage/*` (see `use-usage.ts`).
+ */
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api-client';
 import { useAnalyticsStore } from '@/components/admin/store';
 import { UsageMetric, AnalyticsCard } from '@/components/admin/types';
@@ -21,12 +25,18 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
   const [allMetrics, setAllMetrics] = useState<UsageMetric[]>([]);
   const [cards, setCards] = useState<AnalyticsCard[]>(ANALYTICS_CARDS);
   const [isLoading, setLoading] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState('7d');
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);
+    setIsError(false);
+    setError(null);
     try {
       const res = await api.get<{
+        scope?: string;
+        dataSource?: string;
         totalUsers: number;
         apiCallsToday: number;
         activeJobs: number;
@@ -37,7 +47,7 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
 
       setMetrics({
         totalUsers: res.totalUsers,
-        activeDocuments: 0,
+        activeDocuments: res.activeJobs,
         apiCallsToday: res.apiCallsToday,
         monthlyCost: res.monthlyCost,
       });
@@ -50,6 +60,9 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
       ]);
 
       setAllMetrics(res.usage?.length ? res.usage : []);
+    } catch (err) {
+      setIsError(true);
+      setError(err instanceof Error ? err.message : 'Failed to fetch analytics');
     } finally {
       setLoading(false);
     }
@@ -116,13 +129,43 @@ interface UseRealtimeMetricsReturn {
 
 export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
   const { metrics } = useAnalyticsStore();
+  const [activeJobs, setActiveJobs] = useState(0);
+  const [errorRate, setErrorRate] = useState(0);
+  const [avgResponseTime, setAvgResponseTime] = useState(0);
+  const intervalRef = useRef<number | undefined>(undefined);
+
+  const subscribe = useCallback(() => {
+    intervalRef.current = window.setInterval(async () => {
+      try {
+        const res = await api.get<{
+          activeJobs: number;
+          errorRate: number;
+          avgResponseTime: number;
+        }>('/api/v1/admin/platform/analytics/summary');
+        setActiveJobs(res.activeJobs);
+        setErrorRate(res.errorRate);
+        setAvgResponseTime(res.avgResponseTime);
+      } catch {}
+    }, 30000);
+  }, []);
+
+  const unsubscribe = useCallback(() => {
+    if (intervalRef.current !== undefined) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = undefined;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => unsubscribe();
+  }, [unsubscribe]);
 
   return {
     apiCalls: metrics.apiCallsToday,
-    activeJobs: 0,
-    errorRate: 0,
-    avgResponseTime: 0,
-    subscribe: () => {},
-    unsubscribe: () => {},
+    activeJobs,
+    errorRate,
+    avgResponseTime,
+    subscribe,
+    unsubscribe,
   };
 }

@@ -1,16 +1,47 @@
 'use client';
 
-import { TrendingUp, DollarSign, Clock, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { TrendingUp, DollarSign, Clock, CheckCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { api } from '@/lib/api-client';
 
-const mockBids = [
-  { id: '1', tender: 'IT Infrastructure Upgrade', amount: '$485,000', status: 'submitted', submittedAt: '2026-05-15' },
-  { id: '2', tender: 'Office Supplies Procurement', amount: '$48,500', status: 'won', submittedAt: '2026-05-10' },
-  { id: '3', tender: 'Marketing Services RFP', amount: '$140,000', status: 'under_review', submittedAt: '2026-05-12' },
-];
+interface Bid {
+  id: string;
+  tender: string;
+  amount: string;
+  status: string;
+  submittedAt: string;
+}
 
 export default function BidsPage() {
+  const [bids, setBids] = useState<Bid[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchBids = async () => {
+      try {
+        const res = await api.get<{ bids: Bid[]; total_bids: number; win_rate: number; total_value: string; pending_count: number }>('/api/v1/bids');
+        setBids(res.bids);
+      } catch (err) {
+        setError('Failed to load bids');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBids();
+  }, []);
+
+  const totalBids = bids.length;
+  const wonBids = bids.filter(b => b.status === 'won').length;
+  const winRate = totalBids > 0 ? Math.round((wonBids / totalBids) * 100) : 0;
+  const pendingCount = bids.filter(b => b.status === 'submitted' || b.status === 'under_review').length;
+  const totalValue = bids.reduce((sum, b) => {
+    const num = parseFloat(b.amount.replace(/[$,]/g, ''));
+    return sum + (isNaN(num) ? 0 : num);
+  }, 0);
+
   return (
     <div className="space-y-6">
       <div>
@@ -25,8 +56,7 @@ export default function BidsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">+3 this month</p>
+            <div className="text-2xl font-bold">{totalBids}</div>
           </CardContent>
         </Card>
         <Card>
@@ -35,8 +65,7 @@ export default function BidsPage() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">75%</div>
-            <p className="text-xs text-muted-foreground">+5% from last quarter</p>
+            <div className="text-2xl font-bold">{winRate}%</div>
           </CardContent>
         </Card>
         <Card>
@@ -45,7 +74,7 @@ export default function BidsPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$2.1M</div>
+            <div className="text-2xl font-bold">${totalValue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">Across all bids</p>
           </CardContent>
         </Card>
@@ -55,42 +84,50 @@ export default function BidsPage() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">4</div>
+            <div className="text-2xl font-bold">{pendingCount}</div>
             <p className="text-xs text-muted-foreground">Awaiting response</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Bids</CardTitle>
-          <CardDescription>Your latest tender submissions</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mockBids.map((bid) => (
-              <div key={bid.id} className="flex items-center justify-between border-b pb-4 last:border-0">
-                <div className="space-y-1">
-                  <p className="font-medium">{bid.tender}</p>
-                  <p className="text-sm text-muted-foreground">Bid Amount: {bid.amount}</p>
-                  <p className="text-xs text-muted-foreground">Submitted: {bid.submittedAt}</p>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <p className="text-destructive text-center py-12">{error}</p>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Bids</CardTitle>
+            <CardDescription>Your latest tender submissions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {bids.map((bid) => (
+                <div key={bid.id} className="flex items-center justify-between border-b pb-4 last:border-0">
+                  <div className="space-y-1">
+                    <p className="font-medium">{bid.tender}</p>
+                    <p className="text-sm text-muted-foreground">Bid Amount: {bid.amount}</p>
+                    <p className="text-xs text-muted-foreground">Submitted: {bid.submittedAt}</p>
+                  </div>
+                  <Badge
+                    variant={
+                      bid.status === 'won'
+                        ? 'default'
+                        : bid.status === 'submitted'
+                        ? 'secondary'
+                        : 'outline'
+                    }
+                  >
+                    {bid.status.replace('_', ' ')}
+                  </Badge>
                 </div>
-                <Badge
-                  variant={
-                    bid.status === 'won'
-                      ? 'default'
-                      : bid.status === 'submitted'
-                      ? 'secondary'
-                      : 'outline'
-                  }
-                >
-                  {bid.status.replace('_', ' ')}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

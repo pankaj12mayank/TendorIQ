@@ -1,16 +1,34 @@
 import { z } from 'zod';
 
+/** Platform role (JWT) or effective tenant role for display. */
+export const platformRoleSchema = z.enum(['super_admin', 'user']);
+
+/** Tenant membership roles — matches DB memberships.role CHECK. */
+export const membershipRoleSchema = z.enum([
+  'owner',
+  'admin',
+  'manager',
+  'analyst',
+  'member',
+  'viewer',
+]);
+
 export const userSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   name: z.string().min(1).max(255).optional(),
-  role: z.enum(['admin', 'manager', 'user', 'viewer']),
+  /** Effective role for UI (super_admin or membership role). */
+  role: z.union([platformRoleSchema, membershipRoleSchema]),
+  membershipRole: membershipRoleSchema.optional(),
+  tenantId: z.string().uuid().optional(),
   avatarUrl: z.string().url().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 
 export type User = z.infer<typeof userSchema>;
+export type MembershipRole = z.infer<typeof membershipRoleSchema>;
+export type PlatformRole = z.infer<typeof platformRoleSchema>;
 
 export const tenderSchema = z.object({
   id: z.string().uuid(),

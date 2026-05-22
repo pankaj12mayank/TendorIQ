@@ -1,15 +1,11 @@
-import { useCallback, useState } from 'react';
-import { api } from '@/lib/api';
-import { useDocumentStore, Document, DocumentStats, DocumentFilters } from '@/stores/document-store';
-
-export interface DocumentListResponse {
-  success: boolean;
-  documents: Document[];
-  total: number;
-  page: number;
-  limit: number;
-  pages: number;
-}
+import { useCallback, useState, useRef, useEffect } from 'react';
+import { api } from '@/lib/api-client';
+import {
+  unwrapDocumentPayload,
+  type DocumentListResponse,
+} from '@/lib/documents-api';
+import { useDocumentStore, Document, DocumentStats, DocumentFilters, DocumentStatus } from '@/stores/document-store';
+import { toast } from 'sonner';
 
 export interface DocumentStatsResponse {
   success: boolean;
@@ -30,6 +26,11 @@ export function useDocumentsApi() {
   const store = useDocumentStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelledRef = useRef(false);
+
+  useEffect(() => {
+    return () => { cancelledRef.current = true; };
+  }, []);
 
   const buildQueryParams = useCallback((filters: DocumentFilters, page: number, limit: number) => {
     const params: Record<string, string> = {
@@ -79,8 +80,7 @@ export function useDocumentsApi() {
     try {
       const res = await api.get<DocumentStatsResponse>('/api/v1/documents/stats');
       store.setStats(res.stats);
-    } catch (err) {
-      console.error('Failed to fetch stats:', err);
+    } catch {
     }
   }, [store]);
 
@@ -130,12 +130,13 @@ export function useDocumentsApi() {
     setError(null);
 
     try {
-      const res = await api.patch<{ document: Document }>(
+      const res = await api.patch<{ success: boolean; document: Document }>(
         `/api/v1/documents/${documentId}`,
         data
       );
-      store.updateDocument(documentId, res.document);
-      return res.document;
+      const doc = unwrapDocumentPayload(res);
+      store.updateDocument(documentId, doc);
+      return doc;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update document';
       setError(msg);
@@ -215,42 +216,56 @@ export function useDocumentsApi() {
     }
   }, [store, fetchStats]);
 
-  const pollDocumentStatus = useCallback(async (documentId: string, maxAttempts = 30, intervalMs = 3000) => {
-    let attempts = 0;
+  const delay = useCallback((ms: number) => {
+    return new Promise<void>((resolve) => {
+      if (cancelledRef.current) { resolve(); return; }
+      const timer = setTimeout(() => {
+        if (!cancelledRef.current) resolve();
+      }, ms);
+      const interval = setInterval(() => {
+        if (cancelledRef.current) {
+          clearTimeout(timer);
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }, []);
 
-    const poll = async (): Promise<DocumentStatus> => {
-      if (attempts >= maxAttempts) {
-        throw new Error('Polling timeout');
+  const pollDocumentStatus = useCallback(async (documentId: string, maxAttempts = 30, intervalMs = 3000) => {
+    const poll = async (attempt = 0): Promise<DocumentStatus> => {
+      if (cancelledRef.current || attempt >= maxAttempts) {
+        throw new Error(cancelledRef.current ? 'Polling cancelled' : 'Polling timeout');
       }
 
       try {
-        const res = await api.get<{ document: { processing_status: string } }>(
+        const res = await api.get<{ success: boolean; document: { processing_status: string } }>(
           `/api/v1/documents/${documentId}`
         );
-        const status = res.document.processing_status as string;
+        const status = unwrapDocumentPayload(res).processing_status;
         store.updateDocument(documentId, { processing_status: status as never });
 
         if (status === 'completed' || status === 'failed' || status === 'needs_review') {
           return status as never;
         }
 
-        attempts++;
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
-        return poll();
+        await delay(intervalMs);
+        return poll(attempt + 1);
       } catch (err) {
-        attempts++;
-        if (attempts >= maxAttempts) throw err;
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
-        return poll();
+        if (cancelledRef.current) throw new Error('Polling cancelled');
+        if (attempt + 1 >= maxAttempts) throw err;
+        await delay(intervalMs);
+        return poll(attempt + 1);
       }
     };
 
     return poll();
-  }, [store]);
+  }, [store, delay]);
 
   return {
     loading,
     error,
+    stats: store.stats,
     fetchDocuments,
     fetchStats,
     deleteDocument,

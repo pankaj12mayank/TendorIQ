@@ -37,13 +37,6 @@ required_vars = [
     'OPENAI_API_KEY'
 ]
 
-optional_vars = [
-    'SENTRY_DSN',
-    'STRIPE_SECRET_KEY',
-    'AWS_ACCESS_KEY_ID',
-    'AZURE_STORAGE_CONNECTION_STRING'
-]
-
 missing = [v for v in required_vars if not os.getenv(v)]
 if missing:
     print(f'Missing required: {missing}')
@@ -68,12 +61,15 @@ print('Environment variables valid')
         run: pnpm install --frozen-lockfile
       - name: Run security audit
         run: pnpm audit --audit-level=high
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Check for vulnerabilities
         run: |
           cd apps/api
           pip install safety bandit
-          safety check --json > security-report.json || true
-          bandit -r src/ -f json -o bandit-report.json || true
+          safety check --json -o security-report.json
+          bandit -r src/ -f json -o bandit-report.json
 
   build-validation:
     name: Build Validation
@@ -97,6 +93,11 @@ print('Environment variables valid')
             echo "Build output missing"
             exit 1
           fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
       - name: Check API builds
         run: |
           cd apps/api
@@ -108,34 +109,33 @@ print('Environment variables valid')
     runs-on: ubuntu-latest
     needs: build-validation
     services:
-      postgres:
-        image: postgres:15
+      mysql:
+        image: mysql:8
         env:
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: test
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "mysqladmin ping -h localhost"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
         ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
+          - 3306:3306
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
+        run: |
+          cd apps/api
+          uv sync
       - name: Run integration tests
         run: |
-          echo "Running integration tests..."
-          # Integration test placeholder
-          echo "Integration tests passed"
+          cd apps/api
+          uv run pytest tests/integration -v
 
   production-checklist:
     name: Production Checklist
@@ -143,66 +143,124 @@ print('Environment variables valid')
     needs: integration-tests
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install uv
+        run: pip install uv
       - name: Run production checklist validation
         run: |
-          cat > /tmp/prod_check.sh << 'EOF'
-#!/bin/bash
-set -e
+          cd apps/api
+          uv sync
+          uv run python -c "
+import subprocess
+import sys
+import os
 
-echo "Running Production Readiness Checklist..."
+exit_code = 0
 
-# 1. Check linting
-echo "✓ Linting configured"
-if [ -f "apps/api/pyproject.toml" ]; then
-  grep -q "ruff" apps/api/pyproject.toml && echo "✓ Ruff configured"
-fi
+# 1. Check linting configured
+if os.path.exists('apps/api/pyproject.toml'):
+    with open('apps/api/pyproject.toml') as f:
+        content = f.read()
+        if 'ruff' in content:
+            print('PASS: Ruff configured')
+        else:
+            print('FAIL: Ruff not configured')
+            exit_code = 1
+else:
+    print('FAIL: pyproject.toml not found')
+    exit_code = 1
 
-# 2. Check testing
-echo "✓ Testing configured"
-if [ -f "package.json" ]; then
-  grep -q "test" package.json && echo "✓ Test scripts configured"
-fi
+# 2. Check test scripts configured
+if os.path.exists('package.json'):
+    with open('package.json') as f:
+        content = f.read()
+        if 'test' in content:
+            print('PASS: Test scripts configured')
+        else:
+            print('FAIL: No test script')
+            exit_code = 1
 
-# 3. Check build validation
-echo "✓ Build validation configured"
+# 3. Check production settings
+if os.path.exists('apps/api/src/config.py'):
+    with open('apps/api/src/config.py') as f:
+        content = f.read()
+        if 'PRODUCTION' in content or 'production' in content:
+            print('PASS: Production configuration exists')
+        else:
+            print('WARN: No production config detected')
 
-# 4. Check deployment checks
-echo "✓ Deployment checks configured"
+# 4. Check Docker healthcheck
+if os.path.exists('apps/api/Dockerfile'):
+    with open('apps/api/Dockerfile') as f:
+        content = f.read()
+        if 'HEALTHCHECK' in content:
+            print('PASS: HEALTHCHECK configured')
+        else:
+            print('FAIL: No HEALTHCHECK in Dockerfile')
+            exit_code = 1
 
 # 5. Check env validation
-echo "✓ Environment validation configured"
+required_files = ['.env.production.example', '.env']
+found = [f for f in required_files if os.path.exists(f)]
+if found:
+    print(f'PASS: Env files present: {found}')
+else:
+    print('FAIL: No env files found')
+    exit_code = 1
 
-# 6. Check security checks
-echo "✓ Security checks configured"
+# 6. Check security headers
+if os.path.exists('apps/api/src/middleware.py'):
+    with open('apps/api/src/middleware.py') as f:
+        content = f.read()
+        headers = ['Strict-Transport-Security', 'Content-Security-Policy', 'X-Content-Type-Options']
+        missing_headers = [h for h in headers if h not in content]
+        if missing_headers:
+            print(f'FAIL: Missing security headers: {missing_headers}')
+            exit_code = 1
+        else:
+            print('PASS: Security headers present')
 
-# 7. Check monitoring
-echo "✓ Health checks available"
+# 7. Check migration files
+import glob
+migrations = glob.glob('apps/api/migrations/versions/*.py')
+if migrations:
+    print(f'PASS: {len(migrations)} migration files present')
+else:
+    print('FAIL: No migration files found')
+    exit_code = 1
 
-# 8. Check audit logging
-echo "✓ Audit logging available"
-
-echo "All production checks passed!"
-EOF
-          chmod +x /tmp/prod_check.sh
-          /tmp/prod_check.sh
+sys.exit(exit_code)
+"
 
   deploy-ready:
     name: Deploy Ready
     runs-on: ubuntu-latest
     needs: production-checklist
-    if: github.ref == 'refs/heads/main'
+    if: success()
     steps:
       - name: Create deployment trigger
         run: |
-          echo "🚀 Ready for production deployment!"
+          echo "Ready for production deployment!"
           echo "All validation checks passed successfully."
 
   notify-success:
     name: Notify Success
     runs-on: ubuntu-latest
     needs: deploy-ready
-    if: always() && needs.deploy-ready.result == 'success'
+    if: success()
     steps:
       - name: Post to Slack
         run: |
           echo "Deployment pipeline completed successfully"
+
+  notify-failure:
+    name: Notify Failure
+    runs-on: ubuntu-latest
+    needs: deploy-ready
+    if: failure()
+    steps:
+      - name: Notify on failure
+        run: |
+          echo "Deployment pipeline failed"

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 
-from ...core.models import AuditLog, User, Tenant
+from ...core.models import AuditLog, User, Tenant, UsageLog, QueueJob
 from ...core.database import get_db
 from ..dependencies.auth import get_current_user
 from ...core.auth import AuthContext
@@ -89,34 +89,6 @@ class HealthStatus(BaseModel):
 
 MOCK_START_TIME = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
-MOCK_API_METRICS = {
-    '/api/v1/tenders': {'requests': 1250, 'errors': 12, 'avg_duration': 45.2},
-    '/api/v1/documents': {'requests': 890, 'errors': 8, 'avg_duration': 120.5},
-    '/api/v1/ai/analyze': {'requests': 456, 'errors': 3, 'avg_duration': 2500.0},
-    '/api/v1/queue/submit': {'requests': 2100, 'errors': 15, 'avg_duration': 15.0},
-    '/api/v1/bids': {'requests': 340, 'errors': 2, 'avg_duration': 35.8},
-}
-
-MOCK_QUEUE_METRICS = [
-    {'queue_name': 'ocr', 'pending': 12, 'active': 3, 'completed': 1500, 'failed': 8, 'dead_letter': 2, 'avg_time': 4500},
-    {'queue_name': 'parsing', 'pending': 5, 'active': 2, 'completed': 890, 'failed': 4, 'dead_letter': 1, 'avg_time': 2200},
-    {'queue_name': 'analysis', 'pending': 8, 'active': 1, 'completed': 456, 'failed': 2, 'dead_letter': 0, 'avg_time': 8500},
-    {'queue_name': 'email', 'pending': 25, 'active': 5, 'completed': 3200, 'failed': 12, 'dead_letter': 3, 'avg_time': 800},
-    {'queue_name': 'notifications', 'pending': 45, 'active': 8, 'completed': 5600, 'failed': 20, 'dead_letter': 5, 'avg_time': 200},
-]
-
-MOCK_AI_METRICS = [
-    {'provider': 'openai', 'model': 'gpt-4', 'requests': 850, 'input_tokens': 1250000, 'output_tokens': 890000, 'cost': 42.50, 'latency': 1800, 'success_rate': 0.98},
-    {'provider': 'anthropic', 'model': 'claude-3', 'requests': 420, 'input_tokens': 680000, 'output_tokens': 520000, 'cost': 28.75, 'latency': 1500, 'success_rate': 0.99},
-    {'provider': 'azure', 'model': 'gpt-35-turbo', 'requests': 1250, 'input_tokens': 2100000, 'output_tokens': 1400000, 'cost': 15.20, 'latency': 900, 'success_rate': 0.97},
-]
-
-MOCK_FAILURES = [
-    {'id': 'f1', 'type': 'timeout', 'queue': 'analysis', 'message': 'AI request timeout after 30s', 'occurred_at': '2026-05-19T10:30:00Z', 'retry_count': 3},
-    {'id': 'f2', 'type': 'invalid_input', 'queue': 'parsing', 'message': 'Failed to parse corrupt PDF', 'occurred_at': '2026-05-19T09:45:00Z', 'retry_count': 2},
-    {'id': 'f3', 'type': 'rate_limit', 'queue': 'ocr', 'message': 'External OCR API rate limit exceeded', 'occurred_at': '2026-05-19T08:20:00Z', 'retry_count': 5},
-]
-
 
 def _get_uptime() -> float:
     return (datetime.now(timezone.utc) - MOCK_START_TIME).total_seconds()
@@ -126,45 +98,80 @@ def _get_uptime() -> float:
 async def get_api_metrics(
     limit: int = Query(20, le=100),
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    """Get API endpoint metrics"""
-    
-    results = []
-    for endpoint, data in MOCK_API_METRICS.items():
-        requests = data['requests']
-        errors = data['errors']
-        success = requests - errors
-        
-        results.append(APIEndpointMetrics(
-            endpoint=endpoint,
-            method='GET',
-            total_requests=requests,
-            success_count=success,
-            error_count=errors,
-            avg_duration_ms=data['avg_duration'],
-            p50_latency_ms=data['avg_duration'] * 0.8,
-            p95_latency_ms=data['avg_duration'] * 1.5,
-            p99_latency_ms=data['avg_duration'] * 2.0,
-        ))
-    
-    return results[:limit]
+    """Get API endpoint metrics — counts UsageLog by action"""
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        rows = await db.execute(
+            select(
+                UsageLog.action,
+                func.count(UsageLog.id).label('total_requests'),
+            )
+            .where(UsageLog.tenant_id == tenant_id)
+            .group_by(UsageLog.action)
+            .order_by(func.count(UsageLog.id).desc())
+            .limit(limit)
+        )
+        results = []
+        for row in rows.all():
+            results.append(APIEndpointMetrics(
+                endpoint=row.action,
+                method='POST',
+                total_requests=row.total_requests,
+                success_count=row.total_requests,
+                error_count=0,
+                avg_duration_ms=0.0,
+                p50_latency_ms=0.0,
+                p95_latency_ms=0.0,
+                p99_latency_ms=0.0,
+            ))
+        return results
+    except Exception:
+        logger.exception('Failed to fetch API metrics')
+        return []
 
 
 @router.get('/metrics/queue', response_model=list[QueueMetrics])
 async def get_queue_metrics(
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    """Get queue metrics"""
-    
-    return [QueueMetrics(
-        queue_name=m['queue_name'],
-        pending=m['pending'],
-        active=m['active'],
-        completed=m['completed'],
-        failed=m['failed'],
-        dead_letter=m['dead_letter'],
-        avg_processing_time_ms=m['avg_time'],
-    ) for m in MOCK_QUEUE_METRICS]
+    """Get queue metrics — counts QueueJob by status"""
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        rows = await db.execute(
+            select(
+                QueueJob.job_type,
+                QueueJob.status,
+                func.count(QueueJob.id).label('cnt'),
+            )
+            .where(QueueJob.tenant_id == tenant_id)
+            .group_by(QueueJob.job_type, QueueJob.status)
+        )
+        job_data = {}
+        for row in rows.all():
+            key = row.job_type or 'unknown'
+            if key not in job_data:
+                job_data[key] = {'queue_name': key, 'pending': 0, 'active': 0, 'completed': 0, 'failed': 0, 'dead_letter': 0, 'avg_processing_time_ms': 0.0}
+            status = row.status or 'pending'
+            if status == 'pending':
+                job_data[key]['pending'] = row.cnt
+            elif status == 'processing':
+                job_data[key]['active'] = row.cnt
+            elif status == 'completed':
+                job_data[key]['completed'] = row.cnt
+            elif status == 'failed':
+                job_data[key]['failed'] = row.cnt
+            elif status == 'cancelled':
+                job_data[key]['dead_letter'] = row.cnt
+            else:
+                job_data[key]['pending'] += row.cnt
+
+        return [QueueMetrics(**v) for v in job_data.values()]
+    except Exception:
+        logger.exception('Failed to fetch queue metrics')
+        return []
 
 
 @router.get('/metrics/ai', response_model=list[AITokenMetrics])
@@ -172,41 +179,82 @@ async def get_ai_metrics(
     provider: Optional[str] = Query(None),
     days: int = Query(7, le=30),
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    """Get AI token usage metrics"""
-    
-    metrics = MOCK_AI_METRICS
-    if provider:
-        metrics = [m for m in metrics if m['provider'] == provider]
-    
-    return [AITokenMetrics(
-        provider=m['provider'],
-        model=m['model'],
-        total_requests=m['requests'],
-        total_input_tokens=m['input_tokens'],
-        total_output_tokens=m['output_tokens'],
-        total_cost=m['cost'],
-        avg_latency_ms=m['latency'],
-        success_rate=m['success_rate'],
-    ) for m in metrics]
+    """Get AI token usage metrics — sums cost_usd and tokens_used from UsageLog"""
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        since = datetime.utcnow() - timedelta(days=days)
+        conditions = [
+            UsageLog.tenant_id == tenant_id,
+            UsageLog.created_at >= since,
+        ]
+        if provider:
+            conditions.append(UsageLog.action.like(f'%{provider}%'))
+
+        rows = await db.execute(
+            select(
+                func.coalesce(func.sum(UsageLog.cost_usd), 0).label('total_cost'),
+                func.coalesce(func.sum(UsageLog.tokens_used), 0).label('total_tokens'),
+                func.count(UsageLog.id).label('total_requests'),
+            )
+            .where(*conditions)
+        )
+        row = rows.one()
+        total_cost = float(row.total_cost) if row.total_cost else 0.0
+        total_tokens = int(row.total_tokens) if row.total_tokens else 0
+        total_requests = int(row.total_requests) if row.total_requests else 0
+
+        return [AITokenMetrics(
+            provider=provider or 'openai',
+            model='gpt-4',
+            total_requests=total_requests,
+            total_input_tokens=total_tokens // 2 if total_tokens else 0,
+            total_output_tokens=total_tokens // 2 if total_tokens else 0,
+            total_cost=total_cost,
+            avg_latency_ms=0.0,
+            success_rate=1.0 if total_requests > 0 else 0.0,
+        )]
+    except Exception:
+        logger.exception('Failed to fetch AI metrics')
+        return []
 
 
 @router.get('/metrics/processing', response_model=ProcessingMetrics)
 async def get_processing_metrics(
     days: int = Query(1, le=30),
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
     """Get document processing metrics"""
-    
-    return ProcessingMetrics(
-        document_count=1250,
-        ocr_count=890,
-        parsing_count=456,
-        analysis_count=340,
-        extraction_count=210,
-        avg_processing_time_ms=1850,
-        success_rate=0.96,
-    )
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        since = datetime.utcnow() - timedelta(days=days)
+
+        total = await db.scalar(
+            select(func.count(UsageLog.id)).where(
+                UsageLog.tenant_id == tenant_id,
+                UsageLog.created_at >= since,
+                UsageLog.resource_type == 'document',
+            )
+        ) or 0
+
+        return ProcessingMetrics(
+            document_count=total,
+            ocr_count=0,
+            parsing_count=0,
+            analysis_count=0,
+            extraction_count=0,
+            avg_processing_time_ms=0.0,
+            success_rate=1.0,
+        )
+    except Exception:
+        logger.exception('Failed to fetch processing metrics')
+        return ProcessingMetrics(
+            document_count=0, ocr_count=0, parsing_count=0,
+            analysis_count=0, extraction_count=0,
+            avg_processing_time_ms=0.0, success_rate=0.0,
+        )
 
 
 @router.get('/metrics/failures', response_model=FailureMetrics)
@@ -214,56 +262,135 @@ async def get_failure_metrics(
     days: int = Query(7, le=30),
     queue: Optional[str] = Query(None),
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    """Get failure tracking metrics"""
-    
-    failures_by_type = {'timeout': 45, 'invalid_input': 32, 'rate_limit': 28, 'external_error': 15}
-    failures_by_queue = {'analysis': 38, 'ocr': 35, 'parsing': 28, 'email': 19}
-    
-    if queue:
-        failures_by_queue = {queue: failures_by_queue.get(queue, 0)}
-    
-    return FailureMetrics(
-        total_failures=120,
-        failures_by_type=failures_by_type,
-        failures_by_queue=failures_by_queue,
-        recent_failures=MOCK_FAILURES,
-        retry_rate=0.75,
-    )
+    """Get failure tracking metrics — queries QueueJob where status='failed'"""
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        since = datetime.utcnow() - timedelta(days=days)
+
+        conditions = [
+            QueueJob.tenant_id == tenant_id,
+            QueueJob.status == 'failed',
+            QueueJob.created_at >= since,
+        ]
+        if queue:
+            conditions.append(QueueJob.job_type == queue)
+
+        total = await db.scalar(
+            select(func.count(QueueJob.id)).where(*conditions)
+        ) or 0
+
+        type_rows = await db.execute(
+            select(QueueJob.job_type, func.count(QueueJob.id).label('cnt'))
+            .where(*conditions)
+            .group_by(QueueJob.job_type)
+        )
+        failures_by_type = {}
+        failures_by_queue = {}
+        recent = []
+        for row in type_rows.all():
+            jt = row.job_type or 'unknown'
+            failures_by_type[jt] = row.cnt
+            failures_by_queue[jt] = row.cnt
+
+        recent_q = (
+            select(QueueJob)
+            .where(*conditions)
+            .order_by(QueueJob.created_at.desc())
+            .limit(10)
+        )
+        recent_rows = (await db.execute(recent_q)).scalars().all()
+        for r in recent_rows:
+            recent.append({
+                'id': str(r.id),
+                'type': r.job_type or 'unknown',
+                'queue': r.job_type or 'unknown',
+                'message': r.error or '',
+                'occurred_at': r.created_at.isoformat() if r.created_at else '',
+                'retry_count': r.attempts or 0,
+            })
+
+        return FailureMetrics(
+            total_failures=total,
+            failures_by_type=failures_by_type,
+            failures_by_queue=failures_by_queue,
+            recent_failures=recent,
+            retry_rate=0.0,
+        )
+    except Exception:
+        logger.exception('Failed to fetch failure metrics')
+        return FailureMetrics(
+            total_failures=0, failures_by_type={},
+            failures_by_queue={}, recent_failures=[], retry_rate=0.0,
+        )
 
 
 @router.get('/metrics/summary')
 async def get_metrics_summary(
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
     """Get overall metrics summary"""
-    
-    total_api_requests = sum(m['requests'] for m in MOCK_API_METRICS.values())
-    total_queue_jobs = sum(m['completed'] for m in MOCK_QUEUE_METRICS)
-    total_ai_requests = sum(m['requests'] for m in MOCK_AI_METRICS)
-    total_ai_cost = sum(m['cost'] for m in MOCK_AI_METRICS)
-    
-    return {
-        'api': {
-            'total_requests': total_api_requests,
-            'error_rate': 0.015,
-            'avg_response_time_ms': 145.5,
-        },
-        'queue': {
-            'total_jobs': total_queue_jobs,
-            'active_jobs': sum(m['active'] for m in MOCK_QUEUE_METRICS),
-            'failure_rate': 0.008,
-        },
-        'ai': {
-            'total_requests': total_ai_requests,
-            'total_cost': round(total_ai_cost, 2),
-            'total_tokens': sum(m['input_tokens'] + m['output_tokens'] for m in MOCK_AI_METRICS),
-        },
-        'processing': {
-            'documents_processed': 1250,
-            'success_rate': 0.96,
-        },
-    }
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+
+        total_api = await db.scalar(
+            select(func.count(UsageLog.id)).where(UsageLog.tenant_id == tenant_id)
+        ) or 0
+
+        cost_row = await db.execute(
+            select(func.coalesce(func.sum(UsageLog.cost_usd), 0).label('total'))
+            .where(UsageLog.tenant_id == tenant_id)
+        )
+        total_cost = float(cost_row.scalar_one() or 0)
+
+        token_row = await db.execute(
+            select(func.coalesce(func.sum(UsageLog.tokens_used), 0).label('total'))
+            .where(UsageLog.tenant_id == tenant_id)
+        )
+        total_tokens = int(token_row.scalar_one() or 0)
+
+        queue_total = await db.scalar(
+            select(func.count(QueueJob.id)).where(QueueJob.tenant_id == tenant_id)
+        ) or 0
+
+        queue_active = await db.scalar(
+            select(func.count(QueueJob.id)).where(
+                QueueJob.tenant_id == tenant_id,
+                QueueJob.status == 'processing',
+            )
+        ) or 0
+
+        return {
+            'api': {
+                'total_requests': total_api,
+                'error_rate': 0.0,
+                'avg_response_time_ms': 0.0,
+            },
+            'queue': {
+                'total_jobs': queue_total,
+                'active_jobs': queue_active,
+                'failure_rate': 0.0,
+            },
+            'ai': {
+                'total_requests': total_api,
+                'total_cost': round(total_cost, 2),
+                'total_tokens': total_tokens,
+            },
+            'processing': {
+                'documents_processed': 0,
+                'success_rate': 0.0,
+            },
+        }
+    except Exception:
+        logger.exception('Failed to fetch metrics summary')
+        return {
+            'api': {'total_requests': 0, 'error_rate': 0.0, 'avg_response_time_ms': 0.0},
+            'queue': {'total_jobs': 0, 'active_jobs': 0, 'failure_rate': 0.0},
+            'ai': {'total_requests': 0, 'total_cost': 0.0, 'total_tokens': 0},
+            'processing': {'documents_processed': 0, 'success_rate': 0.0},
+        }
 
 
 @router.get('/health')
@@ -271,7 +398,6 @@ async def get_health(
     x_health_check: Optional[str] = Header(None, alias='X-Health-Check'),
 ):
     """Health check endpoint"""
-    
     return HealthStatus(
         status='healthy',
         checks={
@@ -329,7 +455,7 @@ async def readiness_check(
         pass
 
     all_ready = checks['database']
-    
+
     return JSONResponse(
         status_code=200 if all_ready else 503,
         content={
@@ -342,7 +468,6 @@ async def readiness_check(
 @router.get('/health/live')
 async def liveness_check():
     """Liveness check for container orchestration"""
-    
     return {'status': 'alive', 'timestamp': datetime.now(timezone.utc).isoformat()}
 
 
@@ -352,9 +477,7 @@ async def record_custom_metric(
     current_user: AuthContext = Depends(get_current_user),
 ):
     """Record a custom metric"""
-    
     logger.info(f"Custom metric: {metric.name}={metric.value} tags={metric.tags}")
-    
     return {'success': True, 'metric_id': f"metric-{time.time()}"}
 
 
@@ -363,50 +486,61 @@ async def get_metrics_trend(
     metric_type: str = Query(..., pattern='^(api|queue|ai|processing)$'),
     days: int = Query(7, le=30),
     current_user: AuthContext = Depends(get_current_user),
+    db=Depends(get_db),
 ):
     """Get metrics trends over time"""
-    
-    if metric_type == 'api':
-        return {
-            'metric': 'api_requests',
-            'data': [
-                {'date': '2026-05-19', 'value': 4500},
-                {'date': '2026-05-18', 'value': 4200},
-                {'date': '2026-05-17', 'value': 3800},
-                {'date': '2026-05-16', 'value': 5100},
-                {'date': '2026-05-15', 'value': 4800},
-            ]
-        }
-    elif metric_type == 'queue':
-        return {
-            'metric': 'queue_throughput',
-            'data': [
-                {'date': '2026-05-19', 'value': 1250},
-                {'date': '2026-05-18', 'value': 1180},
-                {'date': '2026-05-17', 'value': 950},
-                {'date': '2026-05-16', 'value': 1400},
-                {'date': '2026-05-15', 'value': 1320},
-            ]
-        }
-    elif metric_type == 'ai':
-        return {
-            'metric': 'ai_tokens',
-            'data': [
-                {'date': '2026-05-19', 'input': 250000, 'output': 180000, 'cost': 12.5},
-                {'date': '2026-05-18', 'input': 220000, 'output': 160000, 'cost': 11.2},
-                {'date': '2026-05-17', 'input': 280000, 'output': 200000, 'cost': 14.0},
-                {'date': '2026-05-16', 'input': 310000, 'output': 220000, 'cost': 15.5},
-                {'date': '2026-05-15', 'input': 190000, 'output': 140000, 'cost': 9.5},
-            ]
-        }
-    else:
-        return {
-            'metric': 'processing_time_ms',
-            'data': [
-                {'date': '2026-05-19', 'value': 1850},
-                {'date': '2026-05-18', 'value': 1920},
-                {'date': '2026-05-17', 'value': 2100},
-                {'date': '2026-05-16', 'value': 1750},
-                {'date': '2026-05-15', 'value': 1680},
-            ]
-        }
+    try:
+        tenant_id = UUID(current_user.tenant_id) if current_user.tenant_id else None
+        since = datetime.utcnow() - timedelta(days=days)
+
+        if metric_type == 'api':
+            rows = await db.execute(
+                select(
+                    func.date(UsageLog.created_at).label('day'),
+                    func.count(UsageLog.id).label('cnt'),
+                )
+                .where(UsageLog.tenant_id == tenant_id, UsageLog.created_at >= since)
+                .group_by(func.date(UsageLog.created_at))
+                .order_by(func.date(UsageLog.created_at))
+            )
+            data = [{'date': str(r.day), 'value': r.cnt} for r in rows.all()]
+            return {'metric': 'api_requests', 'data': data}
+
+        elif metric_type == 'queue':
+            rows = await db.execute(
+                select(
+                    func.date(QueueJob.created_at).label('day'),
+                    func.count(QueueJob.id).label('cnt'),
+                )
+                .where(QueueJob.tenant_id == tenant_id, QueueJob.created_at >= since)
+                .group_by(func.date(QueueJob.created_at))
+                .order_by(func.date(QueueJob.created_at))
+            )
+            data = [{'date': str(r.day), 'value': r.cnt} for r in rows.all()]
+            return {'metric': 'queue_throughput', 'data': data}
+
+        elif metric_type == 'ai':
+            rows = await db.execute(
+                select(
+                    func.date(UsageLog.created_at).label('day'),
+                    func.coalesce(func.sum(UsageLog.tokens_used), 0).label('tokens'),
+                    func.coalesce(func.sum(UsageLog.cost_usd), 0).label('cost'),
+                )
+                .where(UsageLog.tenant_id == tenant_id, UsageLog.created_at >= since)
+                .group_by(func.date(UsageLog.created_at))
+                .order_by(func.date(UsageLog.created_at))
+            )
+            data = [{'date': str(r.day), 'input': r.tokens // 2, 'output': r.tokens // 2, 'cost': float(r.cost)} for r in rows.all()]
+            return {'metric': 'ai_tokens', 'data': data}
+
+        else:
+            return {
+                'metric': 'processing_time_ms',
+                'data': [
+                    {'date': (since + timedelta(days=i)).strftime('%Y-%m-%d'), 'value': 0}
+                    for i in range(days)
+                ],
+            }
+    except Exception:
+        logger.exception('Failed to fetch trends')
+        return {'metric': metric_type, 'data': []}

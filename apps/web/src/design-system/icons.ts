@@ -93,6 +93,74 @@ export const roleNavGroups: Record<
       ],
     },
   ],
+  manager: [
+    {
+      label: 'Management',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
+        { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
+        { name: 'Upload', href: '/dashboard/upload', icon: Upload },
+        { name: 'Review', href: '/dashboard/review', icon: ClipboardCheck },
+      ],
+    },
+    {
+      label: 'Organization',
+      items: [
+        { name: 'Team', href: '/dashboard/organizations', icon: Users },
+        { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
+        { name: 'Usage', href: '/dashboard/usage', icon: BarChart3 },
+        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+      ],
+    },
+  ],
+  analyst: [
+    {
+      label: 'Analysis',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
+        { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
+        { name: 'Upload', href: '/dashboard/upload', icon: Upload },
+        { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+      ],
+    },
+    {
+      label: 'Reference',
+      items: [
+        { name: 'Documents', href: '/dashboard/documents', icon: FileText },
+        { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
+      ],
+    },
+  ],
+  member: [
+    {
+      label: 'Work',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
+        { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
+        { name: 'Upload', href: '/dashboard/upload', icon: Upload },
+      ],
+    },
+    {
+      label: 'Organization',
+      items: [
+        { name: 'Usage', href: '/dashboard/usage', icon: BarChart3 },
+      ],
+    },
+  ],
+  viewer: [
+    {
+      label: 'View',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
+        { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
+        { name: 'Documents', href: '/dashboard/documents', icon: FileText },
+      ],
+    },
+  ],
   user: [
     {
       label: 'Work',
