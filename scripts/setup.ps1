@@ -48,9 +48,16 @@ Write-Host "`n[2/6] Installing Node.js dependencies..." -ForegroundColor Yellow
 pnpm install
 
 Write-Host "`n[3/6] Setting up Python environment..." -ForegroundColor Yellow
-cd apps/api
-uv sync
-cd ../..
+$apiDir = Join-Path $PSScriptRoot "..\apps\api" | Resolve-Path
+$venvPy = Join-Path $apiDir "venv\Scripts\python.exe"
+if (-not (Test-Path $venvPy)) {
+    Push-Location $apiDir
+    python -m venv venv
+    Pop-Location
+}
+. (Join-Path $PSScriptRoot "install-python-deps.ps1")
+$venvPip = Join-Path $apiDir "venv\Scripts\pip.exe"
+Install-TenderIqPythonDeps -ApiDir $apiDir -VenvPython $venvPy -VenvPip $venvPip -Force
 
 Write-Host "`n[4/6] Creating environment file..." -ForegroundColor Yellow
 if (-not (Test-Path ".env")) {
@@ -63,7 +70,7 @@ if (-not (Test-Path ".env")) {
 
 Write-Host "`n[5/6] Setting up pre-commit hooks..." -ForegroundColor Yellow
 try {
-    uv run pre-commit install
+    & $venvPy -m pre_commit install
     Write-Host "  Pre-commit hooks installed" -ForegroundColor Green
 } catch {
     Write-Host "  Skipped pre-commit setup" -ForegroundColor Gray

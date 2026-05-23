@@ -1,3 +1,9 @@
+import type { Plan } from '@/types/onboarding';
+import { api } from '@/lib/api-client';
+import { getStoredSession, setStoredSession, type AuthUser } from './auth-session';
+import { normalizeBillingCycle, normalizePlanId } from './billing-plan-bridge';
+import { isSuperAdmin } from '@/lib/permissions';
+
 export interface OnboardingApiResponse {
   id: string;
   user_id: string;
@@ -16,9 +22,6 @@ export interface OnboardingApiResponse {
   step_5_data: Record<string, unknown>;
   is_completed: boolean;
 }
-import type { Plan } from '@/types/onboarding';
-import { getStoredSession, setStoredSession, type AuthUser } from './auth-session';
-import { normalizeBillingCycle, normalizePlanId } from './billing-plan-bridge';
 
 export interface OnboardingSessionPayload {
   access_token: string;
@@ -103,4 +106,23 @@ export function normalizeOnboardingStep4(data: {
 export function parsePlansResponse(payload: { plans?: Plan[] } | Plan[]): Plan[] {
   if (Array.isArray(payload)) return payload;
   return payload.plans ?? [];
+}
+
+/** Authenticated onboarding status (shared by Clerk sign-in and password login). */
+export async function fetchOnboardingStatusAuthenticated(
+  accessToken: string
+): Promise<OnboardingApiResponse> {
+  return api.get<OnboardingApiResponse>('/api/v1/onboarding/status', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** Fail closed: unknown status or API error → send user to onboarding (except platform admin). */
+export function shouldCompleteOnboardingFirst(
+  status: OnboardingApiResponse | null,
+  role?: string | null
+): boolean {
+  if (role && isSuperAdmin(role)) return false;
+  if (!status) return true;
+  return !status.is_completed;
 }

@@ -1,170 +1,107 @@
 # TenderIQ Local Setup Guide
 
-## Quick Start (One-Click)
+## Quick Start (recommended)
 
-The easiest way to run TenderIQ locally is to use the one-click startup system:
+### Prerequisites
 
-### Prerequisites (Required)
+1. **Python 3.12+** — https://www.python.org/downloads/ (check “Add to PATH”)
+2. **Node.js 20+** — https://nodejs.org/ (pnpm via corepack)
+3. **MySQL 8+** — https://dev.mysql.com/downloads/ (Windows service running)
 
-Before running TenderIQ, you need to install:
+No PostgreSQL, Redis, or Docker required for local dev.
 
-1. **Python 3.10+** - Download from https://www.python.org/downloads/
-2. **Node.js 18+** - Download from https://nodejs.org/
-3. **PostgreSQL 15+** - Download from https://www.postgresql.org/download/windows/
-4. **Redis** - Download from https://redis.io/download (or use Redis Windows port)
-
-### Quick Start Steps
+### Steps
 
 ```batch
-1. Clone or download the TenderIQ project
-2. Double-click run.bat
-3. Wait for automatic installation and startup
-4. Open http://localhost:3000 in your browser
-```
-
-That's it! The system will automatically:
-- Check for required software
-- Create Python virtual environment
-- Install all dependencies
-- Create default configuration
-- Start all services
-- Verify everything is working
-
----
-
-## Manual Setup (Alternative)
-
-If you prefer to set up manually:
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/yourorg/tenderiq.git
+git clone <your-repo-url>
 cd tenderiq
+copy .env.example .env
 ```
 
-### 2. Backend Setup
-
-```bash
-cd apps/api
-
-# Create virtual environment
-python -m venv venv
-
-# Activate
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env file
-copy ..\..\.env.example .env
-# Edit .env with your settings
-```
-
-### 3. Frontend Setup
-
-```bash
-cd apps/web
-
-# Install dependencies
-npm install
-```
-
-### 4. Start Services
-
-```bash
-# Terminal 1 - Start Redis (if not running)
-redis-server
-
-# Terminal 2 - Backend
-cd apps/api
-venv\Scripts\activate
-uvicorn main:app --reload
-
-# Terminal 3 - Frontend  
-cd apps/web
-npm run dev
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
+Edit `.env` and set **`DATABASE_URL`** with your real MySQL password:
 
 ```env
-# Database (PostgreSQL)
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/tenderiq
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# Authentication (Clerk) - Get from https://clerk.com
-CLERK_PUBLISHABLE_KEY=pk_test_xxx
-CLERK_SECRET_KEY=sk_test_xxx
-
-# Security (Generate with: python -c "import secrets; print(secrets.token_hex(32))")
-SECRET_KEY=your-generated-secret-key
-
-# AI Providers (Optional) - Get from https://platform.openai.com
-OPENAI_API_KEY=sk-xxx
-
-# App URLs
-NODE_ENV=development
-APP_URL=http://localhost:3000
-API_URL=http://localhost:8000
+DATABASE_URL=mysql+aiomysql://root:YOUR_PASSWORD@localhost:3306/tenderiq?charset=utf8mb4
 ```
+
+Then:
+
+```batch
+run.bat
+```
+
+`run.bat` automatically:
+
+- Creates `venv` and installs Python/Node dependencies
+- Checks MySQL connectivity
+- Creates the `tenderiq` database if missing
+- Runs **`alembic upgrade head`**
+- Starts API (`:8000`) and web (`:3000`)
+
+Sign in at http://localhost:3000/sign-in using `SUPER_ADMIN_*` or `DEMO_USER_*` from `.env`.
+
+Use **`run.bat check`** for compile + import + MySQL + migrations without starting servers.
+
+---
+
+## Manual setup
+
+```bash
+cd apps/api
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+cd ../..
+copy .env.example .env
+# edit DATABASE_URL
+cd apps/api
+set DOTENV_PATH=../../.env
+python scripts/ensure_mysql.py
+python -m alembic upgrade head
+uvicorn src.main:app --reload --port 8000
+```
+
+Frontend (second terminal, repo root):
+
+```bash
+pnpm install
+pnpm --filter @tendoriq/web run dev
+```
+
+See [MYSQL_SETUP.md](./MYSQL_SETUP.md) and [database-migrations.md](./database-migrations.md).
 
 ---
 
 ## Troubleshooting
 
-### "Python not found"
+### MySQL connection failed
 
-Install Python from https://www.python.org/downloads/
-Make sure to check "Add Python to PATH" during installation.
+1. Start the **MySQL** Windows service (Services app or `net start MySQL80`).
+2. Confirm password in `.env` matches your MySQL user.
+3. Run `run.bat check` — step `[3/5] MySQL reachability` must pass.
+4. Create DB manually if needed:
 
-### "Node.js not found"
-
-Install Node.js from https://nodejs.org/
-Use version 18 or higher.
-
-### "PostgreSQL connection failed"
-
-1. Start PostgreSQL service:
-   - Windows: Start "PostgreSQL" service from Services app
-   - Or run: `pg_ctl -D "C:\Program Files\PostgreSQL\15\data" start`
-
-2. Create database:
-   ```bash
-   createdb tenderiq
-   ```
-
-### "Redis connection failed"
-
-1. Install Redis for Windows or use WSL
-2. Or install Memurai/Redis Windows port
-3. Start Redis: `redis-server`
-
-### "Port already in use"
-
-Stop other services using the port:
-```batch
-netstat -ano | findstr :8000
-taskkill /PID <PID> /F
+```sql
+CREATE DATABASE tenderiq CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### "Module not found"
+### Migrations failed
 
-Reinstall dependencies:
-```batch
-cd apps/api
-venv\Scripts\activate
-pip install -r requirements.txt
+From `apps/api` with `DOTENV_PATH` pointing at repo `.env`:
+
+```bash
+python -m alembic upgrade head
 ```
+
+### Port already in use
+
+```batch
+run.bat stop
+```
+
+### Python / Node not found
+
+Install Python 3.12+ and Node 20+, then re-run `run.bat`.
 
 ---
 
@@ -172,43 +109,25 @@ pip install -r requirements.txt
 
 | Script | Purpose |
 |--------|---------|
-| `run.bat` | One-click startup (main script) |
-| `run.bat setup` | Force full dependency setup + startup |
-| `run.bat stop` | Stop all services |
-| `scripts/restart.bat` | Restart all services |
-| `scripts/validate-env.ps1` | Validate environment |
-| `scripts/health-check.ps1` | Check service health |
+| `run.bat` | Full bootstrap: deps, MySQL, migrations, start stack |
+| `run.bat check` | L0 gates without starting servers |
+| `run.bat setup` | Force reinstall dependencies + start |
+| `run.bat stop` | Stop API and web |
 
 ---
 
-## Services
-
-When running, TenderIQ starts these services:
+## Services (local)
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| Frontend | 3000 | Next.js web app |
-| Backend API | 8000 | FastAPI server |
-| PostgreSQL | 5432 | Database |
-| Redis | 6379 | Queue/Cache |
+| Frontend | 3000 | Next.js |
+| Backend API | 8000 | FastAPI |
+| MySQL | 3306 | Database |
 
 ---
 
-## Access Points
+## Access
 
-After successful startup:
-
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
-
----
-
-## Support
-
-For issues:
-1. Check the logs in `.tenderiq/startup.log`
-2. Run `scripts/validate-env.ps1`
-3. Run `scripts/health-check.ps1`
-4. Check the troubleshooting section above
+- Frontend: http://localhost:3000  
+- API docs: http://localhost:8000/docs  
+- Health: http://localhost:8000/health  

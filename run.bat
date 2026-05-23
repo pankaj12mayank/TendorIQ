@@ -15,6 +15,7 @@ if /I "%~1"=="stop" goto :do_stop
 if /I "%~1"=="check" goto :do_check
 if /I "%~1"=="setup" goto :do_setup
 if /I "%~1"=="full" goto :do_setup
+if /I "%~1"=="dev" goto :do_turbo_dev
 
 where powershell >nul 2>&1
 if errorlevel 1 (
@@ -79,9 +80,17 @@ if not "%EXIT_CODE%"=="0" (
     exit /b %EXIT_CODE%
 )
 echo.
-echo [OK] Backend import check passed. Run run.bat to start servers.
+echo [OK] L0 checks passed. Run run.bat to start servers.
 pause
 exit /b 0
+
+:do_turbo_dev
+echo.
+echo  TenderIQ - Turbo dev (pnpm dev — see docs/monorepo-tooling.md)
+echo  ==================================================
+cd /d "%ROOT%"
+call pnpm dev
+exit /b %ERRORLEVEL%
 
 :do_stop
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\tenderiq-stop.ps1"

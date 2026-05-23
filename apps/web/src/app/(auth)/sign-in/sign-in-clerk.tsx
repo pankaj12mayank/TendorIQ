@@ -4,10 +4,13 @@ import { SignIn, useUser, useSession } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { apiUrl as resolveApiUrl } from '@/lib/api-config';
 import { exchangeClerkSession } from '@/lib/auth-api';
 import { setStoredSession } from '@/lib/auth-session';
 import { getPostLoginPath } from '@/lib/auth-redirect';
+import {
+  fetchOnboardingStatusAuthenticated,
+  shouldCompleteOnboardingFirst,
+} from '@/lib/onboarding-api';
 import { isSuperAdmin } from '@/lib/permissions';
 
 /** Clerk SSO block on the unified sign-in page (no separate tenant login). */
@@ -42,21 +45,19 @@ export default function SignInClerk() {
           return;
         }
 
-        const onboardingRes = await fetch(resolveApiUrl('/api/v1/onboarding/status'), {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiToken}`,
-          },
-        });
-        if (onboardingRes.ok) {
-          const data = await onboardingRes.json();
-          if (!data.is_completed) {
-            router.push('/onboarding');
-            return;
-          }
+        let onboardingStatus = null;
+        try {
+          onboardingStatus = await fetchOnboardingStatusAuthenticated(apiToken);
+        } catch {
+          onboardingStatus = null;
+        }
+        if (shouldCompleteOnboardingFirst(onboardingStatus, role)) {
+          router.replace('/onboarding');
+          return;
         }
       } catch {
-        // fall through to dashboard
+        router.replace('/onboarding');
+        return;
       }
       const role =
         user.publicMetadata?.membership_role ??

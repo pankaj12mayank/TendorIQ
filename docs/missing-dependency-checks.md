@@ -94,9 +94,9 @@ pnpm add @sentry/react @tanstack/react-virtual
 ```bash
 # Before deployment, verify:
 
-# Python deps
+# Python deps (same as run.bat / CI)
 cd apps/api
-uv sync
+pip install -r requirements-dev.txt
 python -c "import sentry_sdk; print('Sentry OK')"
 python -c "import pytest; print('Pytest OK')"
 

@@ -1,6 +1,7 @@
 {
   "name": "@tendoriq/api",
   "version": "1.0.0",
+  "description": "FastAPI backend. Python deps: requirements-dev.txt (venv) — same as CI setup-api-python action.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,5 +23,6 @@
     "@tendoriq/shared": "workspace:*"
   },
   "devDependencies": {
+    "turbo": "^2.3.3"
   }
 }

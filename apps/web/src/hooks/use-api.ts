@@ -13,7 +13,9 @@ import {
 } from '@tendoriq/shared/tenders';
 import { type QueryParams, type PaginatedResponse } from '@/lib/query-client';
 import { getQueryErrorMessage } from '@/lib/query-error-message';
+import { hasTenantWorkspace, TENANT_WORKSPACE_REQUIRED } from '@/lib/tenant-workspace';
 import { toast } from 'sonner';
+import { useCurrentUser } from '@/hooks/use-auth';
 
 export { getQueryErrorMessage } from '@/lib/query-error-message';
 
@@ -66,6 +68,8 @@ export function useApiMutation<TData, TVariables>(
 export type Tender = ClientTender;
 
 export function useTenders(params?: QueryParams) {
+  const user = useCurrentUser();
+  const tenantReady = hasTenantWorkspace(user);
   const query = useQuery({
     queryKey: ['tenders', params],
     queryFn: async () => {
@@ -78,36 +82,49 @@ export function useTenders(params?: QueryParams) {
         meta: page.meta,
       } satisfies PaginatedResponse<Tender>;
     },
+    enabled: tenantReady,
     throwOnError: false,
     retry: 1,
   });
   return {
     ...query,
-    errorMessage: getQueryErrorMessage(query.error),
+    tenantReady,
+    errorMessage: tenantReady
+      ? getQueryErrorMessage(query.error)
+      : TENANT_WORKSPACE_REQUIRED,
   };
 }
 
 export function useTender(id: string) {
+  const user = useCurrentUser();
+  const tenantReady = hasTenantWorkspace(user);
   const query = useQuery({
     queryKey: ['tender', id],
     queryFn: async () => {
       const raw = await api.get<ApiEnvelope<ApiTender>>(`/api/v1/tenders/${id}`);
       return mapTenderFromApi(unwrapData(raw));
     },
-    enabled: !!id,
+    enabled: !!id && tenantReady,
     throwOnError: false,
     retry: 1,
   });
   return {
     ...query,
-    errorMessage: getQueryErrorMessage(query.error),
+    tenantReady,
+    errorMessage: tenantReady
+      ? getQueryErrorMessage(query.error)
+      : TENANT_WORKSPACE_REQUIRED,
   };
 }
 
 export function useCreateTender() {
+  const user = useCurrentUser();
   return useApiMutation(
     ['tenders'],
     async (data: Partial<Tender>) => {
+      if (!hasTenantWorkspace(user)) {
+        throw new Error(TENANT_WORKSPACE_REQUIRED);
+      }
       const raw = await api.post<ApiEnvelope<ApiTender>>(
         '/api/v1/tenders',
         mapTenderToApi(data)

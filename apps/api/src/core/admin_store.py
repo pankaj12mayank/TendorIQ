@@ -1,4 +1,7 @@
-"""File-backed platform admin data when DB is unavailable or for AI provider secrets."""
+"""Platform admin persistence (MySQL). DB helpers below are used by admin_platform routes.
+
+Legacy JSON under .tenderiq/ is deprecated and not written by API handlers.
+"""
 
 from __future__ import annotations
 

@@ -4,16 +4,19 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth, useCurrentUser } from '@/hooks/use-auth';
 import { useRouter, usePathname } from 'next/navigation';
 import { canAccessAdminConsole, canAccessTenantDashboard, isSuperAdmin } from '@/lib/permissions';
+import { isSuperAdminTenantViewActive } from '@/lib/super-admin-tenant-view';
+import { fetchOnboardingStatusAuthenticated } from '@/lib/onboarding-api';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/layout/mobile-nav';
 import { DashboardBootLoading, SidebarSkeleton } from '@/components/layout/dashboard-loading';
 import { Toaster } from '@/components/ui/sonner';
-import { useOnboardingApi } from '@/hooks/use-onboarding';
+import { toast } from 'sonner';
 import { LoadingState } from '@/components/ui/loading-state';
+import { getAuthToken } from '@/lib/auth-session';
 
-const ONBOARDING_CHECK_TIMEOUT_MS = 8_000;
+const ONBOARDING_CHECK_TIMEOUT_MS = 12_000;
 
 export default function DashboardLayout({
   children,
@@ -27,7 +30,6 @@ export default function DashboardLayout({
   const isAdminConsole = pathname.startsWith('/dashboard/admin');
   const [mounted, setMounted] = useState(false);
   const [checkedOnboarding, setCheckedOnboarding] = useState(false);
-  const { fetchStatus } = useOnboardingApi();
 
   useEffect(() => {
     setMounted(true);
@@ -42,48 +44,72 @@ export default function DashboardLayout({
   useEffect(() => {
     let cancelled = false;
 
-    const timeoutId = window.setTimeout(() => {
-      if (!cancelled) setCheckedOnboarding(true);
-    }, ONBOARDING_CHECK_TIMEOUT_MS);
-
     async function checkOnboarding() {
       if (!isLoaded || !userId) return;
+
       if (user?.role === 'super_admin') {
-        setCheckedOnboarding(true);
+        if (!cancelled) setCheckedOnboarding(true);
         return;
       }
+
+      const token = getAuthToken();
+      if (!token) {
+        if (!cancelled) setCheckedOnboarding(true);
+        return;
+      }
+
       try {
-        const status = await fetchStatus();
+        const status = await Promise.race([
+          fetchOnboardingStatusAuthenticated(token),
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error('Onboarding verification timed out')),
+              ONBOARDING_CHECK_TIMEOUT_MS
+            );
+          }),
+        ]);
+
         if (cancelled) return;
+
         if (!status.is_completed) {
-          router.push('/onboarding');
+          router.replace('/onboarding');
           return;
         }
+
+        setCheckedOnboarding(true);
       } catch {
-        // Fail open — user may already have tenant context from JWT
+        if (cancelled) return;
+        toast.error('Could not verify workspace setup. Please complete onboarding.');
+        router.replace('/onboarding');
       }
-      if (!cancelled) setCheckedOnboarding(true);
     }
 
     void checkOnboarding();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeoutId);
     };
-  }, [isLoaded, userId, user?.role, fetchStatus, router]);
+  }, [isLoaded, userId, user?.role, router]);
 
   useEffect(() => {
     if (isAdminConsole && user && !canAccessAdminConsole(user.role)) {
       router.replace('/dashboard');
       return;
     }
-    if (!isAdminConsole && user && isSuperAdmin(user.role)) {
+    if (
+      !isAdminConsole &&
+      user &&
+      isSuperAdmin(user.role) &&
+      !isSuperAdminTenantViewActive()
+    ) {
       router.replace('/dashboard/admin');
     }
   }, [isAdminConsole, user, router]);
 
-  const tenantDashboardAllowed = user ? canAccessTenantDashboard(user.role) : true;
+  const tenantDashboardAllowed = user
+    ? canAccessTenantDashboard(user.role) ||
+      (isSuperAdmin(user.role) && isSuperAdminTenantViewActive())
+    : true;
 
   const bootMessage = useMemo(() => {
     if (!isLoaded) return 'Loading your session...';

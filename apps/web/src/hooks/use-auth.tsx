@@ -27,7 +27,12 @@ import {
   userFromLoginResponse,
 } from '@/lib/auth-api';
 import { getPostLoginPath } from '@/lib/auth-redirect';
+import {
+  fetchOnboardingStatusAuthenticated,
+  shouldCompleteOnboardingFirst,
+} from '@/lib/onboarding-api';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
+import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
 
@@ -65,6 +70,17 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+
+  useEffect(() => {
+    setUnauthorizedHandler(({ pathname, search }) => {
+      const url = new URL('/sign-in', window.location.origin);
+      if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
+        url.searchParams.set('redirect_url', pathname + search);
+      }
+      router.replace(url.pathname + url.search);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,24 +226,19 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      let onboardingStatus = null;
       try {
-        const onboardingRes = await fetch(resolveApiUrl('/api/v1/onboarding/status'), {
-          headers: {
-            'Content-Type': 'application/json',
-            ...buildApiAuthHeaders(tokens.access_token, authUser),
-          },
-        });
-        if (onboardingRes.ok) {
-          const onboardingData = await onboardingRes.json();
-          if (!onboardingData.is_completed) {
-            router.push('/onboarding');
-            return;
-          }
-        }
+        onboardingStatus = await fetchOnboardingStatusAuthenticated(tokens.access_token);
       } catch {
+        onboardingStatus = null;
+      }
+      const role = authUser.membershipRole ?? authUser.role;
+      if (shouldCompleteOnboardingFirst(onboardingStatus, role)) {
+        router.push('/onboarding');
+        return;
       }
 
-      router.push(postLoginPath);
+      router.push(postLoginPath === '/onboarding' ? '/dashboard' : postLoginPath);
     },
     [router]
   );

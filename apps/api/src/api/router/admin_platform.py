@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from ...core import admin_store
-from ...core.admin_store import dismiss_failed_job, list_dismissed_failed_jobs
 from ...core.platform_metrics import (
     append_email_failed_jobs,
     append_email_queue_jobs,
@@ -432,12 +431,7 @@ async def retry_queue_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
 
 @router.get('/failed-jobs')
 async def list_failed_jobs(_admin: SuperAdmin, db=Depends(get_db)):
-    dismissed: set[str] = set()
-    try:
-        dismissed = await admin_store.list_dismissed_failed_jobs_db(db)
-    except Exception as exc:
-        logger.warning('DB dismissed jobs unavailable, using file store: %s', exc)
-        dismissed = list_dismissed_failed_jobs()
+    dismissed = await admin_store.list_dismissed_failed_jobs_db(db)
     jobs = await load_platform_failed_jobs(db, dismissed)
     await append_email_failed_jobs(db, jobs, dismissed)
     return {'jobs': jobs}
@@ -445,26 +439,16 @@ async def list_failed_jobs(_admin: SuperAdmin, db=Depends(get_db)):
 
 @router.delete('/failed-jobs/{job_id}', status_code=204)
 async def delete_failed_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
-    try:
-        await admin_store.dismiss_failed_job_db(db, job_id)
-    except Exception as exc:
-        logger.warning('DB dismiss failed job, using file store: %s', exc)
-        dismiss_failed_job(job_id)
+    await admin_store.dismiss_failed_job_db(db, job_id)
     return None
 
 
 @router.post('/failed-jobs/clear-dismissed')
 async def clear_dismissed(_admin: SuperAdmin, db=Depends(get_db)):
-    try:
-        from sqlalchemy import delete
-        await db.execute(delete(DismissedFailedJob))
-        await db.commit()
-    except Exception:
-        pass
-    from ...core.admin_store import _DISMISSED_FILE
+    from sqlalchemy import delete
 
-    if _DISMISSED_FILE.is_file():
-        _DISMISSED_FILE.unlink()
+    await db.execute(delete(DismissedFailedJob))
+    await db.commit()
     return {'success': True}
 
 
@@ -478,6 +462,15 @@ async def analytics_summary(_admin: SuperAdmin, db=Depends(get_db)):
 @router.get('/health')
 async def platform_health(_admin: SuperAdmin, db=Depends(get_db)):
     return await platform_system_health(db)
+
+
+# --- Quota overrides (admin usage UI) ---
+
+
+@router.get('/quota-overrides')
+async def list_quota_overrides(_admin: SuperAdmin, db=Depends(get_db)) -> dict:
+    """Platform quota overrides — empty list until persistence is wired (L13)."""
+    return {'overrides': []}
 
 
 # --- Platform audit (cross-tenant) ---

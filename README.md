@@ -46,16 +46,20 @@ TenderIQ is an enterprise-grade SaaS platform for managing tender documents, bid
 
 ### Windows (one click, no Docker)
 
-Requirements: **Python 3.11+**, **Node.js 20+** (pnpm via corepack).
+Requirements: **Python 3.12+**, **Node.js 20+**, **MySQL 8+** (service running). See [docs/MYSQL_SETUP.md](docs/MYSQL_SETUP.md).
 
 ```bat
 git clone https://github.com/yourorg/tenderiq.git
 cd tenderiq
+copy .env.example .env
+REM Edit .env — set DATABASE_URL (replace changeme with your MySQL password)
 run.bat
 ```
 
-`run.bat` installs/verifies Python + Node deps, starts API (`:8000`) and web (`:3000`), and opens the browser. Stop with `run.bat stop`.
-Use `run.bat setup` when you want a full dependency setup pass (slower, but useful after lockfile/requirements changes).
+`run.bat` installs dependencies, **checks MySQL**, **creates the DB if needed**, runs **`alembic upgrade head`**, then starts API (`:8000`) and web (`:3000`). Stop with `run.bat stop`.
+
+- **`run.bat check`** — compile, import, MySQL, migrations (no servers)
+- **`run.bat setup`** — force dependency reinstall + full bootstrap
 
 **Auth:** One sign-in at `/sign-in` (email/password; role from JWT). Set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` in `.env` for platform admin. Optional `DEMO_USER_*` for a dev tenant. Tenants can also use Clerk if keys are in `apps/web/.env.local`.
 

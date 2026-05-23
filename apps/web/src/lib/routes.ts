@@ -41,6 +41,7 @@ export const PUBLIC_ROUTE_PREFIXES = [
   ROUTES.signUp,
   ROUTES.forgotPassword,
   ROUTES.resetPassword,
+  ROUTES.onboarding,
   ROUTES.adminLogin,
   ROUTES.adminLoginLegacy,
 ] as const;

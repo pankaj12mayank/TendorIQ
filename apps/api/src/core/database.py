@@ -1,5 +1,6 @@
 ﻿"""Database Configuration and Session Management"""
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -65,6 +66,10 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+def _allow_start_without_db() -> bool:
+    return os.getenv('ALLOW_START_WITHOUT_DB', '').lower() in ('1', 'true', 'yes')
+
+
 async def init_db() -> None:
     logger.info('Verifying database connection')
     try:
@@ -74,10 +79,13 @@ async def init_db() -> None:
             'Database connection verified (schema via Alembic: cd apps/api && alembic upgrade head)'
         )
     except Exception as exc:
-        if settings.is_development:
-            logger.warning(f'Database unavailable, continuing without persistence: {exc}')
+        if _allow_start_without_db():
+            logger.warning('Database unavailable (ALLOW_START_WITHOUT_DB=1): %s', exc)
             return
-        raise
+        raise RuntimeError(
+            'Database unavailable. Start MySQL, set DATABASE_URL in .env, '
+            'and run: alembic upgrade head'
+        ) from exc
 
 
 async def close_db() -> None:

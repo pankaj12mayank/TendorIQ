@@ -1,6 +1,6 @@
 # Monorepo & tooling
 
-TenderIQ is a **pnpm + Turbo** monorepo. Python API dependencies are managed separately via `apps/api/requirements.txt` (and `uv` in CI).
+TenderIQ is a **pnpm + Turbo** monorepo. The API is Python; Node packages exist so Turbo can orchestrate `dev` / `lint` / `test` scripts.
 
 ## Layout
 
@@ -10,37 +10,67 @@ TenderIQ is a **pnpm + Turbo** monorepo. Python API dependencies are managed sep
 | `apps/api` | `@tendoriq/api` | FastAPI backend (Python) |
 | `packages/shared` | `@tendoriq/shared` | Shared TypeScript types, env schema, permissions |
 
-`pnpm-workspace.yaml` includes `apps/*` and `packages/*`, so the API package participates in workspace installs (`workspace:*` deps).
+`pnpm-workspace.yaml` includes `apps/*` and `packages/*`.
 
-## Requirements
+## Requirements (aligned)
 
-- **Node** ≥ 20 (see `.nvmrc`)
-- **pnpm** ≥ 9 (`packageManager` in root `package.json`)
-- **Python** 3.12+ for API (`apps/api/requirements.txt`)
+| Tool | Version | Notes |
+|------|---------|--------|
+| **Node** | ≥ 20 | `.nvmrc`, `package.json` engines |
+| **pnpm** | ≥ 9 | `packageManager` in root `package.json` |
+| **Python** | 3.12+ | root `pyproject.toml`, API runtime |
+
+## Python dependencies (single graph)
+
+| File | Use |
+|------|-----|
+| `apps/api/requirements.txt` | Production runtime (Docker, Railway pip) |
+| `apps/api/requirements-dev.txt` | Local `venv`, `run.bat`, **CI** (includes `-r requirements.txt` + pytest, ruff, mypy) |
+
+**Local (Windows):** `run.bat` / `run.bat setup` → `scripts/tenderiq-start.ps1` → `pip install -r requirements-dev.txt` into `apps/api/venv`.
+
+**CI:** `.github/actions/setup-api-python` creates the same venv and installs `requirements-dev.txt`.
+
+**Optional:** `pnpm install` runs `scripts/postinstall.js` to refresh an existing venv; full setup still uses `run.bat`.
+
+Root `pyproject.toml` holds **tool config** (ruff, mypy, pytest paths). Do not use `uv sync` from `apps/api` alone — there is no `pyproject.toml` under `apps/api`.
+
+## Node install policy
+
+- **CI / normal start:** `pnpm install --frozen-lockfile`
+- **`run.bat setup`:** may update the lockfile (no `--frozen-lockfile`)
 
 ## Common commands
 
-From the repo root:
+From repo root:
 
 ```bash
 pnpm install
-pnpm dev                    # web + api via Turbo
-pnpm dev:web                # @tendoriq/web only
-pnpm dev:api                # @tendoriq/api only
+pnpm dev                    # Turbo: web + api package scripts
+pnpm dev:web
+pnpm dev:api
 pnpm build:web
 pnpm --filter @tendoriq/web test -- --run
-pnpm --filter @tendoriq/api run db:migrate
 ```
 
-API Python (from `apps/api`):
+**Windows one-click (no Turbo):** `run.bat` starts uvicorn + `pnpm --filter @tendoriq/web dev` directly for reliable hidden windows. For Turbo graph dev, use `run.bat dev` or `pnpm dev`.
+
+API Python (from `apps/api` after venv exists):
 
 ```bash
-pip install -r requirements.txt
-uvicorn src.main:app --reload
-# or: uv sync && uv run pytest tests/unit -q
+# Windows
+venv\Scripts\python.exe -m pytest tests/unit -q
+
+# Linux/macOS
+./venv/bin/python -m pytest tests/unit -q
 ```
 
-## CI workflows
+## CI workflows (no drift)
+
+All workflows share:
+
+- Node **20**, pnpm **9**, `pnpm install --frozen-lockfile`
+- Python **3.12**, `.github/actions/setup-api-python` → `requirements-dev.txt`
 
 | Workflow | Role |
 |----------|------|
@@ -49,16 +79,18 @@ uvicorn src.main:app --reload
 | `production-ready.yml` | Template + build smoke checks (no live secrets required) |
 | `deploy.yml` | Vercel frontend + Docker API image |
 
-All Node jobs use **`pnpm install --frozen-lockfile`**, not `npm install`.
+When changing Python or Node versions, update **`.github/actions/setup-api-python`**, root `package.json` engines, and this doc together.
 
 ## Docker (API)
+
+Production image installs **only** `requirements.txt` (no pytest in the image):
 
 ```bash
 docker build -t tendoriq-api apps/api
 docker run -p 8000:8000 -e DATABASE_URL=... tendoriq-api
 ```
 
-Health check: `GET /health`.
+See `apps/api/Dockerfile` and `docs/deployment.md`.
 
 ## Frontend API client
 

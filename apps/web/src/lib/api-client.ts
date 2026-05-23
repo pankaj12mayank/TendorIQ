@@ -1,5 +1,6 @@
 import type { ZodSchema } from 'zod';
 
+import { notifyUnauthorized } from '@/lib/auth-unauthorized';
 import { clearStoredSession, getAuthToken } from '@/lib/auth-session';
 import { getSessionRequestHeaders } from '@/lib/api-headers';
 import { getApiBaseUrl, DEFAULT_API_TIMEOUT_MS } from '@/lib/api-config';
@@ -73,12 +74,7 @@ class ApiClient {
       if (!response.ok) {
         if (response.status === 401 && typeof window !== 'undefined') {
           clearStoredSession();
-          const path = window.location.pathname + window.location.search;
-          if (path.startsWith('/dashboard')) {
-            window.location.href = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
-          } else if (path.startsWith('/admin')) {
-            window.location.href = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
-          }
+          notifyUnauthorized();
         }
 
         let errorData: Record<string, unknown> = {};

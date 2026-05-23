@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     EMAIL_API_KEY: str = ''
     EMAIL_FROM: str = 'noreply@tendoriq.com'
     EMAIL_FROM_NAME: str = 'TenderIQ'
+    RESEND_WEBHOOK_SECRET: str = ''
     FRONTEND_URL: str = 'http://localhost:3000'
     SUPER_ADMIN_EMAIL: str = ''  # Must be set in .env
     SUPER_ADMIN_PASSWORD: str = ''  # Must be set in .env for production

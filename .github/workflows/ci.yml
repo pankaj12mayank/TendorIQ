@@ -41,27 +41,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        run: pip install uv
-
-      - name: Install dependencies
-        run: |
-          cd apps/api
-          uv sync
+      - uses: ./.github/actions/setup-api-python
 
       - name: Run ruff
-        run: |
-          cd apps/api
-          uv run ruff check src/ tests/
+        working-directory: apps/api
+        run: ruff check src/ tests/
 
       - name: Run mypy
-        run: |
-          cd apps/api
-          uv run mypy src/ --strict
+        working-directory: apps/api
+        run: mypy src/ --strict
 
   typecheck:
     name: Typecheck
@@ -115,37 +103,49 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint-python]
 
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test
+          MYSQL_DATABASE: tenderiq_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uroot -ptest"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - uses: ./.github/actions/setup-api-python
 
-      - name: Install uv
-        run: pip install uv
-
-      - name: Install dependencies
-        run: |
-          cd apps/api
-          uv sync
+      - name: Apply migrations
+        working-directory: apps/api
+        env:
+          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tenderiq_test?charset=utf8mb4
+          ALLOW_START_WITHOUT_DB: '0'
+        run: alembic upgrade head
 
       - name: Reliability gate — compile & import app
         env:
           DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tendoriq_test?charset=utf8mb4
           JWT_SECRET: ci-test-secret-key-at-least-32-characters-long
+          ALLOW_START_WITHOUT_DB: '0'
+        working-directory: apps/api
         run: |
-          cd apps/api
-          uv run python -m compileall -q src
-          uv run python scripts/verify_import.py
+          python -m compileall -q src
+          python scripts/verify_import.py
 
       - name: Run API unit & contract tests
+        working-directory: apps/api
         env:
-          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tendoriq_test?charset=utf8mb4
+          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tenderiq_test?charset=utf8mb4
           JWT_SECRET: ci-test-secret-key-at-least-32-characters-long
-        run: |
-          cd apps/api
-          uv run pytest tests/unit tests/integration -q
+          ALLOW_START_WITHOUT_DB: '0'
+        run: pytest tests/unit tests/integration -q
 
   test:
     name: Web Unit Tests

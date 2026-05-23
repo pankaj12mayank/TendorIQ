@@ -125,10 +125,21 @@ function syncFromApiState(
   });
 }
 
+function stepFailureMessage(step: number, err: unknown, fallback: string): string {
+  const base = err instanceof Error ? err.message : fallback;
+  return `Step ${step} could not be saved: ${base}. Previous steps are kept — fix the issue and try again.`;
+}
+
 export function useOnboardingApi() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedStep, setFailedStep] = useState<number | null>(null);
   const store = useOnboardingStore();
+
+  const clearStepError = useCallback(() => {
+    setError(null);
+    setFailedStep(null);
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -151,13 +162,15 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step1Response>('/api/v1/onboarding/step/1', data);
+      clearStepError();
       syncFromApiState(store, res.onboarding_state, { tenantName: res.tenant_name });
       applyOnboardingSession(res.session, res.tenant_id);
       store.setStepCompleted(1, true);
       store.setTenantInfo(res.tenant_id, res.tenant_name);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create organization';
+      const msg = stepFailureMessage(1, err, 'Failed to create organization');
+      setFailedStep(1);
       setError(msg);
       throw err;
     } finally {
@@ -170,11 +183,13 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step2Response>('/api/v1/onboarding/step/2', data);
+      clearStepError();
       syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(2, true);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save profile';
+      const msg = stepFailureMessage(2, err, 'Failed to save profile');
+      setFailedStep(2);
       setError(msg);
       throw err;
     } finally {
@@ -187,11 +202,13 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step3Response>('/api/v1/onboarding/step/3', data);
+      clearStepError();
       syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(3, true);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to save expertise';
+      const msg = stepFailureMessage(3, err, 'Failed to save expertise');
+      setFailedStep(3);
       setError(msg);
       throw err;
     } finally {
@@ -205,11 +222,13 @@ export function useOnboardingApi() {
     try {
       const payload = normalizeOnboardingStep4(data);
       const res = await api.post<Step4Response>('/api/v1/onboarding/step/4', payload);
+      clearStepError();
       syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(4, true);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to select plan';
+      const msg = stepFailureMessage(4, err, 'Failed to select plan');
+      setFailedStep(4);
       setError(msg);
       throw err;
     } finally {
@@ -222,13 +241,15 @@ export function useOnboardingApi() {
     setError(null);
     try {
       const res = await api.post<Step5Response>('/api/v1/onboarding/step/5', data);
+      clearStepError();
       syncFromApiState(store, res.onboarding_state);
       store.setStepCompleted(5, true);
       store.setOnboardingComplete(true);
       applyOnboardingSession(res.session, res.onboarding_state.tenant_id);
       return res;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to setup dashboard';
+      const msg = stepFailureMessage(5, err, 'Failed to setup dashboard');
+      setFailedStep(5);
       setError(msg);
       throw err;
     } finally {
@@ -248,6 +269,8 @@ export function useOnboardingApi() {
   return {
     loading,
     error,
+    failedStep,
+    clearStepError,
     fetchStatus,
     submitStep1,
     submitStep2,

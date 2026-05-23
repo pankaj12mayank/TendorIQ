@@ -11,3 +11,5 @@ os.environ.setdefault(
 os.environ.setdefault('JWT_SECRET', 'test-secret-key-at-least-32-chars-long-for-pytest')
 os.environ.setdefault('NODE_ENV', 'development')
 os.environ.setdefault('EXPOSE_ERROR_DETAILS', 'false')
+# Unit tests without a live MySQL (CI test-api job uses real DB and omits this).
+os.environ.setdefault('ALLOW_START_WITHOUT_DB', '1')

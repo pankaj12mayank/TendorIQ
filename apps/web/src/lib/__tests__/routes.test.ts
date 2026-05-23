@@ -13,6 +13,8 @@ describe('routes', () => {
     expect(isPublicAppPath('/')).toBe(true);
     expect(isPublicAppPath('/landing')).toBe(true);
     expect(isPublicAppPath('/sign-in')).toBe(true);
+    expect(isPublicAppPath('/onboarding')).toBe(true);
+    expect(isPublicAppPath('/onboarding/step/2')).toBe(true);
     expect(isPublicAppPath('/admin/sign-in')).toBe(true);
     expect(isPublicAppPath('/dashboard')).toBe(false);
   });

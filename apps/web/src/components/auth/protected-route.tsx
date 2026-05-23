@@ -4,6 +4,8 @@ import { useAuthState } from '@/hooks/use-auth';
 import { getMembershipRole } from '@/lib/auth-user';
 import { hasPermission } from '@/lib/permissions';
 import { LoadingState } from '@/components/ui/loading-state';
+import { ROUTES } from '@/lib/routes';
+import { getPostLoginPath } from '@/lib/auth-redirect';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -22,6 +24,14 @@ export function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user } = useAuthState();
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading || isAuthenticated) return;
+    const url = new URL(ROUTES.signIn, window.location.origin);
+    url.searchParams.set('redirect_url', pathname);
+    router.replace(url.pathname + url.search);
+  }, [isLoading, isAuthenticated, pathname, router]);
 
   if (isLoading) {
     return <LoadingState message="Checking authentication..." />;
@@ -29,15 +39,7 @@ export function ProtectedRoute({
 
   if (!isAuthenticated) {
     if (fallback) return <>{fallback}</>;
-
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-lg font-semibold">Authentication Required</h2>
-          <p className="text-muted-foreground">Please sign in to continue.</p>
-        </div>
-      </div>
-    );
+    return <LoadingState message="Redirecting to sign in..." />;
   }
 
   if (requiredRoles && requiredRoles.length > 0) {
@@ -88,17 +90,34 @@ interface GuestRouteProps {
   children: React.ReactNode;
 }
 
+function isGuestAuthPath(pathname: string): boolean {
+  return (
+    pathname === ROUTES.signIn ||
+    pathname.startsWith(`${ROUTES.signIn}/`) ||
+    pathname === ROUTES.signUp ||
+    pathname.startsWith(`${ROUTES.signUp}/`) ||
+    pathname === ROUTES.forgotPassword ||
+    pathname.startsWith(`${ROUTES.forgotPassword}/`)
+  );
+}
+
 export function GuestRoute({ children }: GuestRouteProps) {
-  const { isAuthenticated, isLoading } = useAuthState();
+  const { isAuthenticated, isLoading, user } = useAuthState();
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      const redirectUrl = pathname || '/dashboard';
-      router.push(redirectUrl);
+    if (isLoading || !isAuthenticated) return;
+    if (!isGuestAuthPath(pathname)) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const redirectUrl = params.get('redirect_url');
+    if (redirectUrl && redirectUrl.startsWith('/dashboard')) {
+      router.replace(redirectUrl);
+      return;
     }
-  }, [isLoading, isAuthenticated, pathname, router]);
+    router.replace(getPostLoginPath(user?.membershipRole ?? user?.role));
+  }, [isLoading, isAuthenticated, pathname, router, user]);
 
   if (isLoading) {
     return <LoadingState message="Loading..." />;

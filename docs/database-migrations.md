@@ -30,7 +30,8 @@ pnpm --filter @tendoriq/api run db:migrate
 | Revision | Purpose |
 |----------|---------|
 | `20260522_admin_store` | Full schema from SQLAlchemy models (`create_all`) |
-| `20260522_layer1_db_refinements` | Extra indexes / role constraints (idempotent) |
+| `20260522_layer1_db_refinements` | Core indexes / role constraints (idempotent) |
+| `20260523_layer2_email_audit_indexes` | Email + audit indexes (idempotent) |
 
 `alembic.ini` defaults are overridden at runtime by `alembic/env.py`, which reads `DATABASE_URL` from app settings (sync `pymysql` driver).
 

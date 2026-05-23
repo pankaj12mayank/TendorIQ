@@ -8,6 +8,8 @@ readme = "README.md"
 [tool.hatch]
 build.targets.hatch.only = []
 
+# Runtime API packages: apps/api/requirements.txt (+ requirements-dev.txt for local/CI).
+# Tooling below mirrors requirements-dev.txt; install via venv pip or setup-api-python CI action.
 [tool.uv]
 dev-dependencies = [
     "ruff>=0.9.0",

@@ -77,16 +77,10 @@ jobs:
             echo "Next.js build output (.next) missing"
             exit 1
           fi
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install uv
-        run: pip install uv
+      - uses: ./.github/actions/setup-api-python
       - name: Check API builds
-        run: |
-          cd apps/api
-          uv sync
-          uv run uvicorn --version
+        working-directory: apps/api
+        run: uvicorn --version
 
   integration-tests:
     name: Integration Tests
@@ -107,19 +101,10 @@ jobs:
           - 3306:3306
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install uv
-        run: pip install uv
-      - name: Install dependencies
-        run: |
-          cd apps/api
-          uv sync
+      - uses: ./.github/actions/setup-api-python
       - name: Run integration tests
-        run: |
-          cd apps/api
-          uv run pytest tests/integration -v
+        working-directory: apps/api
+        run: pytest tests/integration -v
 
   production-checklist:
     name: Production Checklist
@@ -127,16 +112,10 @@ jobs:
     needs: integration-tests
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install uv
-        run: pip install uv
+      - uses: ./.github/actions/setup-api-python
       - name: Run production checklist validation
-        run: |
-          cd apps/api
-          uv sync
-          uv run python -c "
+        working-directory: apps/api
+        run: python -c "
 import subprocess
 import sys
 import os

@@ -20,11 +20,19 @@ def app_title(api_client):
     return app.title
 
 
-def test_health_endpoint_returns_ok(api_client):
+def test_health_endpoint_returns_healthy(api_client):
     response = api_client.get('/health')
     assert response.status_code == 200
     data = response.json()
-    assert data['status'] == 'ok'
+    assert data['status'] == 'healthy'
+
+
+def test_readiness_endpoint_shape(api_client):
+    response = api_client.get('/health/ready')
+    assert response.status_code in (200, 503)
+    data = response.json()
+    assert 'checks' in data
+    assert 'database' in data['checks']
 
 
 def test_app_title(app_title):

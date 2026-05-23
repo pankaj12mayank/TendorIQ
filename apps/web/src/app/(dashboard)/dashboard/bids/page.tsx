@@ -14,18 +14,33 @@ interface Bid {
   submittedAt: string;
 }
 
+interface BidsSummary {
+  bids: Bid[];
+  total_bids: number;
+  win_rate: number;
+  total_value: string;
+  pending_count: number;
+}
+
 export default function BidsPage() {
   const [bids, setBids] = useState<Bid[]>([]);
+  const [summary, setSummary] = useState<Pick<BidsSummary, 'total_bids' | 'win_rate' | 'total_value' | 'pending_count'> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBids = async () => {
       try {
-        const res = await api.get<{ bids: Bid[]; total_bids: number; win_rate: number; total_value: string; pending_count: number }>('/api/v1/bids');
-        setBids(res.bids);
-      } catch (err) {
-        setError('Failed to load bids');
+        const res = await api.get<BidsSummary>('/api/v1/bids');
+        setBids(res.bids ?? []);
+        setSummary({
+          total_bids: res.total_bids,
+          win_rate: res.win_rate,
+          total_value: res.total_value,
+          pending_count: res.pending_count,
+        });
+      } catch {
+        setError('Failed to load bids. Check that you are signed in with a workspace and have bid access.');
       } finally {
         setLoading(false);
       }
@@ -33,14 +48,10 @@ export default function BidsPage() {
     fetchBids();
   }, []);
 
-  const totalBids = bids.length;
-  const wonBids = bids.filter(b => b.status === 'won').length;
-  const winRate = totalBids > 0 ? Math.round((wonBids / totalBids) * 100) : 0;
-  const pendingCount = bids.filter(b => b.status === 'submitted' || b.status === 'under_review').length;
-  const totalValue = bids.reduce((sum, b) => {
-    const num = parseFloat(b.amount.replace(/[$,]/g, ''));
-    return sum + (isNaN(num) ? 0 : num);
-  }, 0);
+  const totalBids = summary?.total_bids ?? bids.length;
+  const winRate = summary?.win_rate ?? 0;
+  const pendingCount = summary?.pending_count ?? 0;
+  const totalValueLabel = summary?.total_value ?? '$0.00';
 
   return (
     <div className="space-y-6">
@@ -74,7 +85,7 @@ export default function BidsPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalValue.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{totalValueLabel}</div>
             <p className="text-xs text-muted-foreground">Across all bids</p>
           </CardContent>
         </Card>

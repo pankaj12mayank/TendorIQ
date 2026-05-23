@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOnboardingStore } from '@/stores/onboarding-store';
 import { useOnboardingApi } from '@/hooks/use-onboarding';
+import { OnboardingStepErrorBanner } from '@/components/onboarding/step-error-banner';
 import { OnboardingWizard } from '@/components/onboarding/wizard';
 import { OnboardingProgress } from '@/components/onboarding/progress';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -54,6 +55,7 @@ export default function OnboardingPage() {
       </div>
       <div className="flex-1">
         <div className="mx-auto max-w-3xl px-4 py-8">
+          <OnboardingStepErrorBanner />
           <OnboardingWizard currentStep={currentStep} />
         </div>
       </div>

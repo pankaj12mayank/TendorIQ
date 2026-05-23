@@ -1,7 +1,6 @@
-"""Re-export shim — auth routes consolidated into routers/auth.py.
+"""DEPRECATED — use ``api.routers.auth`` (registered in ``main.py``).
 
-All login/me/status logic moved to apps/api/src/api/routers/auth.py.
-This module kept for backward compatibility during transition.
+Re-export shim only. Do not import from ``main``; kept for legacy imports.
 """
 
 from ...core.local_auth import issue_access_token

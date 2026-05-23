@@ -1,6 +1,7 @@
 """TenderIQ API - Main Application Entry Point"""
 
 import logging
+import os
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
@@ -25,6 +26,8 @@ from .api.base import router as base_router
 from .api.routers.tenders import router as tenders_router
 from .api.routers.organizations import router as organizations_router
 from .api.routers.auth import router as auth_router
+from .api.routers.bids import router as bids_router
+from .api.routers.webhooks import router as webhooks_router
 from .api.tenants import router as tenants_router
 from .api.routers.onboarding import router as onboarding_router
 from .api.routers.files import public_storage_router, router as files_router
@@ -79,20 +82,21 @@ async def lifespan(app: FastAPI):
     if settings.STORAGE_PROVIDER == 'local':
         logger.info('Local storage root: %s', root)
 
+    allow_offline = os.getenv('ALLOW_START_WITHOUT_DB', '').lower() in ('1', 'true', 'yes')
     try:
         from .core.database import async_session_maker
         from .core.email.seed import seed_email_system
 
         async with async_session_maker() as db:
             await seed_email_system(db)
+        logger.info('Email system seed OK')
     except Exception as exc:
-        if settings.is_development:
-            logger.error(
-                'Email system seed failed — ensure migrations ran (alembic upgrade head): %s',
-                exc,
-            )
+        if allow_offline:
+            logger.warning('Email system seed skipped (ALLOW_START_WITHOUT_DB): %s', exc)
         else:
-            logger.warning('Email system seed skipped: %s', exc)
+            raise RuntimeError(
+                'Email system seed failed. Run alembic upgrade head and ensure MySQL schema is current.'
+            ) from exc
 
     yield
 
@@ -213,8 +217,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 app.include_router(base_router, tags=['Base'])
+app.include_router(webhooks_router, prefix='/api/v1')
 app.include_router(admin_platform_router, prefix='/api/v1')
 app.include_router(auth_router, prefix='/api/v1')
+app.include_router(bids_router, prefix='/api/v1')
 app.include_router(tenders_router, prefix='/api/v1')
 app.include_router(organizations_router, prefix='/api/v1')
 app.include_router(tenants_router, prefix='/api/v1')
@@ -250,7 +256,7 @@ if __name__ == '__main__':
     import uvicorn
 
     uvicorn.run(
-        'main:app',
+        'src.main:app',
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.RELOAD,

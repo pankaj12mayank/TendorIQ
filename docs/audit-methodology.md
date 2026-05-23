@@ -1,6 +1,6 @@
 # Audit methodology — E2E & root cause
 
-Layer audits (L1–L35) track **code and contract fixes**. They are **not sufficient** for “project runs end-to-end” unless each layer also passes **reliability gates**.
+Layer audits (**L0–L12** in [AUDIT_REPORT.md](../AUDIT_REPORT.md)) track **end-to-end fixes** from setup through client-ready. A layer is not done until its gate/smoke steps pass (see report).
 
 ## What “audit” means here
 
@@ -10,7 +10,7 @@ Layer audits (L1–L35) track **code and contract fixes**. They are **not suffic
 | Unit test with mocks | One function behaves | Full stack + DB + auth |
 | **Reliability gate** (required for “done”) | Backend imports, health OK, critical paths reachable | Every edge case in production |
 
-**Rule:** A layer is only **operationally complete** when its reliability gate passes (see [AUDIT_REPORT.md](../AUDIT_REPORT.md#system-reliability--root-causes)).
+**Rule:** A layer is only **operationally complete** when its gate passes (see [AUDIT_REPORT.md](../AUDIT_REPORT.md) — Gates + smoke table).
 
 ## Reliability gates (run every release / after large merges)
 

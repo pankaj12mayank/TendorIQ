@@ -19,6 +19,7 @@ import { getPostLoginPath } from '@/lib/auth-redirect';
 import { apiUrl as resolveApiUrl } from '@/lib/api-config';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
 import { parseApiErrorMessage } from '@/lib/api-envelope';
+import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
 import { isProtectedPath } from '@/lib/clerk-config';
 import { isSuperAdmin } from '@/lib/permissions';
 import { toast } from 'sonner';
@@ -61,6 +62,17 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
   const [syncing, setSyncing] = useState(false);
 
   const stored = typeof window !== 'undefined' ? getStoredSession() : null;
+
+  useEffect(() => {
+    setUnauthorizedHandler(({ pathname, search }) => {
+      const url = new URL('/sign-in', window.location.origin);
+      if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
+        url.searchParams.set('redirect_url', pathname + search);
+      }
+      router.replace(url.pathname + url.search);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [router]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !session) {

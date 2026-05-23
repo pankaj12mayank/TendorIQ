@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Request, status
 from pydantic import BaseModel
 from uuid import UUID
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import get_settings, settings
@@ -28,11 +29,22 @@ from ...core.local_auth import (
     login_user_payload as _login_user_payload,
 )
 from ...core.roles import is_platform_super_admin, normalize_membership_role, PLATFORM_ROLE_SUPER_ADMIN
+from ...core.svix_support import SVIX_AVAILABLE, Webhook, WebhookVerificationError
 from ..dependencies.auth import get_current_user, CurrentUser
 
 logger = get_logger('auth_api')
 
 router = APIRouter(prefix='/auth', tags=['Authentication'])
+
+
+def _database_unavailable(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            'Database is unavailable. Ensure MySQL is running, DATABASE_URL in .env is correct, '
+            'and run: run.bat (applies migrations automatically).'
+        ),
+    )
 
 
 # ── Models ──────────────────────────────────────────────────────────
@@ -209,11 +221,17 @@ async def login(
                 name=demo['name'],
                 membership_role=demo['role'],
             )
+        except OperationalError as exc:
+            logger.exception('Demo account bootstrap failed (database): %s', exc)
+            raise _database_unavailable(exc) from exc
         except Exception as exc:
             logger.exception('Demo account bootstrap failed: %s', exc)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail='Demo tenant setup failed. Check database connectivity.',
+                detail=(
+                    'Demo tenant setup failed. Ensure MySQL is running, DATABASE_URL is set, '
+                    'and run: alembic upgrade head (or run.bat setup).'
+                ),
             ) from exc
 
         logger.info(
@@ -245,7 +263,12 @@ async def login(
         await _audit_tenant_login(db, tenant_id, user_id, demo['email'], http_request)
         return response
 
-    session = await resolve_db_user_session(db, request.email)
+    try:
+        session = await resolve_db_user_session(db, request.email)
+    except OperationalError as exc:
+        logger.exception('Database unavailable during login: %s', exc)
+        raise _database_unavailable(exc) from exc
+
     if session:
         user_id, email, tenant_id, membership_role = session
         user_row = await db.get(User, UUID(user_id))
@@ -294,11 +317,19 @@ async def auth_status():
         (s.SUPER_ADMIN_EMAIL or '').strip() and (s.SUPER_ADMIN_PASSWORD or '').strip()
     )
     demo_configured = bool((s.DEMO_USER_EMAIL or '').strip() and (s.DEMO_USER_PASSWORD or '').strip())
+    clerk_webhook_secret = bool((s.CLERK_WEBHOOK_SECRET or '').strip())
     return {
         "super_admin_configured": super_admin_configured,
         "demo_user_configured": demo_configured,
         "demo_tenant_slug": (s.DEMO_TENANT_SLUG or 'demo').strip() if demo_configured else None,
         "auth_mode": "local_jwt",
+        "super_admin_note": (
+            "Platform super_admin uses SUPER_ADMIN_EMAIL/PASSWORD from .env — not a row in users table."
+            if super_admin_configured
+            else None
+        ),
+        "clerk_webhook_configured": clerk_webhook_secret,
+        "svix_package_available": SVIX_AVAILABLE,
         "tenant_context": {
             "demo_login_includes_tenant_id": demo_configured,
             "super_admin_has_tenant_id": False,
@@ -443,7 +474,6 @@ async def logout(
 
 @router.post('/clerk/webhook')
 async def clerk_webhook(
-    payload: WebhookPayload,
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -454,40 +484,45 @@ async def clerk_webhook(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='Clerk webhooks are not configured',
         )
-
-    try:
-        from svix.webhooks import Webhook, WebhookVerificationError
-    except ImportError as exc:
+    if not SVIX_AVAILABLE:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Clerk webhooks require the svix package (pip install -r requirements.txt)',
-        ) from exc
+            detail='Clerk webhooks require the svix package (pip install -r requirements-dev.txt)',
+        )
 
+    body = await request.body()
     wh = Webhook(secret)
     try:
         wh.verify(
-            json.dumps(payload.dict(), default=str),
+            body,
             {
-                'svix-id': request.headers.get('svix-id'),
-                'svix-timestamp': request.headers.get('svix-timestamp'),
-                'svix-signature': request.headers.get('svix-signature'),
+                'svix-id': request.headers.get('svix-id') or '',
+                'svix-timestamp': request.headers.get('svix-timestamp') or '',
+                'svix-signature': request.headers.get('svix-signature') or '',
             },
         )
     except WebhookVerificationError:
         logger.warning('Invalid Clerk webhook signature')
         raise HTTPException(status_code=400, detail='Invalid webhook signature')
 
-    logger.info('Clerk webhook received', type=payload.type)
-    if payload.type == 'user.created':
+    try:
+        event = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail='Invalid JSON payload') from exc
+
+    event_type = event.get('type', '')
+    data = event.get('data', {})
+    logger.info('Clerk webhook received', type=event_type)
+    if event_type == 'user.created':
         try:
-            await ensure_clerk_user(db, payload.data)
+            await ensure_clerk_user(db, data)
         except ValueError as exc:
             logger.warning('Clerk user.created bootstrap skipped: %s', exc)
-    elif payload.type == 'user.updated':
+    elif event_type == 'user.updated':
         try:
-            await ensure_clerk_user(db, payload.data)
+            await ensure_clerk_user(db, data)
         except ValueError as exc:
             logger.warning('Clerk user.updated bootstrap skipped: %s', exc)
-    elif payload.type == 'user.deleted':
-        logger.info('User deleted via Clerk', user_id=payload.data.get('id'))
+    elif event_type == 'user.deleted':
+        logger.info('User deleted via Clerk', user_id=data.get('id'))
     return {'status': 'received'}

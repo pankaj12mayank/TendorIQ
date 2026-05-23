@@ -10,6 +10,8 @@ $LogFile = Join-Path $LogDir "startup.log"
 $VenvPython = Join-Path $ApiDir "venv\Scripts\python.exe"
 $VenvPip = Join-Path $ApiDir "venv\Scripts\pip.exe"
 
+. (Join-Path $PSScriptRoot "tenderiq-bootstrap.ps1")
+
 function Write-Log($level, $msg) {
     $line = "[{0}] {1}" -f $level, $msg
     Write-Host $line -ForegroundColor $(if ($level -eq 'ERROR') { 'Red' } elseif ($level -eq 'WARN') { 'Yellow' } else { 'Cyan' })
@@ -77,7 +79,7 @@ function Ensure-WorkspaceFile {
     Write-Log "INFO" "Creating pnpm-workspace.yaml..."
     @"
 packages:
-  - "apps/web"
+  - "apps/*"
   - "packages/*"
 "@ | Set-Content $ws -Encoding utf8
 }
@@ -115,17 +117,28 @@ function Ensure-EnvFiles {
     $rootEnv = Join-Path $Root ".env"
     if (-not (Test-Path $rootEnv)) {
         Write-Log "INFO" "Creating .env from template..."
-        Copy-Item (Join-Path $Root ".env.example") $rootEnv -ErrorAction SilentlyContinue
+        $example = Join-Path $Root ".env.example"
+        if (Test-Path $example) {
+            Copy-Item $example $rootEnv
+            Write-Log "WARN" "Created .env from .env.example — set DATABASE_URL password (replace changeme)"
+        }
         if (-not (Test-Path $rootEnv)) {
             @"
-# TenderIQ - local development (MySQL required for persistence)
+# TenderIQ - local development (MySQL 8+ required)
+# Edit DATABASE_URL: replace YOUR_MYSQL_PASSWORD with your MySQL root password
 NODE_ENV=development
-DATABASE_URL=mysql+aiomysql://root:root@localhost:3306/tenderiq?charset=utf8mb4
+DATABASE_URL=mysql+aiomysql://root:YOUR_MYSQL_PASSWORD@localhost:3306/tenderiq?charset=utf8mb4
 JWT_SECRET=dev-secret-key-change-in-production-min-32chars
 CLERK_SECRET_KEY=sk_test_placeholder
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
 "@ | Set-Content $rootEnv -Encoding utf8
+            Write-Log "WARN" "Created .env — edit DATABASE_URL (set your MySQL password) before signing in"
         }
+    }
+
+    $dbUrl = Get-TenderIqDatabaseUrlFromEnv -EnvPath $rootEnv
+    if ($dbUrl -match 'changeme|YOUR_MYSQL_PASSWORD') {
+        Write-Log "WARN" "DATABASE_URL uses a placeholder password — update .env (see docs/MYSQL_SETUP.md)"
     }
 
     Ensure-EnvFileKeys $rootEnv
@@ -242,22 +255,24 @@ if (-not (Test-Path $VenvPython)) {
     Pop-Location
 }
 
-Write-Log "INFO" "Installing Python dependencies..."
-$reqFile = Join-Path $ApiDir "requirements.txt"
-$reqStamp = Join-Path $ApiDir "venv\.requirements.sha256"
-$reqHash = (Get-FileHash $reqFile -Algorithm SHA256).Hash
-$needsPip = $forceSetup -or (-not (Test-Path $reqStamp)) -or ((Get-Content $reqStamp -Raw).Trim() -ne $reqHash)
-if ($needsPip) {
-    & $VenvPython -m pip install --upgrade pip --quiet
-    & $VenvPip install -r $reqFile
-    if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
-    Set-Content -Path $reqStamp -Value $reqHash -Encoding ascii -NoNewline
-} else {
-    Write-Log "INFO" "Python dependencies up to date (requirements.txt unchanged)"
+Write-Log "INFO" "Installing Python dependencies (requirements-dev.txt = runtime + pytest/ruff/mypy)..."
+try {
+    Install-TenderIqPythonDeps -ApiDir $ApiDir -VenvPython $VenvPython -VenvPip $VenvPip -Force:$forceSetup
+    Write-Log "INFO" "Python dependencies OK"
+} catch {
+    throw $_.Exception.Message
+}
+if (-not (Test-TenderIqPythonDevTools -VenvPython $VenvPython)) {
+    throw "pytest/ruff/mypy missing after install — run: run.bat setup"
+}
+
+$rootEnv = Join-Path $Root ".env"
+Initialize-TenderIqDatabase -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn {
+    param($level, $msg)
+    Write-Log $level $msg
 }
 
 Write-Log "INFO" "Verifying backend imports..."
-$rootEnv = Join-Path $Root ".env"
 Push-Location $ApiDir
 $env:DOTENV_PATH = $rootEnv
 & $VenvPython scripts/verify_import.py
@@ -272,7 +287,13 @@ $modulesStamp = Join-Path $Root "node_modules\.modules.yaml"
 $lockFile = Join-Path $Root "pnpm-lock.yaml"
 $needsPnpmInstall = $forceSetup -or (-not (Test-Path $modulesStamp)) -or ((Get-Item $lockFile).LastWriteTimeUtc -gt (Get-Item $modulesStamp).LastWriteTimeUtc)
 if ($needsPnpmInstall) {
-    pnpm install --no-frozen-lockfile 2>&1 | Tee-Object -FilePath (Join-Path $LogDir "pnpm-install.log") | Out-Null
+    $pnpmArgs = @('install')
+    if (-not $forceSetup) {
+        $pnpmArgs += '--frozen-lockfile'
+    } else {
+        Write-Log "WARN" "Setup mode: pnpm install without --frozen-lockfile (lockfile may update)"
+    }
+    & pnpm @pnpmArgs 2>&1 | Tee-Object -FilePath (Join-Path $LogDir "pnpm-install.log") | Out-Null
     if ($LASTEXITCODE -ne 0) { Pop-Location; throw "pnpm install failed - see .tenderiq\pnpm-install.log" }
 } else {
     Write-Log "INFO" "Node dependencies already present, skipping pnpm install"
@@ -358,10 +379,9 @@ $webOk = $false
 for ($i = 0; $i -lt 25; $i++) {
     Start-Sleep -Seconds 2
     if (-not $apiOk) {
-        try {
-            $h = Invoke-RestMethod "http://127.0.0.1:$apiPort/health" -TimeoutSec 3
-            if ($h.status -eq 'healthy') { $apiOk = $true }
-        } catch {}
+        if (Test-TenderIqApiReady -Port $apiPort) {
+            $apiOk = $true
+        }
     }
     if (-not $webOk) {
         try {
@@ -384,6 +404,7 @@ Write-Host "  API Docs:  http://localhost:$apiPort/docs" -ForegroundColor White
 Write-Host "  Frontend:  http://localhost:3000  $(if ($webOk) { '[OK]' } else { '[check .tenderiq\web.log]' })" -ForegroundColor White
 Write-Host "  Logs:      .tenderiq\api.log , web.log , startup.log" -ForegroundColor DarkGray
 Write-Host "  Stop:      run.bat stop" -ForegroundColor DarkGray
+Write-Host "  DB:        MySQL + alembic applied (see startup.log)" -ForegroundColor DarkGray
 Write-Host "============================================================" -ForegroundColor Green
 
 if (-not $apiOk) {

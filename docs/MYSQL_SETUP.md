@@ -15,13 +15,17 @@ DATABASE_URL=mysql+aiomysql://root:YOUR_PASSWORD@localhost:3306/tenderiq?charset
 ## Start
 
 ```bat
+copy .env.example .env
+REM Edit .env — set DATABASE_URL password (replace changeme)
 run.bat
 ```
 
-Apply schema with Alembic (from `apps/api`):
+`run.bat` runs **`alembic upgrade head`** automatically after MySQL is reachable.
+
+Manual migrations only if needed (from `apps/api`, `DOTENV_PATH` = repo `.env`):
 
 ```bash
-alembic upgrade head
+python -m alembic upgrade head
 ```
 
 See [database-migrations.md](./database-migrations.md).

@@ -1,10 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+vi.mock('@/lib/api-client', () => ({
+  api: { get: vi.fn(), post: vi.fn() },
+}));
+
 import {
   mapOnboardingState,
   normalizeOnboardingStep4,
   parsePlansResponse,
+  shouldCompleteOnboardingFirst,
 } from '../onboarding-api';
+import { CANONICAL_PLAN_IDS } from '@tendoriq/shared/plans';
 
 describe('onboarding-api', () => {
   beforeEach(() => {
@@ -46,6 +52,20 @@ describe('onboarding-api', () => {
       billing_cycle: 'yearly',
       addons: undefined,
     });
+  });
+
+  it('fail closed when onboarding status unknown for tenant users', () => {
+    expect(shouldCompleteOnboardingFirst(null, 'admin')).toBe(true);
+    expect(shouldCompleteOnboardingFirst({ is_completed: false } as never, 'admin')).toBe(true);
+    expect(shouldCompleteOnboardingFirst({ is_completed: true } as never, 'admin')).toBe(false);
+    expect(shouldCompleteOnboardingFirst(null, 'super_admin')).toBe(false);
+  });
+
+  it('canonical plan ids cover API onboarding step 4', () => {
+    expect(CANONICAL_PLAN_IDS).toContain('professional');
+    expect(normalizeOnboardingStep4({ plan_id: 'plan_pro', billing_cycle: 'monthly' }).plan_id).toBe(
+      'professional'
+    );
   });
 
   it('parses plans list from API envelope', () => {

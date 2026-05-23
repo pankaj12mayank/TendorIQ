@@ -76,47 +76,18 @@ railway variables set DATABASE_URL=...
 railway up
 ```
 
-**Railway Configuration (railway.json):**
-```json
-{
-  "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "cd apps/api && uv sync && cd ../web && pnpm install && pnpm build"
-  },
-  "run": {
-    "command": "cd apps/api && uv run uvicorn main:app --host 0.0.0.0 --port $PORT",
-    "web": true
-  }
-}
-```
+**Railway Configuration (`apps/api/railway.json`):** installs runtime deps with pip from `requirements.txt` (same as Docker). See the checked-in file for `buildCommand` / `startCommand`.
 
 ### Option 2: Docker
 
-**Dockerfile:**
-```dockerfile
-FROM python:3.12-slim
+Use the production Dockerfile at **`apps/api/Dockerfile`** (pip + `requirements.txt` only — no dev tools in the image):
 
-WORKDIR /app
-
-# Install uv
-RUN pip install uv
-
-# Install dependencies
-COPY apps/api/pyproject.toml .
-RUN uv sync --no-dev
-
-# Copy source
-COPY apps/api/src ./src
-
-EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-**Build & Run:**
 ```bash
-docker build -t tenderiq-api .
-docker run -d -p 8000:8000 --env-file .env.production tenderiq-api
+docker build -t tendoriq-api apps/api
+docker run -d -p 8000:8000 --env-file .env.production tendoriq-api
 ```
+
+Health check: `GET /health`.
 
 ### Option 3: Vercel + Neon
 

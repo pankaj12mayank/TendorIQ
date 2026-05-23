@@ -24,7 +24,11 @@ const clerkEnabled = isClerkPublishableKeyConfigured();
 
 const clerkProtected = clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {
-    await auth.protect();
+    // Email/password login sets `__session` (local JWT) — do not require a Clerk session too.
+    const hasLocalSession = Boolean(request.cookies.get('__session')?.value);
+    if (!hasLocalSession) {
+      await auth.protect();
+    }
   }
 });
 

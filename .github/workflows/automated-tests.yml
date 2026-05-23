@@ -18,19 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install uv
-        run: pip install uv
-      - name: Install dependencies
-        run: |
-          cd apps/api
-          uv sync
+      - uses: ./.github/actions/setup-api-python
       - name: Run unit tests
-        run: |
-          cd apps/api
-          uv run pytest tests/unit -v --cov=src --cov-report=xml
+        working-directory: apps/api
+        run: pytest tests/unit -v --cov=src --cov-report=xml
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
@@ -76,19 +67,10 @@ jobs:
           - 3306:3306
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install uv
-        run: pip install uv
-      - name: Install dependencies
-        run: |
-          cd apps/api
-          uv sync
+      - uses: ./.github/actions/setup-api-python
       - name: Run integration tests
-        run: |
-          cd apps/api
-          uv run pytest tests/integration -v
+        working-directory: apps/api
+        run: pytest tests/integration -v
 
   e2e-tests:
     name: E2E Tests
