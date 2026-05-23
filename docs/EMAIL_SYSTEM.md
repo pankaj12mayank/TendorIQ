@@ -69,13 +69,15 @@ Super Admin (Bearer JWT) required except:
 4. User opens `/reset-password?token=...`
 5. `POST /api/v1/email/auth/reset-password` `{ token, new_password }`
 
-## Migration
+## Migration & seed (required)
+
+Email tables and default templates are **not** created by the app alone. Before first use:
 
 ```bash
 cd apps/api && alembic upgrade head
 ```
 
-Tables are created with `alembic upgrade head` (see `docs/database-migrations.md`).
+Then start the API once so `seed_email_system` runs (or call admin seed endpoints). If seed fails at startup, check MySQL connectivity and that migrations match `apps/api/alembic/versions/`. See [database-migrations.md](database-migrations.md) (layer L2).
 
 ## Worker
 
@@ -86,6 +88,22 @@ For manual retries, use `POST /api/v1/email/queue/{id}/retry` (super admin).
 
 ```env
 FRONTEND_URL=http://localhost:3000
-ENCRYPTION_KEY=your-32-char-secret
-RESEND_API_KEY=re_...   # optional
+ENCRYPTION_KEY=your-32-char-secret-min-32-chars
+EMAIL_PROVIDER=resend
+EMAIL_API_KEY=re_...          # or RESEND_API_KEY — required when using Resend without Admin SMTP
+RESEND_WEBHOOK_SECRET=whsec_...  # Svix signing secret from Resend dashboard
 ```
+
+### `ENCRYPTION_KEY` rotation (SMTP / provider secrets)
+
+SMTP and provider credentials in `email_provider_configs` are encrypted with Fernet derived from `ENCRYPTION_KEY` (fallback: `JWT_SECRET`). To rotate:
+
+1. Set a new `ENCRYPTION_KEY` in `.env` (32+ characters).
+2. Re-save each SMTP/Resend config in **Admin → Email System** so credentials re-encrypt with the new key.
+3. Restart API workers / `run.bat` stack.
+
+Old ciphertext cannot be decrypted after rotation until configs are re-entered.
+
+### Resend webhooks
+
+`POST /api/v1/webhooks/resend` updates `email_logs` by `message_id` (delivered, bounced, opened, clicked). Configure the endpoint URL and `RESEND_WEBHOOK_SECRET` in Resend.

@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useReviewStore } from '@/components/review/store';
-import { useReviewSections } from '@/hooks/use-review';
-import { useReviewApi, useApprovalWorkflow, useEditWorkflow } from '@/hooks/use-review';
+import { useReviewSections, useReviewApi, useApprovalWorkflow, useEditWorkflow } from '@/hooks/use-review';
 import {
   ReviewSummary,
   EditableSection,
@@ -29,7 +30,6 @@ import {
   Save,
   RefreshCw,
 } from 'lucide-react';
-import Link from 'next/link';
 
 const SECTION_ICONS = {
   summary: FileText,
@@ -52,14 +52,45 @@ const SECTION_TITLES = {
 };
 
 export default function ReviewPage() {
-  const { selectedSection, setSelectedSection, sections, getSectionStatus, getSectionProgress } = useReviewSections();
-  const { session, regenerateSection, isLoading } = useReviewStore();
-  const { submitApproval, requestChanges } = useApprovalWorkflow();
-  const { editState, saveEdit, cancelEdit, isSaving } = useEditWorkflow();
+  const searchParams = useSearchParams();
+  const tenderId = searchParams.get('tenderId') ?? undefined;
+  const setActiveTenderId = useReviewStore((s) => s.setActiveTenderId);
+
+  const { selectedSection, setSelectedSection, sections, getSectionStatus, getSectionProgress } =
+    useReviewSections();
+  const { session, isLoading, isError, error, refetch, regenerateSection } = useReviewApi(tenderId);
+  const { editState, saveEdit, cancelEdit, isSaving } = useEditWorkflow(tenderId);
 
   const [activeTab, setActiveTab] = useState<'content' | 'comments' | 'history' | 'audit'>('content');
 
-  if (!session) {
+  useEffect(() => {
+    setActiveTenderId(tenderId ?? null);
+    return () => setActiveTenderId(null);
+  }, [tenderId, setActiveTenderId]);
+
+  if (!tenderId) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+        <p className="text-muted-foreground">Select a tender to open the review workspace.</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/tenders">Back to tenders</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (isError && !session) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+        <p className="text-destructive">{error ?? 'Failed to load review session'}</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLoading && !session) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-200px)]">
         <div className="text-center space-y-4">
@@ -70,13 +101,12 @@ export default function ReviewPage() {
     );
   }
 
+  if (!session) {
+    return null;
+  }
+
   const handleRegenerate = async (section: string) => {
-    await regenerateSection({
-      section: section as any,
-      reason: 'Manual regeneration requested',
-      includeChanges: true,
-      priority: 'normal',
-    });
+    await regenerateSection(section as Parameters<typeof regenerateSection>[0], 'Manual regeneration requested');
   };
 
   return (
@@ -89,16 +119,18 @@ export default function ReviewPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight">Human Review</h1>
-              <Badge className={cn(
-                session.workflow.status === 'approved' && 'bg-green-100 text-green-800',
-                session.workflow.status === 'in_review' && 'bg-blue-100 text-blue-800',
-                session.workflow.status === 'changes_requested' && 'bg-yellow-100 text-yellow-800'
-              )}>
+              <Badge
+                className={cn(
+                  session.workflow.status === 'approved' && 'bg-green-100 text-green-800',
+                  session.workflow.status === 'in_review' && 'bg-blue-100 text-blue-800',
+                  session.workflow.status === 'changes_requested' && 'bg-yellow-100 text-yellow-800'
+                )}
+              >
                 {session.workflow.status.replace('_', ' ')}
               </Badge>
             </div>
             <p className="text-muted-foreground">
-              Review and approve tender analysis - {session.tenderId}
+              Review and approve tender analysis — {session.tenderId}
             </p>
           </div>
         </div>
@@ -116,12 +148,10 @@ export default function ReviewPage() {
             </>
           )}
           {!editState.isEditing && (
-            <>
-              <Button variant="outline">
-                <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
-                Refresh
-              </Button>
-            </>
+            <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+              <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
+              Refresh
+            </Button>
           )}
         </div>
       </div>
@@ -138,13 +168,13 @@ export default function ReviewPage() {
               <div className="grid gap-2 md:grid-cols-4 lg:grid-cols-7">
                 {sections.map((section) => {
                   const Icon = SECTION_ICONS[section.id as keyof typeof SECTION_ICONS];
-                  const status = getSectionStatus(section.id as any);
-                  const progress = getSectionProgress(section.id as any);
+                  const progress = getSectionProgress(section.id as Parameters<typeof getSectionProgress>[0]);
 
                   return (
                     <button
                       key={section.id}
-                      onClick={() => setSelectedSection(section.id as any)}
+                      type="button"
+                      onClick={() => setSelectedSection(section.id as Parameters<typeof setSelectedSection>[0])}
                       className={cn(
                         'flex flex-col items-center justify-center p-3 rounded-lg border transition-all',
                         selectedSection === section.id
@@ -168,7 +198,7 @@ export default function ReviewPage() {
                 })}
               </div>
 
-              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
                 <TabsList>
                   <TabsTrigger value="content">Content</TabsTrigger>
                   <TabsTrigger value="comments">Comments</TabsTrigger>
@@ -190,20 +220,20 @@ export default function ReviewPage() {
                       </Button>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        <EditableSection section={selectedSection} title={SECTION_TITLES[selectedSection]}>
-                          <div className="p-8 text-center text-muted-foreground">
-                            Section content for {selectedSection} would be rendered here.
-                            This connects to the analysis components.
-                          </div>
-                        </EditableSection>
-                      </div>
+                      <EditableSection
+                        section={selectedSection}
+                        title={SECTION_TITLES[selectedSection]}
+                      >
+                        <div className="p-8 text-center text-muted-foreground">
+                          Section content for {selectedSection} is loaded from analysis results.
+                        </div>
+                      </EditableSection>
                     </CardContent>
                   </Card>
                 </TabsContent>
 
                 <TabsContent value="comments">
-                  <ReviewerComments sectionFilter={selectedSection} />
+                  <ReviewerComments sectionFilter={selectedSection} tenderId={tenderId} />
                 </TabsContent>
 
                 <TabsContent value="history">
@@ -219,11 +249,7 @@ export default function ReviewPage() {
         </div>
 
         <div className="space-y-4">
-          <ApprovalWorkflow
-            onApprove={(comments) => { /* handled by ApprovalWorkflow */ }}
-            onReject={(comments) => { /* handled by ApprovalWorkflow */ }}
-            onRequestChanges={(sections, comments) => { /* handled by ApprovalWorkflow */ }}
-          />
+          <ApprovalWorkflow tenderId={tenderId} />
 
           <Card>
             <CardHeader>

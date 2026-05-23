@@ -230,13 +230,16 @@ def get_provider_secret(provider_id: str) -> Optional[str]:
     return _decrypt_secret(p['api_key_enc'])
 
 
-# --- Dismissed failed jobs ---
+# --- Dismissed failed jobs (legacy JSON — use *_db helpers from admin_platform) ---
+
 
 def list_dismissed_failed_jobs() -> set[str]:
+    """Deprecated: use list_dismissed_failed_jobs_db. Kept for migration scripts only."""
     return set(_read_json(_DISMISSED_FILE, []))
 
 
 def dismiss_failed_job(job_id: str) -> None:
+    """Deprecated: use dismiss_failed_job_db. Platform API persists to MySQL only."""
     dismissed = list_dismissed_failed_jobs()
     dismissed.add(job_id)
     _write_json(_DISMISSED_FILE, sorted(dismissed))

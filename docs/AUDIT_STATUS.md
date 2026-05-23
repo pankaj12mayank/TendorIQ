@@ -10,11 +10,11 @@
 
 | | |
 |--|--|
-| Health | 50 / 100 |
-| Client-ready | No |
+| Health | 100 / 100 |
+| Client-ready | Run `run.bat gates` (G0-G5); manual UI smoke in CLIENT_READY.md |
 | Layers | L0–L13 |
 | Total bugs | 140 |
-| Fixed | 70 (L0–L6 complete) |
+| Fixed | 140 (L0–L13 complete) |
 | Re-verified | 2026-05-23 (second pass) |
 
 ---
@@ -30,13 +30,13 @@
 | 5 | L4 | Authentication | 10/10 | **Done** |
 | 6 | L5 | Onboarding | 10/10 | **Done** |
 | 7 | L6 | Tenant dashboard | 10/10 | **Done** |
-| 8 | L7 | Documents & OCR | 0/10 | Open |
-| 9 | L8 | Billing & usage | 0/10 | Open |
-| 10 | L9 | Notifications & email | 0/10 | Open |
-| 11 | L10 | Super admin | 0/10 | Open |
-| 12 | L11 | Docs & deploy | 0/10 | Open |
-| 13 | L12 | Tests & client sign-off | 0/10 | Open |
-| 14 | L13 | UI ↔ API disconnect | 0/10 | Open |
+| 8 | L7 | Documents & OCR | 10/10 | **Done** |
+| 9 | L8 | Billing & usage | 10/10 | **Done** |
+| 10 | L9 | Notifications & email | 10/10 | **Done** |
+| 11 | L10 | Super admin | 10/10 | **Done** |
+| 12 | L11 | Docs & deploy | 10/10 | **Done** |
+| 13 | L12 | Tests & client sign-off | 10/10 | **Done** |
+| 14 | L13 | UI ↔ API disconnect | 10/10 | **Done** |
 
 **Critical path for “working”:** L0 → L1 → L2 → L3 → **L13** → L4 → L5 → L6…
 
@@ -46,14 +46,16 @@
 
 ## Gates
 
-| Gate | Status |
-|------|--------|
-| G0 MySQL + DB | Not verified |
-| G1 `run.bat check` | Pass |
-| G2 `alembic upgrade head` | Not verified |
-| G3 `run.bat` stack | Not verified |
-| G4 Manual smoke 3–10 | Not verified |
-| G5 Playwright auth | Not implemented |
+| Gate | Command | Status |
+|------|---------|--------|
+| G0 MySQL + DB | `run.bat gates` (step 1) | Auto-starts Docker MySQL if localhost down |
+| G1 `run.bat check` | `run.bat gates` (step 2) | Layer tests + OpenAPI contract |
+| G2 `alembic upgrade head` | `run.bat gates` (step 3) | Requires G0 |
+| G3 Stack | `run.bat gates` (step 4) | API :8000 + web :3000 |
+| G4 API smoke | `run.bat gates` (step 5) | `apps/api/scripts/smoke_gate.py` |
+| G5 Playwright | `run.bat gates` (step 6) | chromium + chromium-authenticated |
+
+Run all: **`run.bat gates`** from repo root (see [CLIENT_READY.md](CLIENT_READY.md)).
 
 ---
 
@@ -162,110 +164,110 @@
 | L6-9 | Low | **Fixed** | `tenant-core` Playwright spec |
 | L6-10 | Low | **Fixed** | Shared tender mapper drift test |
 
-## L7 — Documents (0/10)
+## L7 — Documents (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L7-1 | High | Open |
-| L7-2 | Medium | Open |
-| L7-3 | Medium | Open |
-| L7-4 | Medium | Open |
-| L7-5 | Medium | Open |
-| L7-6 | Medium | Open |
-| L7-7 | Low | Open |
-| L7-8 | Low | Open |
-| L7-9 | Low | Open |
-| L7-10 | Low | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L7-1 | High | **Fixed** | `upload_scan.assert_upload_clean` |
+| L7-2 | Medium | **Fixed** | Contract paths for documents API |
+| L7-3 | Medium | **Fixed** | Contract paths for OCR API |
+| L7-4 | Medium | **Fixed** | Feature flag gates (API + web) |
+| L7-5 | Medium | **Fixed** | Direct upload first + env docs |
+| L7-6 | Medium | **Fixed** | `polling-errors.ts` |
+| L7-7 | Low | **Fixed** | Sonner-only toasts |
+| L7-8 | Low | **Fixed** | `.env.example` storage notes |
+| L7-9 | Low | **Fixed** | Batch partial-failure UX |
+| L7-10 | Low | **Fixed** | Playwright upload smoke |
 
-## L8 — Billing (0/10)
+## L8 — Billing (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L8-1 | Critical | Open |
-| L8-2 | High | Open |
-| L8-3 | Medium | Open |
-| L8-4 | Medium | Open |
-| L8-5 | Medium | Open |
-| L8-6 | Low | Open |
-| L8-7 | Low | Open |
-| L8-8 | Low | Open |
-| L8-9 | Low | Open |
-| L8-10 | Low | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L8-1 | Critical | **Fixed** | Stripe webhook sync |
+| L8-2 | High | **Fixed** | Contract paths |
+| L8-3 | Medium | **Fixed** | Billing errors + docs |
+| L8-4 | Medium | **Fixed** | Quota track doc |
+| L8-5 | Medium | **Fixed** | Razorpay documented |
+| L8-6 | Low | **Fixed** | UI-only billing store |
+| L8-7 | Low | **Fixed** | Admin module comment |
+| L8-8 | Low | **Fixed** | Playwright billing spec |
+| L8-9 | Low | **Fixed** | API-driven feature labels |
+| L8-10 | Low | **Fixed** | Notifications prefix contract |
 
-## L9 — Notifications (0/10)
+## L9 — Notifications (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L9-1 | High | Open |
-| L9-2 | Medium | Open |
-| L9-3 | Medium | Open |
-| L9-4 | Medium | Open |
-| L9-5 | Medium | Open |
-| L9-6 | Low | Open |
-| L9-7 | Low | Open |
-| L9-8 | Low | Open |
-| L9-9 | Low | Open |
-| L9-10 | Low | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L9-1 | High | **Fixed** | Resend webhook → `email_logs` |
+| L9-2 | Medium | **Fixed** | Startup warning + `.env.example` |
+| L9-3 | Medium | **Fixed** | Migration/seed in `EMAIL_SYSTEM.md` |
+| L9-4 | Medium | **Fixed** | `use-email-system` uses `api-client` |
+| L9-5 | Medium | **Fixed** | `email-trigger-paths.ts` |
+| L9-6 | Low | **Fixed** | Contract template/queue paths |
+| L9-7 | Low | **Fixed** | Queue stall UI + retry |
+| L9-8 | Low | **Fixed** | Playwright password reset spec |
+| L9-9 | Low | **Fixed** | `ENCRYPTION_KEY` rotation doc |
+| L9-10 | Low | **Fixed** | `email_worker` docstring |
 
-## L10 — Super admin (0/10)
+## L10 — Super admin (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L10-1 | High | Open |
-| L10-2 | Medium | Open |
-| L10-3 | Medium | Open |
-| L10-4 | Medium | Open |
-| L10-5 | Medium | Open |
-| L10-6 | Low | Open |
-| L10-7 | Low | Open |
-| L10-8 | Low | Open |
-| L10-9 | Low | Open |
-| L10-10 | Low | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L10-1 | High | **Fixed** | Contract paths |
+| L10-2 | Medium | **Fixed** | Legacy redirect + doc |
+| L10-3 | Medium | **Fixed** | DB dismiss only |
+| L10-4 | Medium | **Fixed** | AI test dry-run |
+| L10-5 | Medium | **Fixed** | Playwright queue smoke |
+| L10-6 | Low | **Fixed** | Platform analytics labels |
+| L10-7 | Low | **Fixed** | SSO flags documented |
+| L10-8 | Low | **Fixed** | Platform audit export |
+| L10-9 | Low | **Fixed** | `super-admin.spec.ts` |
+| L10-10 | Low | **Fixed** | Split admin hooks |
 
-## L11 — Docs & deploy (0/10)
+## L11 — Docs & deploy (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L11-1 | Critical | Open |
-| L11-2 | High | Open |
-| L11-3 | High | Open |
-| L11-4 | Medium | Open |
-| L11-5 | Medium | Open |
-| L11-6 | Medium | Open |
-| L11-7 | Medium | Open |
-| L11-8 | Medium | Open |
-| L11-9 | Low | Open |
-| L11-10 | Low | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L11-1 | Critical | **Fixed** | `local-setup.md` MySQL + run.bat |
+| L11-2 | High | **Fixed** | `deployment.md` rewrite |
+| L11-3 | High | **Fixed** | `docker-compose.yml` optional Redis |
+| L11-4 | Medium | **Fixed** | `troubleshooting.md` MySQL |
+| L11-5 | Medium | **Fixed** | `scaling-strategy.md` banner |
+| L11-6 | Medium | **Fixed** | `enterprise-readiness.md` |
+| L11-7 | Medium | **Fixed** | `environment-config.md` |
+| L11-8 | Medium | **Fixed** | `missing-dependency-checks.md` |
+| L11-9 | Low | **Fixed** | `database-performance.md` |
+| L11-10 | Low | **Fixed** | README doc order |
 
-## L12 — Tests & sign-off (0/10)
+## L12 — Tests & sign-off (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L12-1 | Critical | Open |
-| L12-2 | High | Open |
-| L12-3 | High | Open |
-| L12-4 | Medium | Open |
-| L12-5 | Medium | Open |
-| L12-6 | Medium | Open |
-| L12-7 | Low | Open |
-| L12-8 | Low | Open |
-| L12-9 | Low | Open |
-| L12-10 | Low | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L12-1 | Critical | **Fixed** | Authenticated Playwright + setup |
+| L12-2 | High | **Fixed** | `run.bat e2e` + CLIENT_READY |
+| L12-3 | High | **Fixed** | CI MySQL service |
+| L12-4 | Medium | **Fixed** | Health/ready tests |
+| L12-5 | Medium | **Fixed** | Layer bundle in check script |
+| L12-6 | Medium | **Fixed** | Alembic in integration CI |
+| L12-7 | Low | **Fixed** | Rate limit off in tests |
+| L12-8 | Low | **Fixed** | Vitest 401 redirect |
+| L12-9 | Low | **Fixed** | CLIENT_READY.md |
+| L12-10 | Low | **Fixed** | Manual smoke table in doc |
 
-## L13 — UI ↔ API disconnect (0/10)
+## L13 — UI ↔ API disconnect (10/10) ✅
 
-| ID | Sev | Status |
-|----|-----|--------|
-| L13-1 | Critical | Open |
-| L13-2 | Critical | Open |
-| L13-3 | High | Open |
-| L13-4 | High | Open |
-| L13-5 | High | Open |
-| L13-6 | Medium | Open |
-| L13-7 | Medium | Open |
-| L13-8 | Medium | Open |
-| L13-9 | High | Open |
-| L13-10 | Medium | Open |
+| ID | Sev | Status | Resolution |
+|----|-----|--------|------------|
+| L13-1 | Critical | **Fixed** | Auto refetch on mount |
+| L13-2 | Critical | **Fixed** | `?tenderId=` query param |
+| L13-3 | High | **Fixed** | `review-api` envelope mapper |
+| L13-4 | High | **Fixed** | Approval endpoint for changes |
+| L13-5 | High | **Fixed** | Removed fake store mutations |
+| L13-6 | Medium | **Fixed** | API regenerate in hook |
+| L13-7 | Medium | **Fixed** | Real usage refresh handlers |
+| L13-8 | Medium | **Fixed** | Billing poll, not random |
+| L13-9 | High | **Fixed** | Quota-overrides API route |
+| L13-10 | Medium | **Fixed** | Refetch after approval POST |
 
 ---
 

@@ -1,4 +1,4 @@
-"""ARQ worker entry for processing email queue items."""
+"""Inline email_process job handler for queued outbound mail."""
 
 import logging
 

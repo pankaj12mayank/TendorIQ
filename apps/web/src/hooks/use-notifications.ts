@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '@/lib/api-client';
+import { EMAIL_TRIGGER_PATHS, emailTriggerApiPath } from '@/lib/email-trigger-paths';
 import { parseNotificationsList } from '@/lib/notifications-api';
 import { useNotificationStore, Notification } from '@/components/notifications/store';
 
@@ -133,41 +134,41 @@ interface UseEmailTriggersReturn {
 }
 
 export function useEmailTriggers(): UseEmailTriggersReturn {
-  const postTrigger = useCallback(async (path: string, data: Record<string, unknown>) => {
-    await api.post(`/api/v1/email/triggers/${path}`, data);
+  const postTrigger = useCallback(async (trigger: string, data: Record<string, unknown>) => {
+    await api.post(emailTriggerApiPath(trigger as (typeof EMAIL_TRIGGER_PATHS)[keyof typeof EMAIL_TRIGGER_PATHS]), data);
   }, []);
 
   const triggerUploadReceived = useCallback(
     async (data: { user_email: string; file_name: string; tender_name: string }) => {
-      await postTrigger('upload-received', data);
+      await postTrigger(EMAIL_TRIGGER_PATHS.uploadReceived, data);
     },
     [postTrigger]
   );
 
   const triggerProcessingCompleted = useCallback(
     async (data: { user_email: string; file_name: string; tender_name: string }) => {
-      await postTrigger('processing-completed', data);
+      await postTrigger(EMAIL_TRIGGER_PATHS.processingCompleted, data);
     },
     [postTrigger]
   );
 
   const triggerProcessingFailed = useCallback(
     async (data: { user_email: string; file_name: string; error: string }) => {
-      await postTrigger('processing-failed', data);
+      await postTrigger(EMAIL_TRIGGER_PATHS.processingFailed, data);
     },
     [postTrigger]
   );
 
   const triggerQuotaExceeded = useCallback(
     async (data: { user_email: string; feature: string; used: number; limit: number }) => {
-      await postTrigger('quota-exceeded', data);
+      await postTrigger(EMAIL_TRIGGER_PATHS.quotaExceeded, data);
     },
     [postTrigger]
   );
 
   const triggerSubscriptionAlert = useCallback(
     async (data: { user_email: string; alert_type: string; message: string }) => {
-      await postTrigger('subscription-alert', data);
+      await postTrigger(EMAIL_TRIGGER_PATHS.subscriptionAlert, data);
     },
     [postTrigger]
   );

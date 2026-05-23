@@ -17,23 +17,27 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { ApprovalAction, ReviewSection } from '../types';
+import { useApprovalWorkflow } from '@/hooks/use-review';
 import { useReviewStore } from '../store';
 import { cn } from '@/lib/utils';
 
 interface ApprovalWorkflowProps {
+  tenderId?: string;
   onApprove?: (comments?: string) => void;
   onReject?: (comments?: string) => void;
   onRequestChanges?: (sections: string[], comments: string) => void;
   className?: string;
 }
 
-export function ApprovalWorkflow({ 
+export function ApprovalWorkflow({
+  tenderId,
   onApprove,
   onReject,
   onRequestChanges,
-  className 
+  className,
 }: ApprovalWorkflowProps) {
-  const { session, isLoading, submitApproval, requestChanges } = useReviewStore();
+  const session = useReviewStore((s) => s.session);
+  const { isLoading, submitApproval, requestChanges } = useApprovalWorkflow(tenderId);
   const [comments, setComments] = useState('');
   const [selectedSections, setSelectedSections] = useState<ReviewSection[]>([]);
 

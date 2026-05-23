@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useUsageStore } from '@/components/usage/store';
 import { 
   QuotaStatus, 
@@ -12,6 +12,7 @@ import {
 } from '@/components/usage/types';
 import { api } from '@/lib/api-client';
 import { mapUsageQuotas, mapUsageSummary } from '@/lib/billing-api';
+import { mergeFeatureConfigFromQuotas } from '@/components/usage/constants';
 
 interface UseUsageApiReturn {
   quotas: QuotaStatus[];
@@ -52,6 +53,7 @@ export function useUsageApi(): UseUsageApiReturn {
         '/api/v1/billing/quota'
       );
       const quotas = mapUsageQuotas(res);
+      mergeFeatureConfigFromQuotas(quotas);
       store.setQuotas(quotas);
       setLoading(false);
       return quotas;
@@ -91,16 +93,19 @@ export function useUsageApi(): UseUsageApiReturn {
   const fetchOverrides = useCallback(async (): Promise<AdminQuotaOverride[]> => {
     setLoading(true);
     try {
-      const res = await api.get<{ overrides: AdminQuotaOverride[] }>('/api/v1/admin/platform/quota-overrides');
-      store.setOverrides(res.overrides);
+      const res = await api.get<{ overrides?: AdminQuotaOverride[] }>(
+        '/api/v1/admin/platform/quota-overrides'
+      );
+      const overrides = res.overrides ?? [];
+      store.setOverrides(overrides);
       setLoading(false);
-      return res.overrides;
+      return overrides;
     } catch {
       store.setOverrides([]);
       setLoading(false);
       return [];
     }
-  }, []);
+  }, [store]);
 
   const trackUsage = useCallback(async (
     featureKey: FeatureKey, 
@@ -135,31 +140,43 @@ export function useUsageApi(): UseUsageApiReturn {
 
   const subscribeToRealtime = useCallback(() => {
     store.toggleRealTime(true);
-    
-    const interval = setInterval(() => {
-      const featureKeys: FeatureKey[] = ['ai_tokens', 'api_requests', 'uploads'];
-      const idx = Math.floor(Math.random() * featureKeys.length);
-      const randomFeature: FeatureKey = featureKeys[idx]!;
-      const randomChange = Math.floor(Math.random() * 5) + 1;
-      
-      const currentQuota = store.quotas.find((q) => q.featureKey === randomFeature);
-      if (currentQuota) {
-        const update: RealTimeUsageUpdate = {
-          featureKey: randomFeature,
-          change: randomChange,
-          newTotal: currentQuota.used + randomChange,
-          timestamp: new Date().toISOString(),
-        };
-        store.addRealtimeUpdate(update);
-      }
-    }, 10000);
+
+    const poll = () => {
+      void fetchQuotas();
+      void fetchUsageSummary();
+    };
+
+    poll();
+    const interval = setInterval(poll, 60_000);
 
     return () => {
       clearInterval(interval);
       store.toggleRealTime(false);
       store.clearRealtimeUpdates();
     };
-  }, []);
+  }, [fetchQuotas, fetchUsageSummary, store]);
+
+  useEffect(() => {
+    useUsageStore.setState({
+      refreshUsage: async () => {
+        setLoading(true);
+        try {
+          await fetchQuotas();
+          await fetchUsageSummary();
+        } finally {
+          setLoading(false);
+        }
+      },
+      refreshAlerts: async () => {
+        setLoading(true);
+        try {
+          await fetchAlerts();
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+  }, [fetchAlerts, fetchQuotas, fetchUsageSummary]);
 
   const getAllQuotas = useCallback(() => {
     return store.quotas;

@@ -111,6 +111,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         return result;
       }
 
+      if (directResponse.status === 400) {
+        const errBody = (await directResponse.json().catch(() => ({}))) as Record<string, unknown>;
+        throw new Error(parseApiErrorMessage(errBody) || 'Upload rejected');
+      }
+
       const initResponse = await authenticatedFetch('/api/v1/files/upload/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

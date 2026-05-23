@@ -9,6 +9,7 @@ export const ROUTES = {
   forgotPassword: '/forgot-password',
   resetPassword: '/reset-password',
   onboarding: '/onboarding',
+  /** Legacy URL — redirects to {@link ROUTES.signIn}. Super admins land on {@link ROUTES.admin}. */
   adminLogin: '/admin/login',
   adminLoginLegacy: '/admin/sign-in',
   dashboard: '/dashboard',

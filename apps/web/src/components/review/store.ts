@@ -1,16 +1,11 @@
 import { create } from 'zustand';
-import { 
+import {
   ReviewSession,
   ReviewSection,
-  EditFieldPayload,
-  ApprovalAction,
-  RegenerationRequest,
   ReviewComment,
   AuditEntry,
-  ChangeRecord,
-  SectionStatus
+  SectionStatus,
 } from './types';
-
 
 interface EditState {
   section: ReviewSection | null;
@@ -30,6 +25,7 @@ interface RegenerationState {
 
 interface ReviewState {
   session: ReviewSession | null;
+  activeTenderId: string | null;
   isLoading: boolean;
   isSaving: boolean;
   editState: EditState;
@@ -38,33 +34,39 @@ interface ReviewState {
   showAuditLog: boolean;
   showChangeHistory: boolean;
 
-  setSession: (session: ReviewSession) => void;
+  setActiveTenderId: (tenderId: string | null) => void;
+  setSession: (session: ReviewSession | null) => void;
   setLoading: (loading: boolean) => void;
+  setSaving: (saving: boolean) => void;
   setSelectedSection: (section: ReviewSection) => void;
-  
+
   startEdit: (section: ReviewSection, field: string, value: unknown) => void;
   updateEditValue: (value: unknown) => void;
-  saveEdit: () => Promise<void>;
   cancelEdit: () => void;
-  
-  submitApproval: (action: ApprovalAction, comments?: string) => Promise<void>;
-  requestChanges: (sections: string[], comments: string) => Promise<void>;
-  
-  regenerateSection: (request: RegenerationRequest) => Promise<void>;
-  updateRegenerationProgress: (progress: number) => void;
-  
-  addComment: (comment: Omit<ReviewComment, 'id' | 'createdAt' | 'isResolved'>) => void;
+
+  setRegenerationProgress: (
+    section: ReviewSection | null,
+    progress: number,
+    status: RegenerationState['status']
+  ) => void;
+  clearRegeneration: () => void;
+
+  addCommentLocal: (comment: ReviewComment) => void;
   resolveComment: (commentId: string) => void;
-  addReply: (commentId: string, reply: Omit<ReviewComment, 'id' | 'createdAt' | 'isResolved' | 'replies'>) => void;
-  
+  addReply: (
+    commentId: string,
+    reply: Omit<ReviewComment, 'id' | 'createdAt' | 'isResolved' | 'replies'>
+  ) => void;
+
   toggleAuditLog: () => void;
   toggleChangeHistory: () => void;
-  
+
   getSectionStatus: (section: ReviewSection) => SectionStatus | undefined;
 }
 
 export const useReviewStore = create<ReviewState>((set, get) => ({
   session: null,
+  activeTenderId: null,
   isLoading: false,
   isSaving: false,
   editState: {
@@ -84,8 +86,10 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   showAuditLog: false,
   showChangeHistory: false,
 
+  setActiveTenderId: (tenderId) => set({ activeTenderId: tenderId }),
   setSession: (session) => set({ session }),
   setLoading: (loading) => set({ isLoading: loading }),
+  setSaving: (saving) => set({ isSaving: saving }),
   setSelectedSection: (section) => set({ selectedSection: section }),
 
   startEdit: (section, field, value) =>
@@ -104,184 +108,49 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       editState: { ...state.editState, currentValue: value },
     })),
 
-  saveEdit: async () => {
-    const { editState, session } = get();
-    if (!editState.section || !editState.field || !session) return;
-
-    set({ isSaving: true });
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const newChange: ChangeRecord = {
-      id: `change-${Date.now()}`,
-      section: editState.section,
-      field: editState.field,
-      previousValue: String(editState.originalValue),
-      newValue: String(editState.currentValue),
-      changedBy: 'current-user',
-      changedByName: 'Current User',
-      changedAt: new Date().toISOString(),
-    };
-
-    const newAuditEntry: AuditEntry = {
-      id: `audit-${Date.now()}`,
-      action: 'SECTION_EDITED',
-      performedBy: 'current-user',
-      performedByName: 'Current User',
-      performedByRole: 'Reviewer',
-      timestamp: new Date().toISOString(),
-      details: `Edited ${editState.section}.${editState.field}`,
-      previousState: { [editState.field]: editState.originalValue },
-      newState: { [editState.field]: editState.currentValue },
-    };
-
-    set((state) => ({
-      session: state.session
-        ? {
-            ...state.session,
-            changes: [newChange, ...state.session.changes],
-            auditLog: [newAuditEntry, ...state.session.auditLog],
-            sectionStatuses: state.session.sectionStatuses.map((s) =>
-              s.section === editState.section
-                ? { ...s, isEdited: true, hasChanges: true, editCount: s.editCount + 1, lastEditedAt: new Date().toISOString(), lastEditedBy: 'Current User' }
-                : s
-            ),
-          }
-        : null,
-      editState: { section: null, field: null, isEditing: false, originalValue: null, currentValue: null },
-      isSaving: false,
-    }));
-  },
-
   cancelEdit: () =>
     set({
-      editState: { section: null, field: null, isEditing: false, originalValue: null, currentValue: null },
+      editState: {
+        section: null,
+        field: null,
+        isEditing: false,
+        originalValue: null,
+        currentValue: null,
+      },
     }),
 
-  submitApproval: async (action, comments) => {
-    const { session } = get();
-    if (!session) return;
-
-    set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const newAuditEntry: AuditEntry = {
-      id: `audit-${Date.now()}`,
-      action: action === 'approve' ? 'APPROVAL_SUBMITTED' : 'REQUEST_CHANGES',
-      performedBy: 'current-user',
-      performedByName: 'Current User',
-      performedByRole: 'Reviewer',
-      timestamp: new Date().toISOString(),
-      details: comments || `Action: ${action}`,
-    };
-
-    set((state) => ({
-      session: state.session
-        ? {
-            ...state.session,
-            workflow: {
-              ...state.session.workflow,
-              status: action === 'approve' ? 'approved' : 'changes_requested',
-            },
-            auditLog: [newAuditEntry, ...state.session.auditLog],
-          }
-        : null,
-      isLoading: false,
-    }));
-  },
-
-  requestChanges: async (sections, comments) => {
-    const { session } = get();
-    if (!session) return;
-
-    set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const newAuditEntry: AuditEntry = {
-      id: `audit-${Date.now()}`,
-      action: 'REQUEST_CHANGES',
-      performedBy: 'current-user',
-      performedByName: 'Current User',
-      performedByRole: 'Reviewer',
-      timestamp: new Date().toISOString(),
-      details: `Changes requested for sections: ${sections.join(', ')}. ${comments}`,
-    };
-
-    set((state) => ({
-      session: state.session
-        ? {
-            ...state.session,
-            workflow: { ...state.session.workflow, status: 'changes_requested' },
-            auditLog: [newAuditEntry, ...state.session.auditLog],
-          }
-        : null,
-      isLoading: false,
-    }));
-  },
-
-  regenerateSection: async (request) => {
+  setRegenerationProgress: (section, progress, status) =>
     set({
       regenerationState: {
-        section: request.section,
-        isRegenerating: true,
-        progress: 0,
-        status: 'generating',
+        section,
+        isRegenerating: status === 'generating',
+        progress,
+        status,
       },
-    });
+    }),
 
-    for (let i = 0; i <= 100; i += 20) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      get().updateRegenerationProgress(i);
-    }
+  clearRegeneration: () =>
+    set({
+      regenerationState: {
+        section: null,
+        isRegenerating: false,
+        progress: 0,
+        status: 'idle',
+      },
+    }),
 
-    set((state) => ({
-      regenerationState: { ...state.regenerationState, isRegenerating: false, status: 'completed', progress: 100 },
-    }));
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    set((state) => ({
-      regenerationState: { section: null, isRegenerating: false, progress: 0, status: 'idle' },
-    }));
-  },
-
-  updateRegenerationProgress: (progress) =>
-    set((state) => ({
-      regenerationState: { ...state.regenerationState, progress },
-    })),
-
-  addComment: (comment) => {
+  addCommentLocal: (comment) => {
     const { session } = get();
     if (!session) return;
-
-    const newComment: ReviewComment = {
-      ...comment,
-      id: `comment-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      isResolved: false,
-    };
-
-    const newAuditEntry: AuditEntry = {
-      id: `audit-${Date.now()}`,
-      action: 'COMMENT_ADDED',
-      performedBy: comment.reviewerId,
-      performedByName: comment.reviewerName,
-      performedByRole: comment.reviewerRole,
-      timestamp: new Date().toISOString(),
-      details: `Comment added on ${comment.section || 'general'} section`,
-    };
-
-    set((state) => ({
-      session: state.session
-        ? {
-            ...state.session,
-            comments: [newComment, ...state.session.comments],
-            auditLog: [newAuditEntry, ...state.session.auditLog],
-          }
-        : null,
-    }));
+    set({
+      session: {
+        ...session,
+        comments: [comment, ...session.comments],
+      },
+    });
   },
 
-  resolveComment: (commentId) =>
+  resolveComment: (commentId) => {
     set((state) => ({
       session: state.session
         ? {
@@ -291,7 +160,8 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
             ),
           }
         : null,
-    })),
+    }));
+  },
 
   addReply: (commentId, reply) => {
     const { session } = get();
@@ -304,18 +174,14 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       isResolved: false,
     };
 
-    set((state) => ({
-      session: state.session
-        ? {
-            ...state.session,
-            comments: state.session.comments.map((c) =>
-              c.id === commentId
-                ? { ...c, replies: [...(c.replies || []), newReply] }
-                : c
-            ),
-          }
-        : null,
-    }));
+    set({
+      session: {
+        ...session,
+        comments: session.comments.map((c) =>
+          c.id === commentId ? { ...c, replies: [...(c.replies || []), newReply] } : c
+        ),
+      },
+    });
   },
 
   toggleAuditLog: () => set((state) => ({ showAuditLog: !state.showAuditLog })),

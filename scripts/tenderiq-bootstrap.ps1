@@ -95,6 +95,44 @@ function Test-TenderIqApiReady {
     }
 }
 
+function Start-TenderIqDockerMySql {
+    param([string]$Root)
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    $compose = Join-Path $Root 'docker-compose.yml'
+    if (-not (Test-Path $compose)) {
+        return $false
+    }
+    Write-Host '[INFO] Starting MySQL via docker compose (mysql service)...' -ForegroundColor Yellow
+    Push-Location $Root
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    docker compose up -d mysql 2>&1 | Out-Null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    Pop-Location
+    if ($code -ne 0) {
+        Write-Host '[WARN] docker compose mysql failed (is Docker Desktop running?)' -ForegroundColor Yellow
+        return $false
+    }
+    $deadline = (Get-Date).AddSeconds(90)
+    while ((Get-Date) -lt $deadline) {
+        $healthy = docker compose -f $compose ps mysql 2>$null | Select-String -Pattern 'healthy'
+        if ($healthy) {
+            Write-Host '[INFO] Docker MySQL is healthy on localhost:3306' -ForegroundColor Green
+            return $true
+        }
+        Start-Sleep -Seconds 3
+    }
+    Write-Host '[WARN] Docker MySQL started but health check timed out' -ForegroundColor Yellow
+    return $true
+}
+
+function Get-TenderIqDockerDatabaseUrl {
+    return 'mysql+aiomysql://root:password@localhost:3306/tenderiq?charset=utf8mb4'
+}
+
 function Initialize-TenderIqDatabase {
     param(
         [string]$Root,

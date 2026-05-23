@@ -4,6 +4,7 @@
  */
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api-client';
+import { ADMIN_PLATFORM_PATHS } from '@/lib/admin-platform-paths';
 import {
   parsePlatformAnalyticsSummary,
   type PlatformAnalyticsSummary,
@@ -42,7 +43,7 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
     setIsError(false);
     setError(null);
     try {
-      const raw = await api.get<unknown>('/api/v1/admin/platform/analytics/summary');
+      const raw = await api.get<unknown>(ADMIN_PLATFORM_PATHS.analyticsSummary);
       const res = parsePlatformAnalyticsSummary(raw);
 
       setMetrics({
@@ -158,7 +159,7 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const raw = await api.get<unknown>('/api/v1/admin/platform/analytics/summary');
+      const raw = await api.get<unknown>(ADMIN_PLATFORM_PATHS.analyticsSummary);
       setSummary(parsePlatformAnalyticsSummary(raw));
     } catch {
       /* keep last snapshot */

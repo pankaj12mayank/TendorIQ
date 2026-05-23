@@ -13,6 +13,8 @@ echo.
 
 if /I "%~1"=="stop" goto :do_stop
 if /I "%~1"=="check" goto :do_check
+if /I "%~1"=="e2e" goto :do_e2e
+if /I "%~1"=="gates" goto :do_gates
 if /I "%~1"=="setup" goto :do_setup
 if /I "%~1"=="full" goto :do_setup
 if /I "%~1"=="dev" goto :do_turbo_dev
@@ -66,6 +68,20 @@ echo Press any key to close this window (servers keep running in background).
 echo To stop servers, run: run.bat stop
 pause >nul
 exit /b 0
+
+:do_gates
+echo.
+echo  TenderIQ - Client-ready gates G0-G5
+echo  ==================================================
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\tenderiq-gates.ps1"
+exit /b %ERRORLEVEL%
+
+:do_e2e
+echo.
+echo  TenderIQ - Playwright E2E (requires API :8000 and web :3000 — run run.bat first)
+echo  ==================================================
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\tenderiq-e2e.ps1"
+exit /b %ERRORLEVEL%
 
 :do_check
 echo.

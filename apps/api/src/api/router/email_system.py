@@ -617,7 +617,7 @@ async def email_analytics(_admin: SuperAdmin, days: int = Query(30, le=365), db:
     result = await db.execute(select(EmailLog).where(EmailLog.created_at >= since))
     logs = result.scalars().all()
     total = len(logs)
-    sent = sum(1 for l in logs if l.status == 'sent')
+    sent = sum(1 for l in logs if l.status in ('sent', 'delivered'))
     failed = sum(1 for l in logs if l.status in ('failed', 'dead_letter'))
     retrying = sum(1 for l in logs if l.status == 'retrying')
     opened = sum(1 for l in logs if l.opened_at)

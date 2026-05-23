@@ -6,6 +6,7 @@ import {
 } from '@/lib/documents-api';
 import { useDocumentStore, Document, DocumentStats, DocumentFilters, DocumentStatus } from '@/stores/document-store';
 import { toast } from 'sonner';
+import { formatPollingError, PollingCancelledError, PollingTimeoutError } from '@/lib/polling-errors';
 
 export interface DocumentStatsResponse {
   success: boolean;
@@ -149,72 +150,98 @@ export function useDocumentsApi() {
   const batchArchive = useCallback(async (documentIds: string[]) => {
     setLoading(true);
     setError(null);
+    const previous = documentIds.map((id) => store.documents.find((d) => d.id === id)).filter(Boolean);
 
     try {
-      await api.post('/api/v1/documents/batch', {
+      const res = await api.post<{ updated_count: number; errors?: string[] }>('/api/v1/documents/batch', {
         document_ids: documentIds,
         status: 'archived',
       });
 
-      for (const id of documentIds) {
-        store.updateDocument(id, { is_archived: true });
-      }
+      await fetchDocuments();
       store.clearSelection();
+
+      if (res.errors?.length) {
+        const msg = `Archived ${res.updated_count} of ${documentIds.length}. ${res.errors.join(' ')}`;
+        setError(msg);
+        toast.warning(msg);
+        return;
+      }
+      toast.success(`Archived ${res.updated_count} document(s)`);
     } catch (err: unknown) {
+      for (const doc of previous) {
+        if (doc) store.updateDocument(doc.id, doc);
+      }
       const msg = err instanceof Error ? err.message : 'Failed to archive';
       setError(msg);
+      toast.error(msg);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [store, fetchDocuments]);
 
   const batchRestore = useCallback(async (documentIds: string[]) => {
     setLoading(true);
     setError(null);
 
     try {
-      await api.post('/api/v1/documents/batch', {
+      const res = await api.post<{ updated_count: number; errors?: string[] }>('/api/v1/documents/batch', {
         document_ids: documentIds,
         status: 'restored',
       });
 
-      for (const id of documentIds) {
-        store.updateDocument(id, { is_archived: false });
-      }
+      await fetchDocuments();
       store.clearSelection();
+
+      if (res.errors?.length) {
+        const msg = `Restored ${res.updated_count} of ${documentIds.length}. ${res.errors.join(' ')}`;
+        setError(msg);
+        toast.warning(msg);
+        return;
+      }
+      toast.success(`Restored ${res.updated_count} document(s)`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to restore';
       setError(msg);
+      toast.error(msg);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [store, fetchDocuments]);
 
   const batchDelete = useCallback(async (documentIds: string[]) => {
     setLoading(true);
     setError(null);
 
     try {
-      await api.post('/api/v1/documents/batch', {
+      const res = await api.post<{ updated_count: number; errors?: string[] }>('/api/v1/documents/batch', {
         document_ids: documentIds,
         status: 'deleted',
       });
 
-      for (const id of documentIds) {
-        store.removeDocument(id);
-      }
+      await fetchDocuments();
       store.clearSelection();
       await fetchStats();
+
+      if (res.errors?.length) {
+        const msg = `Deleted ${res.updated_count} of ${documentIds.length}. ${res.errors.join(' ')}`;
+        setError(msg);
+        toast.warning(msg);
+        return;
+      }
+      toast.success(`Deleted ${res.updated_count} document(s)`);
     } catch (err: unknown) {
+      await fetchDocuments();
       const msg = err instanceof Error ? err.message : 'Failed to delete';
       setError(msg);
+      toast.error(msg);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [store, fetchStats]);
+  }, [store, fetchDocuments, fetchStats]);
 
   const delay = useCallback((ms: number) => {
     return new Promise<void>((resolve) => {
@@ -234,8 +261,11 @@ export function useDocumentsApi() {
 
   const pollDocumentStatus = useCallback(async (documentId: string, maxAttempts = 30, intervalMs = 3000) => {
     const poll = async (attempt = 0): Promise<DocumentStatus> => {
-      if (cancelledRef.current || attempt >= maxAttempts) {
-        throw new Error(cancelledRef.current ? 'Polling cancelled' : 'Polling timeout');
+      if (cancelledRef.current) {
+        throw new PollingCancelledError('Document processing');
+      }
+      if (attempt >= maxAttempts) {
+        throw new PollingTimeoutError('Document processing', maxAttempts, intervalMs);
       }
 
       try {
@@ -252,14 +282,22 @@ export function useDocumentsApi() {
         await delay(intervalMs);
         return poll(attempt + 1);
       } catch (err) {
-        if (cancelledRef.current) throw new Error('Polling cancelled');
-        if (attempt + 1 >= maxAttempts) throw err;
+        if (cancelledRef.current) throw new PollingCancelledError('Document processing');
+        if (attempt + 1 >= maxAttempts) {
+          throw err instanceof PollingTimeoutError ? err : new PollingTimeoutError('Document processing', maxAttempts, intervalMs);
+        }
         await delay(intervalMs);
         return poll(attempt + 1);
       }
     };
 
-    return poll();
+    try {
+      return await poll();
+    } catch (err) {
+      const msg = formatPollingError(err, 'Document processing');
+      setError(msg);
+      throw err;
+    }
   }, [store, delay]);
 
   return {

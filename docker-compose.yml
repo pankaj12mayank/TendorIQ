@@ -1,3 +1,9 @@
+# Optional Docker stack for API + MySQL (matches run.bat / local-setup.md).
+# Default: no Redis. Email/OCR use in-process inline jobs.
+#
+#   docker compose up -d
+#   docker compose --profile with-redis up -d   # optional rate-limit experiments
+
 services:
   api:
     build:
@@ -6,13 +12,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=mysql+pymysql://root:password@mysql:3306/tenderiq
-      - REDIS_URL=redis://redis:6379/0
-      - NODE_ENV=development
+      DATABASE_URL: mysql+aiomysql://root:password@mysql:3306/tenderiq?charset=utf8mb4
+      NODE_ENV: development
+      ALLOW_START_WITHOUT_DB: "false"
     depends_on:
       mysql:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   mysql:
@@ -31,6 +35,7 @@ services:
       retries: 5
 
   redis:
+    profiles: ["with-redis"]
     image: redis:7-alpine
     ports:
       - "6379:6379"

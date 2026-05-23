@@ -120,7 +120,7 @@ function Ensure-EnvFiles {
         $example = Join-Path $Root ".env.example"
         if (Test-Path $example) {
             Copy-Item $example $rootEnv
-            Write-Log "WARN" "Created .env from .env.example — set DATABASE_URL password (replace changeme)"
+            Write-Log "WARN" "Created .env from .env.example - set DATABASE_URL password (replace changeme)"
         }
         if (-not (Test-Path $rootEnv)) {
             @"
@@ -132,13 +132,13 @@ JWT_SECRET=dev-secret-key-change-in-production-min-32chars
 CLERK_SECRET_KEY=sk_test_placeholder
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
 "@ | Set-Content $rootEnv -Encoding utf8
-            Write-Log "WARN" "Created .env — edit DATABASE_URL (set your MySQL password) before signing in"
+            Write-Log "WARN" "Created .env - edit DATABASE_URL (set your MySQL password) before signing in"
         }
     }
 
     $dbUrl = Get-TenderIqDatabaseUrlFromEnv -EnvPath $rootEnv
     if ($dbUrl -match 'changeme|YOUR_MYSQL_PASSWORD') {
-        Write-Log "WARN" "DATABASE_URL uses a placeholder password — update .env (see docs/MYSQL_SETUP.md)"
+        Write-Log "WARN" "DATABASE_URL uses a placeholder password - update .env (see docs/MYSQL_SETUP.md)"
     }
 
     Ensure-EnvFileKeys $rootEnv
@@ -263,7 +263,7 @@ try {
     throw $_.Exception.Message
 }
 if (-not (Test-TenderIqPythonDevTools -VenvPython $VenvPython)) {
-    throw "pytest/ruff/mypy missing after install — run: run.bat setup"
+    throw "pytest/ruff/mypy missing after install - run: run.bat setup"
 }
 
 $rootEnv = Join-Path $Root ".env"

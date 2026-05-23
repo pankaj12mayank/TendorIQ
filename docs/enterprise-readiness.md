@@ -1,5 +1,7 @@
 # Enterprise Readiness Report
 
+> **Infra note (2026-05):** Production path is **MySQL** + inline job processing. Redis/PostgreSQL mentions below are historical or optional enhancements.
+
 **Assessment Date:** 2026-05-19
 **Overall Score:** 85/100
 **Recommendation:** 🟡 ENTERPRISE READY WITH CONDITIONS
@@ -49,7 +51,7 @@ TenderIQ is **85% enterprise-ready** with strong foundations in security, monito
 |------------|--------|-------|
 | Horizontal Scaling | ⚠️ | Manual scaling, no auto-scale |
 | Database Scaling | ⚠️ | No read replicas |
-| Queue Scaling | ✅ | Redis-based, multiple queues |
+| Queue Scaling | ✅ | DB-backed queue + inline workers; Redis optional |
 | CDN Integration | ⚠️ | Not implemented |
 | Caching | ⚠️ | Not implemented |
 | Multi-region | ❌ | Not implemented |

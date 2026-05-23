@@ -32,53 +32,107 @@ if (-not $devToolsOk) {
 
 Test-TenderIqDatabaseUrlConfigured -EnvPath $rootEnv
 
-Write-Host "[1/11] L6 contract tests..." -ForegroundColor Cyan
+Write-Host "[1/19] L12 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer12_client_ready.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[2/19] All layer regression tests (L0-L13)..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer0_bootstrap.py tests/unit/test_layer1_dependencies.py tests/unit/test_layer2_database.py tests/unit/test_layer3_api_routing.py tests/unit/test_layer4_auth.py tests/unit/test_layer5_onboarding.py tests/unit/test_layer6_tenant_dashboard.py tests/unit/test_layer7_documents_ocr.py tests/unit/test_layer8_billing.py tests/unit/test_layer9_notifications_email.py tests/unit/test_layer10_super_admin.py tests/unit/test_layer11_docs_deploy.py tests/unit/test_layer12_client_ready.py tests/unit/test_layer13_ui_api_disconnect.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[3/19] L11 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer11_docs_deploy.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[4/19] L10 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer10_super_admin.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[5/19] L9 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer9_notifications_email.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[6/19] L8 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer8_billing.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[7/19] L7 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer7_documents_ocr.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[8/19] L13 contract tests..." -ForegroundColor Cyan
+Push-Location $ApiDir
+& $VenvPython -m pytest tests/unit/test_layer13_ui_api_disconnect.py -q
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[9/19] L6 contract tests..." -ForegroundColor Cyan
 Push-Location $ApiDir
 & $VenvPython -m pytest tests/unit/test_layer6_tenant_dashboard.py -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 Pop-Location
 
-Write-Host "[2/11] L5 contract tests..." -ForegroundColor Cyan
+Write-Host "[10/19] L5 contract tests..." -ForegroundColor Cyan
 Push-Location $ApiDir
 & $VenvPython -m pytest tests/unit/test_layer5_onboarding.py -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 Pop-Location
 
-Write-Host "[3/11] L4 contract tests..." -ForegroundColor Cyan
+Write-Host "[11/19] L4 contract tests..." -ForegroundColor Cyan
 Push-Location $ApiDir
 & $VenvPython -m pytest tests/unit/test_layer4_auth.py -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 Pop-Location
 
-Write-Host "[4/11] L3 contract tests..." -ForegroundColor Cyan
+Write-Host "[12/19] L3 contract tests..." -ForegroundColor Cyan
 Push-Location $ApiDir
 & $VenvPython -m pytest tests/unit/test_layer3_api_routing.py tests/unit/test_openapi_contract.py -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 Pop-Location
 
-Write-Host "[5/11] L2 contract tests..." -ForegroundColor Cyan
+Write-Host "[13/19] L2 contract tests..." -ForegroundColor Cyan
 Push-Location $ApiDir
 & $VenvPython -m pytest tests/unit/test_layer2_database.py -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 Pop-Location
 
-Write-Host "[6/11] L1 contract tests..." -ForegroundColor Cyan
+Write-Host "[14/19] L1 contract tests..." -ForegroundColor Cyan
 Push-Location $ApiDir
 & $VenvPython -m pytest tests/unit/test_layer1_dependencies.py -q
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 
-Write-Host "[7/11] compileall..." -ForegroundColor Cyan
+Write-Host "[15/19] Web Vitest (auth 401)..." -ForegroundColor Cyan
+Push-Location (Join-Path $Root "apps\web")
+pnpm exec vitest run src/lib/__tests__/auth-unauthorized.test.ts
+if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
+Pop-Location
+
+Write-Host "[16/19] compileall..." -ForegroundColor Cyan
 & $VenvPython -m compileall -q src
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 
-Write-Host "[8/11] verify_import..." -ForegroundColor Cyan
+Write-Host "[17/19] verify_import..." -ForegroundColor Cyan
 $env:DOTENV_PATH = $rootEnv
 & $VenvPython scripts/verify_import.py
 $code = $LASTEXITCODE
 Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
 if ($code -ne 0) { Pop-Location; exit 1 }
 
-Write-Host "[9/11] MySQL reachability..." -ForegroundColor Cyan
+Write-Host "[18/19] MySQL reachability..." -ForegroundColor Cyan
 $mysqlCode = Invoke-TenderIqApiScript -VenvPython $VenvPython -ApiDir $ApiDir -EnvPath $rootEnv -ScriptArgs @('--check-only')
 Pop-Location
 if ($mysqlCode -ne 0) {
@@ -86,7 +140,7 @@ if ($mysqlCode -ne 0) {
     exit 1
 }
 
-Write-Host "[10/11] alembic upgrade head..." -ForegroundColor Cyan
+Write-Host "[19/19] alembic upgrade head..." -ForegroundColor Cyan
 try {
     Invoke-TenderIqAlembicUpgrade -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir
 } catch {
@@ -94,7 +148,7 @@ try {
     exit 1
 }
 
-Write-Host "[11/11] optional API readiness (if already running)..." -ForegroundColor Cyan
+Write-Host "[optional] API readiness (if already running)..." -ForegroundColor Cyan
 try {
     if (Test-TenderIqApiReady -Port 8000) {
         Write-Host '      API ready on :8000 (database OK)' -ForegroundColor Green
@@ -109,5 +163,5 @@ try {
 }
 
 Write-Host ""
-Write-Host 'All L0-L6 checks passed (tenant dashboard, onboarding, auth, routing, deps, schema, compile, import, MySQL, migrations).' -ForegroundColor Green
+Write-Host 'All L0-L13 checks passed. For client sign-off run stack (run.bat) then: run.bat e2e - see docs/CLIENT_READY.md' -ForegroundColor Green
 exit 0

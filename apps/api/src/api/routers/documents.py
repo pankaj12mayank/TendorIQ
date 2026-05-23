@@ -191,6 +191,12 @@ async def complete_document_upload(
     if not meta.get('success'):
         raise HTTPException(status_code=400, detail='File not found in storage')
 
+    from ...core.security.upload_scan import assert_upload_clean
+
+    read_result = await storage_service.read_file(doc.storage_key)
+    if read_result.get('success') and read_result.get('content'):
+        await assert_upload_clean(read_result['content'], doc.file_name)
+
     await document_service.update_document(
         db, UUID(document_id), UUID(current_user.tenant_id),
         file_size=meta.get('content_length', doc.file_size),

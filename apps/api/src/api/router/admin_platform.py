@@ -300,17 +300,34 @@ async def test_ai_provider(provider_id: str, _admin: SuperAdmin, db=Depends(get_
     if not provider:
         raise HTTPException(status_code=404, detail='Provider not found')
 
-    ptype = provider.get('type', 'ollama')
-    try:
-        if ptype == 'ollama':
+    ptype = (provider.get('type') or 'ollama').lower()
+    name = provider.get('name') or provider_id
+
+    if ptype in ('openai', 'anthropic', 'azure', 'gemini', 'sendgrid'):
+        secret = await admin_store.get_provider_secret_db(db, provider_id)
+        if not secret or 'placeholder' in secret.lower():
+            return {
+                'success': False,
+                'message': 'No API key configured — add a key before testing this provider.',
+                'dry_run': True,
+            }
+        return {
+            'success': True,
+            'message': f'{name}: API key is configured (live probe skipped to avoid charges).',
+            'dry_run': True,
+        }
+
+    if ptype == 'ollama':
+        try:
             base = provider.get('base_url') or 'http://localhost:11434'
             async with httpx.AsyncClient(timeout=10.0) as client:
                 r = await client.get(f'{base.rstrip("/")}/api/tags')
                 r.raise_for_status()
-            return {'success': True, 'message': 'Ollama is reachable'}
-        return {'success': True, 'message': f'{provider.get("name")} configuration saved'}
-    except Exception as exc:
-        return {'success': False, 'message': str(exc)}
+            return {'success': True, 'message': 'Ollama is reachable', 'dry_run': False}
+        except Exception as exc:
+            return {'success': False, 'message': str(exc), 'dry_run': False}
+
+    return {'success': True, 'message': f'{name} configuration saved', 'dry_run': True}
 
 
 # --- Queue (observability + email) ---

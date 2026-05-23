@@ -7,9 +7,13 @@ import hmac
 import json
 import time
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
+from ...core.database import get_db
+from ...core.billing.stripe_webhook import apply_stripe_webhook_event
+from ...core.email.resend_webhook import apply_resend_webhook_event
 from ...core.logging import get_logger
 from ...core.svix_support import SVIX_AVAILABLE, Webhook, WebhookVerificationError
 
@@ -67,8 +71,8 @@ def _verify_svix_delivery(body: bytes, request: Request, secret: str) -> None:
 
 
 @router.post('/resend')
-async def resend_webhook(request: Request) -> dict:
-    """Handle Resend delivery events (Svix-signed)."""
+async def resend_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Handle Resend delivery events (Svix-signed) and sync email_logs."""
     body = await request.body()
     _verify_svix_delivery(body, request, (settings.RESEND_WEBHOOK_SECRET or '').strip())
     try:
@@ -76,13 +80,14 @@ async def resend_webhook(request: Request) -> dict:
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid JSON') from exc
 
-    logger.info('Resend webhook received', type=payload.get('type', ''))
-    return {'status': 'received'}
+    result = await apply_resend_webhook_event(db, payload)
+    logger.info('Resend webhook processed', type=payload.get('type', ''), handled=result.get('handled'))
+    return {'status': 'received', **result}
 
 
 @router.post('/stripe')
-async def stripe_webhook(request: Request) -> dict:
-    """Handle Stripe billing webhooks."""
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """Handle Stripe billing webhooks and sync tenant subscription state."""
     body = await request.body()
     signature = request.headers.get('stripe-signature', '')
     secret = (settings.STRIPE_WEBHOOK_SECRET or '').strip()
@@ -101,5 +106,6 @@ async def stripe_webhook(request: Request) -> dict:
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Invalid JSON') from exc
 
-    logger.info('Stripe webhook received', type=payload.get('type', ''))
-    return {'status': 'received'}
+    result = await apply_stripe_webhook_event(db, payload)
+    logger.info('Stripe webhook processed', type=payload.get('type', ''), handled=result.get('handled'))
+    return {'status': 'received', **result}

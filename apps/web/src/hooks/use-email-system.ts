@@ -47,181 +47,186 @@ export interface EmailAnalytics {
   by_event: Record<string, number>;
 }
 
-function useEmailApi() {
-  const [loading, setLoading] = useState(false);
+export interface EmailQueueRow {
+  id: string;
+  recipient: string;
+  event_name: string;
+  status: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+}
 
-  const request = useCallback(async <T>(path: string, options?: RequestInit): Promise<T> => {
+export function useEmailSystem() {
+  const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [events, setEvents] = useState<EmailEventRow[]>([]);
+  const [analytics, setAnalytics] = useState<EmailAnalytics | null>(null);
+  const [logs, setLogs] = useState<unknown[]>([]);
+  const [queue, setQueue] = useState<EmailQueueRow[]>([]);
+  const [smtpConfigs, setSmtpConfigs] = useState<unknown[]>([]);
+
+  const withLoading = useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
     setLoading(true);
     try {
-      const method = options?.method || 'GET';
-      if (method === 'GET') return await api.get<T>(path);
-      if (method === 'POST') return await api.post<T>(path, options?.body ? JSON.parse(options.body as string) : undefined);
-      if (method === 'PATCH') return await api.patch<T>(path, options?.body ? JSON.parse(options.body as string) : undefined);
-      if (method === 'PUT') return await api.put<T>(path, options?.body ? JSON.parse(options.body as string) : undefined);
-      if (method === 'DELETE') return await api.delete<T>(path);
-      throw new Error('Unsupported method');
+      return await fn();
     } finally {
       setLoading(false);
     }
   }, []);
 
-  return { request, loading };
-}
-
-export function useEmailSystem() {
-  const { request, loading } = useEmailApi();
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [events, setEvents] = useState<EmailEventRow[]>([]);
-  const [analytics, setAnalytics] = useState<EmailAnalytics | null>(null);
-  const [logs, setLogs] = useState<unknown[]>([]);
-  const [queue, setQueue] = useState<unknown[]>([]);
-  const [smtpConfigs, setSmtpConfigs] = useState<unknown[]>([]);
-
   const fetchTemplates = useCallback(async () => {
-    const data = await request<EmailTemplate[]>('/api/v1/email/templates?include_archived=true');
+    const data = await withLoading(() =>
+      api.get<EmailTemplate[]>('/api/v1/email/templates?include_archived=true')
+    );
     setTemplates(data);
-  }, [request]);
+  }, [withLoading]);
 
   const fetchEvents = useCallback(async () => {
-    const data = await request<EmailEventRow[]>('/api/v1/email/events');
+    const data = await withLoading(() => api.get<EmailEventRow[]>('/api/v1/email/events'));
     setEvents(data);
-  }, [request]);
+  }, [withLoading]);
 
   const fetchAnalytics = useCallback(async () => {
-    const data = await request<EmailAnalytics>('/api/v1/email/analytics');
+    const data = await withLoading(() => api.get<EmailAnalytics>('/api/v1/email/analytics'));
     setAnalytics(data);
-  }, [request]);
+  }, [withLoading]);
 
   const fetchLogs = useCallback(async () => {
-    const data = await request<unknown[]>('/api/v1/email/logs');
+    const data = await withLoading(() => api.get<unknown[]>('/api/v1/email/logs'));
     setLogs(data);
-  }, [request]);
+  }, [withLoading]);
 
   const fetchQueue = useCallback(async () => {
-    const data = await request<unknown[]>('/api/v1/email/queue');
+    const data = await withLoading(() => api.get<EmailQueueRow[]>('/api/v1/email/queue'));
     setQueue(data);
-  }, [request]);
+  }, [withLoading]);
 
   const fetchSmtp = useCallback(async () => {
-    const data = await request<unknown[]>('/api/v1/email/settings/smtp');
+    const data = await withLoading(() => api.get<unknown[]>('/api/v1/email/settings/smtp'));
     setSmtpConfigs(data);
-  }, [request]);
+  }, [withLoading]);
 
   const createTemplate = useCallback(
     async (body: Partial<EmailTemplate>) => {
-      await request('/api/v1/email/templates', {
-        method: 'POST',
-        body: JSON.stringify({ status: 'inactive', variables: [], ...body }),
-      });
+      await withLoading(() =>
+        api.post('/api/v1/email/templates', { status: 'inactive', variables: [], ...body })
+      );
       toast.success('Template created');
       await fetchTemplates();
     },
-    [request, fetchTemplates]
+    [withLoading, fetchTemplates]
   );
 
   const updateTemplate = useCallback(
     async (id: string, body: Partial<EmailTemplate>) => {
-      await request(`/api/v1/email/templates/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(body),
-      });
+      await withLoading(() => api.patch(`/api/v1/email/templates/${id}`, body));
       toast.success('Template saved');
       await fetchTemplates();
     },
-    [request, fetchTemplates]
+    [withLoading, fetchTemplates]
   );
 
   const activateTemplate = useCallback(
     async (id: string) => {
-      await request(`/api/v1/email/templates/${id}/activate`, { method: 'POST', body: '{}' });
+      await withLoading(() => api.post(`/api/v1/email/templates/${id}/activate`, {}));
       toast.success('Template activated');
       await fetchTemplates();
     },
-    [request, fetchTemplates]
+    [withLoading, fetchTemplates]
   );
 
   const deactivateTemplate = useCallback(
     async (id: string) => {
-      await request(`/api/v1/email/templates/${id}/deactivate`, { method: 'POST', body: '{}' });
+      await withLoading(() => api.post(`/api/v1/email/templates/${id}/deactivate`, {}));
       toast.success('Template deactivated');
       await fetchTemplates();
     },
-    [request, fetchTemplates]
+    [withLoading, fetchTemplates]
   );
 
   const archiveTemplate = useCallback(
     async (id: string) => {
-      await request(`/api/v1/email/templates/${id}`, { method: 'DELETE' });
+      await withLoading(() => api.delete(`/api/v1/email/templates/${id}`));
       toast.success('Template archived (not deleted)');
       await fetchTemplates();
     },
-    [request, fetchTemplates]
+    [withLoading, fetchTemplates]
   );
 
   const duplicateTemplate = useCallback(
     async (id: string) => {
-      await request(`/api/v1/email/templates/${id}/duplicate`, { method: 'POST', body: '{}' });
+      await withLoading(() => api.post(`/api/v1/email/templates/${id}/duplicate`, {}));
       toast.success('Template duplicated');
       await fetchTemplates();
     },
-    [request, fetchTemplates]
+    [withLoading, fetchTemplates]
   );
 
   const testSend = useCallback(
     async (to: string, templateId: string, variables: Record<string, unknown>) => {
-      await request('/api/v1/email/test-send', {
-        method: 'POST',
-        body: JSON.stringify({ to, template_id: templateId, variables }),
-      });
+      await withLoading(() =>
+        api.post('/api/v1/email/test-send', { to, template_id: templateId, variables })
+      );
       toast.success('Test email queued');
     },
-    [request]
+    [withLoading]
   );
 
   const previewTemplate = useCallback(
     async (subject: string, html_body: string, variables: Record<string, unknown>) => {
-      return request<{ subject: string; html: string; missing_variables: string[] }>(
-        '/api/v1/email/templates/preview',
-        { method: 'POST', body: JSON.stringify({ subject, html_body, variables }) }
+      return withLoading(() =>
+        api.post<{ subject: string; html: string; missing_variables: string[] }>(
+          '/api/v1/email/templates/preview',
+          { subject, html_body, variables }
+        )
       );
     },
-    [request]
+    [withLoading]
   );
 
   const updateEvent = useCallback(
     async (eventKey: string, data: { template_id?: string; is_enabled?: boolean }) => {
-      await request(`/api/v1/email/events/${encodeURIComponent(eventKey)}`, {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      });
+      await withLoading(() => api.patch(`/api/v1/email/events/${encodeURIComponent(eventKey)}`, data));
       toast.success('Event updated');
       await fetchEvents();
     },
-    [request, fetchEvents]
+    [withLoading, fetchEvents]
   );
 
   const saveSmtp = useCallback(
     async (data: Record<string, unknown>) => {
-      await request('/api/v1/email/settings/smtp', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      await withLoading(() => api.post('/api/v1/email/settings/smtp', data));
       toast.success('SMTP configuration saved');
       await fetchSmtp();
     },
-    [request, fetchSmtp]
+    [withLoading, fetchSmtp]
   );
 
   const testSmtp = useCallback(
     async (configId: string) => {
-      const res = await request<{ success: boolean; error?: string }>(
-        `/api/v1/email/settings/smtp/${configId}/test`,
-        { method: 'POST', body: '{}' }
+      const res = await withLoading(() =>
+        api.post<{ success: boolean; error?: string }>(
+          `/api/v1/email/settings/smtp/${configId}/test`,
+          {}
+        )
       );
       if (res.success) toast.success('SMTP connection OK');
       else toast.error(res.error || 'SMTP test failed');
     },
-    [request]
+    [withLoading]
+  );
+
+  const retryQueueItem = useCallback(
+    async (itemId: string) => {
+      await withLoading(() => api.post(`/api/v1/email/queue/${itemId}/retry`, {}));
+      toast.success('Queue item requeued');
+      await fetchQueue();
+      await fetchAnalytics();
+    },
+    [withLoading, fetchQueue, fetchAnalytics]
   );
 
   return {
@@ -249,6 +254,7 @@ export function useEmailSystem() {
     updateEvent,
     saveSmtp,
     testSmtp,
+    retryQueueItem,
   };
 }
 

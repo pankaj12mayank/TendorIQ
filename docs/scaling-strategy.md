@@ -1,17 +1,19 @@
 # Scaling Strategy
 
+> **As deployed today:** MySQL 8+, FastAPI with **in-process** background jobs (`core.tasks.inline`). Redis/PostgreSQL sections below are **roadmap / optional** unless noted.
+
 ## Overview
 
-This document outlines the scaling strategy for TenderIQ from startup to enterprise scale.
+This document outlines scaling from startup to enterprise. Align production setup with [deployment.md](deployment.md) and [MYSQL_SETUP.md](MYSQL_SETUP.md).
 
 ---
 
 ## Current Architecture
 
-- **API**: Single FastAPI instance
-- **Database**: PostgreSQL single instance
-- **Queue**: Redis single instance
-- **Frontend**: Static + API calls
+- **API**: FastAPI (single or horizontally scaled instances)
+- **Database**: MySQL 8+
+- **Queue / email**: DB tables + inline workers (no Redis required)
+- **Frontend**: Next.js on Vercel or static host
 
 ---
 

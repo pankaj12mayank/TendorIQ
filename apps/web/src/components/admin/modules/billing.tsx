@@ -1,5 +1,6 @@
 'use client';
 
+/** Platform-wide billing overview (super admin) — not tenant `/dashboard/billing`. */
 import React, { useState, useEffect } from 'react';
 import { useBillingApi } from '@/hooks/use-admin';
 import { LoadingState } from '@/components/ui/loading-state';

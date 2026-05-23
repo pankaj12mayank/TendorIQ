@@ -57,9 +57,9 @@ jobs:
         image: mysql:8
         env:
           MYSQL_ROOT_PASSWORD: test
-          MYSQL_DATABASE: test
+          MYSQL_DATABASE: tenderiq_test
         options: >-
-          --health-cmd "mysqladmin ping -h localhost"
+          --health-cmd "mysqladmin ping -h localhost -uroot -ptest"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -68,8 +68,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-api-python
+      - name: Apply migrations
+        working-directory: apps/api
+        env:
+          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tenderiq_test?charset=utf8mb4
+          JWT_SECRET: ci-test-secret-key-at-least-32-characters-long
+          ALLOW_START_WITHOUT_DB: '0'
+        run: alembic upgrade head
       - name: Run integration tests
         working-directory: apps/api
+        env:
+          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tenderiq_test?charset=utf8mb4
+          JWT_SECRET: ci-test-secret-key-at-least-32-characters-long
+          ALLOW_START_WITHOUT_DB: '0'
+          RATE_LIMIT_ENABLED: 'false'
         run: pytest tests/integration -v
 
   e2e-tests:
@@ -83,8 +95,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --filter @tendoriq/web exec playwright install chromium
       - name: Build
         run: pnpm --filter @tendoriq/web build
       - name: Start preview
@@ -93,10 +108,10 @@ jobs:
         run: |
           pnpm --filter @tendoriq/web preview &
           sleep 15
-      - name: Run E2E tests
+      - name: Run E2E tests (public routes)
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
-        run: pnpm --filter @tendoriq/web e2e
+          BASE_URL: http://localhost:3000
+        run: pnpm --filter @tendoriq/web exec playwright test --project=chromium
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

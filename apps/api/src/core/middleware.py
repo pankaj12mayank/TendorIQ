@@ -66,7 +66,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.redis = redis_client
         global _rate_limit_redis_warned
-        if settings.RATE_LIMIT_ENABLED and not self.redis and not _rate_limit_redis_warned:
+        if (
+            settings.RATE_LIMIT_ENABLED
+            and settings.NODE_ENV not in ('test', 'development')
+            and not self.redis
+            and not _rate_limit_redis_warned
+        ):
             logger.warning('Rate limiting enabled but Redis is not configured; limits are inactive')
             _rate_limit_redis_warned = True
 

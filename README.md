@@ -58,7 +58,8 @@ run.bat
 
 `run.bat` installs dependencies, **checks MySQL**, **creates the DB if needed**, runs **`alembic upgrade head`**, then starts API (`:8000`) and web (`:3000`). Stop with `run.bat stop`.
 
-- **`run.bat check`** — compile, import, MySQL, migrations (no servers)
+- **`run.bat check`** — layer tests L0–L13, compile, import, MySQL, migrations (no servers)
+- **`run.bat e2e`** — Playwright (public + authenticated when API/web are running)
 - **`run.bat setup`** — force dependency reinstall + full bootstrap
 
 **Auth:** One sign-in at `/sign-in` (email/password; role from JWT). Set `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` in `.env` for platform admin. Optional `DEMO_USER_*` for a dev tenant. Tenants can also use Clerk if keys are in `apps/web/.env.local`.
@@ -79,9 +80,11 @@ pnpm --filter @tendoriq/web run dev   # terminal 1
 uvicorn src.main:app --reload --port 8000   # terminal 2, from apps/api
 ```
 
-### Environment Variables
+### Environment variables
 
-See [Environment Configuration](docs/environment-config.md) for details.
+1. **[MySQL setup](docs/MYSQL_SETUP.md)** — database URL and local service  
+2. **[Environment configuration](docs/environment-config.md)** — all variables and platforms  
+3. **[Local setup](docs/local-setup.md)** — `run.bat` workflow
 
 **Remediation tracking:** [docs/AUDIT_STATUS.md](docs/AUDIT_STATUS.md) · Full audit: [AUDIT_REPORT.md](AUDIT_REPORT.md)
 

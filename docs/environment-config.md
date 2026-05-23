@@ -1,5 +1,8 @@
 # TenderIQ Environment Configuration Guide
 
+> **Required for local dev:** `DATABASE_URL` (MySQL) — see [MYSQL_SETUP.md](./MYSQL_SETUP.md) **before** filling optional keys below.  
+> **Redis** is optional (rate limiting only); queues run in-process.
+
 ## Overview
 
 TenderIQ uses centralized environment configuration management with:
@@ -43,9 +46,9 @@ const appUrl = getAppUrl(); // Auto-detects platform URL
 ### Required Environment Variables
 
 ```bash
-# Auto-provisioned by Railway
-DATABASE_URL=postgres://...
-REDIS_URL=redis://...
+# Set on Railway (use MySQL plugin or external MySQL)
+DATABASE_URL=mysql+aiomysql://user:pass@host:3306/tenderiq?charset=utf8mb4
+# REDIS_URL=redis://...   # optional — not required for email/OCR queue
 RAILWAY_SERVICE_NAME=tendoriq-api
 RAILWAY_PUBLIC_DOMAIN=tendoriq-api.up.railway.app
 
@@ -77,7 +80,7 @@ VERCEL_GIT_COMMIT_SHA=abc123
 
 # Must be set in Vercel dashboard
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
-DATABASE_URL=postgres://...
+# DATABASE_URL on API host only (mysql+aiomysql://...)
 NEXT_PUBLIC_API_URL=https://api.tendoriq.com
 ```
 
@@ -177,7 +180,9 @@ if (isFeatureAvailable('ai_analysis')) {
 | `custom_domains` | Custom domain support | false |
 | `sso` | Single sign-on | false |
 
-## Redis Configuration
+## Redis Configuration (optional)
+
+Not required for local dev or default deploy (`run.bat`, inline email/OCR). Use only if enabling Redis-backed rate limiting.
 
 ### Local Development
 ```
@@ -246,7 +251,7 @@ AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
 
 - [ ] JWT_SECRET is minimum 32 characters
 - [ ] DATABASE_URL uses SSL in production
-- [ ] REDIS_URL uses TLS in production
+- [ ] REDIS_URL uses TLS in production (if Redis is used)
 - [ ] CORS_ORIGINS restricts to known domains
 - [ ] INTERNAL_API_KEY set for service-to-service auth
 - [ ] SENTRY_DSN set for error tracking

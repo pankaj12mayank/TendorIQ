@@ -128,6 +128,23 @@ export function getAlertLevel(percentage: number): 'none' | 'warning' | 'critica
   return 'none';
 }
 
+/** Prefer API-provided feature name; fall back to static config. */
+export function featureDisplayName(featureKey: FeatureKey, apiName?: string): string {
+  if (apiName?.trim()) return apiName;
+  return FEATURE_CONFIG[featureKey]?.name ?? featureKey;
+}
+
+export function mergeFeatureConfigFromQuotas(quotas: { featureKey: FeatureKey; featureName: string }[]): void {
+  for (const q of quotas) {
+    if (FEATURE_CONFIG[q.featureKey]) {
+      FEATURE_CONFIG[q.featureKey] = {
+        ...FEATURE_CONFIG[q.featureKey],
+        name: q.featureName,
+      };
+    }
+  }
+}
+
 export function formatUsage(count: number, unit: string): string {
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M ${unit}`;
   if (count >= 1000) return `${(count / 1000).toFixed(1)}K ${unit}`;

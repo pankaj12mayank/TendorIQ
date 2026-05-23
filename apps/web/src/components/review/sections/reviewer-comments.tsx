@@ -17,16 +17,20 @@ import {
   Clock
 } from 'lucide-react';
 import { ReviewComment, ReviewSection } from '../types';
+import { api } from '@/lib/api-client';
+import { loadReviewSession } from '@/lib/review-api';
 import { useReviewStore } from '../store';
 import { cn } from '@/lib/utils';
 
 interface ReviewerCommentsProps {
+  tenderId?: string;
   sectionFilter?: ReviewSection;
   className?: string;
 }
 
-export function ReviewerComments({ sectionFilter, className }: ReviewerCommentsProps) {
-  const { session, addComment, resolveComment, addReply } = useReviewStore();
+export function ReviewerComments({ tenderId, sectionFilter, className }: ReviewerCommentsProps) {
+  const session = useReviewStore((s) => s.session);
+  const { resolveComment, addReply, setSession } = useReviewStore();
   const [newComment, setNewComment] = useState('');
   const [selectedSection, setSelectedSection] = useState<ReviewSection | undefined>(sectionFilter);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -58,17 +62,13 @@ export function ReviewerComments({ sectionFilter, className }: ReviewerCommentsP
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const handleAddComment = () => {
-    if (!newComment.trim()) return;
-
-    addComment({
-      reviewerId: 'current-user',
-      reviewerName: 'Current User',
-      reviewerRole: 'Reviewer',
-      section: selectedSection,
+  const handleAddComment = async () => {
+    if (!tenderId || !newComment.trim()) return;
+    await api.post(`/api/v1/review/session/${tenderId}/comments`, {
       content: newComment,
+      section: selectedSection,
     });
-
+    setSession(await loadReviewSession(tenderId));
     setNewComment('');
   };
 

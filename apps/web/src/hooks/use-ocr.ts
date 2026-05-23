@@ -1,5 +1,7 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api-client';
+import { isAppFeatureEnabled } from '@/lib/feature-flags';
+import { formatPollingError, PollingCancelledError, PollingTimeoutError } from '@/lib/polling-errors';
 
 export interface OCRStatus {
   document_id: string;
@@ -51,6 +53,11 @@ export function useOCRApi() {
   }, []);
 
   const processDocument = useCallback(async (documentId: string, language = 'en') => {
+    if (!isAppFeatureEnabled('document_ocr')) {
+      const msg = 'Document OCR is disabled. Set NEXT_PUBLIC_FEATURE_DOCUMENT_OCR=true to enable.';
+      setError(msg);
+      throw new Error(msg);
+    }
     setLoading(true);
     setError(null);
 
@@ -157,9 +164,15 @@ export function useOCRApi() {
   }, []);
 
   const pollStatus = useCallback(async (documentId: string, maxAttempts = 60, intervalMs = 5000) => {
+    if (!isAppFeatureEnabled('document_ocr')) {
+      throw new Error('Document OCR is disabled.');
+    }
     const poll = async (attempt = 0): Promise<OCRStatus> => {
-      if (cancelledRef.current || attempt >= maxAttempts) {
-        throw new Error(cancelledRef.current ? 'Polling cancelled' : 'OCR polling timeout');
+      if (cancelledRef.current) {
+        throw new PollingCancelledError('OCR');
+      }
+      if (attempt >= maxAttempts) {
+        throw new PollingTimeoutError('OCR', maxAttempts, intervalMs);
       }
 
       try {
@@ -172,14 +185,22 @@ export function useOCRApi() {
         await delay(intervalMs);
         return poll(attempt + 1);
       } catch (err) {
-        if (cancelledRef.current) throw new Error('Polling cancelled');
-        if (attempt + 1 >= maxAttempts) throw err;
+        if (cancelledRef.current) throw new PollingCancelledError('OCR');
+        if (attempt + 1 >= maxAttempts) {
+          throw err instanceof PollingTimeoutError ? err : new PollingTimeoutError('OCR', maxAttempts, intervalMs);
+        }
         await delay(intervalMs);
         return poll(attempt + 1);
       }
     };
 
-    return poll();
+    try {
+      return await poll();
+    } catch (err) {
+      const msg = formatPollingError(err, 'OCR');
+      setError(msg);
+      throw err;
+    }
   }, [getStatus, delay]);
 
   return {

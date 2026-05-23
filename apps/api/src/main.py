@@ -90,6 +90,11 @@ async def lifespan(app: FastAPI):
         async with async_session_maker() as db:
             await seed_email_system(db)
         logger.info('Email system seed OK')
+        if settings.EMAIL_PROVIDER == 'resend' and not settings.resend_api_key_configured:
+            logger.warning(
+                'EMAIL_PROVIDER=resend but EMAIL_API_KEY/RESEND_API_KEY is empty — '
+                'configure Admin → Email System SMTP or set EMAIL_API_KEY in .env'
+            )
     except Exception as exc:
         if allow_offline:
             logger.warning('Email system seed skipped (ALLOW_START_WITHOUT_DB): %s', exc)

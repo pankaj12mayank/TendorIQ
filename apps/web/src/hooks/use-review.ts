@@ -1,14 +1,15 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
+import { loadReviewSession } from '@/lib/review-api';
 import { useReviewStore } from '@/components/review/store';
-import { 
-  ReviewSession, 
-  ReviewSection, 
+import {
+  ReviewSession,
+  ReviewSection,
   ApprovalAction,
   ReviewComment,
   AuditEntry,
   ChangeRecord,
-  SectionStatus
+  SectionStatus,
 } from '@/components/review/types';
 
 interface UseReviewApiReturn {
@@ -19,7 +20,9 @@ interface UseReviewApiReturn {
   refetch: () => Promise<void>;
   submitApproval: (action: ApprovalAction, comments?: string) => Promise<void>;
   requestChanges: (sections: string[], comments: string) => Promise<void>;
+  addComment: (content: string, section?: string) => Promise<void>;
   regenerateSection: (section: ReviewSection, reason: string) => Promise<void>;
+  saveFieldEdit: (section: ReviewSection, field: string, newValue: string, reason?: string) => Promise<void>;
   getSectionData: (section: ReviewSection) => unknown;
   getSectionStatus: (section: ReviewSection) => SectionStatus | undefined;
   getComments: (section?: ReviewSection) => ReviewComment[];
@@ -28,87 +31,172 @@ interface UseReviewApiReturn {
 }
 
 export function useReviewApi(tenderId?: string): UseReviewApiReturn {
-  const { session, isLoading, setSession, submitApproval: storeSubmitApproval, requestChanges: storeRequestChanges } = useReviewStore();
+  const { session, setSession, setLoading: setStoreLoading } = useReviewStore();
+  const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
+    if (!tenderId) {
+      setIsError(true);
+      setError('Missing tender ID');
+      return;
+    }
+
     setIsError(false);
     setError(null);
-    
+    setIsLoading(true);
+    setStoreLoading(true);
+
     try {
-      const res = await api.get<ReviewSession>(`/api/v1/review/session/${tenderId}`);
-      setSession(res);
-    } catch (err) {
+      const loaded = await loadReviewSession(tenderId);
+      setSession(loaded);
+    } catch {
       setIsError(true);
       setError('Failed to fetch review session');
+      setSession(null);
+    } finally {
+      setIsLoading(false);
+      setStoreLoading(false);
     }
-  }, [setSession, tenderId]);
+  }, [setSession, setStoreLoading, tenderId]);
 
-  const submitApproval = useCallback(async (action: ApprovalAction, comments?: string) => {
-    setIsError(false);
-    setError(null);
-    try {
-      const res = await api.post<ReviewSession>(`/api/v1/review/session/${tenderId}/approval`, { action, comments });
-      setSession(res);
-    } catch (err) {
-      setIsError(true);
-      setError('Failed to submit approval');
-    }
-  }, [setSession, tenderId]);
-
-  const requestChanges = useCallback(async (sections: string[], comments: string) => {
-    setIsError(false);
-    setError(null);
-    try {
-      const res = await api.post<ReviewSession>(`/api/v1/review/session/${tenderId}/request-changes`, { sections, comments });
-      setSession(res);
-    } catch (err) {
-      setIsError(true);
-      setError('Failed to request changes');
-    }
-  }, [setSession, tenderId]);
-
-  const regenerateSection = useCallback(async (section: ReviewSection, reason: string) => {
-    try {
-      const res = await api.post<{ success: boolean }>(`/api/v1/review/session/${tenderId}/regenerate`, {
-        section,
-        reason,
-        includeChanges: true,
-        priority: 'normal',
-      });
-      if (res.success) {
-        await refetch();
-      }
-    } catch (err) {
-      setIsError(true);
-      setError('Failed to regenerate section');
+  useEffect(() => {
+    if (tenderId) {
+      void refetch();
     }
   }, [tenderId, refetch]);
 
-  const getSectionData = useCallback((section: ReviewSection): unknown => {
-    if (!session) return null;
-    const status = session.sectionStatuses.find(s => s.section === section);
-    return status || null;
-  }, [session]);
+  const submitApproval = useCallback(
+    async (action: ApprovalAction, comments?: string) => {
+      if (!tenderId) return;
+      setIsError(false);
+      setError(null);
+      try {
+        const apiAction =
+          action === 'request_changes' ? 'request_changes' : action === 'reject' ? 'reject' : 'approve';
+        await api.post(`/api/v1/review/session/${tenderId}/approval`, {
+          action: apiAction,
+          comments,
+        });
+        await refetch();
+      } catch {
+        setIsError(true);
+        setError('Failed to submit approval');
+      }
+    },
+    [refetch, tenderId]
+  );
 
-  const getSectionStatus = useCallback((section: ReviewSection): SectionStatus | undefined => {
-    return session?.sectionStatuses.find(s => s.section === section);
-  }, [session]);
+  const requestChanges = useCallback(
+    async (sections: string[], comments: string) => {
+      if (!tenderId) return;
+      setIsError(false);
+      setError(null);
+      try {
+        await api.post(`/api/v1/review/session/${tenderId}/approval`, {
+          action: 'request_changes',
+          sections,
+          comments,
+        });
+        await refetch();
+      } catch {
+        setIsError(true);
+        setError('Failed to request changes');
+      }
+    },
+    [refetch, tenderId]
+  );
 
-  const getComments = useCallback((section?: ReviewSection): ReviewComment[] => {
-    if (!session) return [];
-    if (!section) return session.comments;
-    return session.comments.filter(c => c.section === section);
-  }, [session]);
+  const addComment = useCallback(
+    async (content: string, section?: string) => {
+      if (!tenderId) return;
+      try {
+        await api.post(`/api/v1/review/session/${tenderId}/comments`, {
+          content,
+          section,
+        });
+        await refetch();
+      } catch {
+        setIsError(true);
+        setError('Failed to add comment');
+      }
+    },
+    [refetch, tenderId]
+  );
 
-  const getAuditLog = useCallback((): AuditEntry[] => {
-    return session?.auditLog || [];
-  }, [session]);
+  const regenerateSection = useCallback(
+    async (section: ReviewSection, reason: string) => {
+      if (!tenderId) return;
+      const store = useReviewStore.getState();
+      store.setRegenerationProgress(section, 0, 'generating');
+      try {
+        await api.post(`/api/v1/review/session/${tenderId}/regenerate`, {
+          section,
+          reason,
+          include_changes: true,
+          priority: 'normal',
+        });
+        store.setRegenerationProgress(section, 100, 'completed');
+        await refetch();
+      } catch {
+        setIsError(true);
+        setError('Failed to regenerate section');
+        store.setRegenerationProgress(null, 0, 'failed');
+      } finally {
+        setTimeout(() => {
+          useReviewStore.getState().clearRegeneration();
+        }, 400);
+      }
+    },
+    [refetch, tenderId]
+  );
 
-  const getChanges = useCallback((): ChangeRecord[] => {
-    return session?.changes || [];
-  }, [session]);
+  const saveFieldEdit = useCallback(
+    async (section: ReviewSection, field: string, newValue: string, reason?: string) => {
+      if (!tenderId) return;
+      try {
+        await api.post(`/api/v1/review/session/${tenderId}/edit`, {
+          section,
+          field,
+          new_value: newValue,
+          reason,
+        });
+        await refetch();
+      } catch {
+        setIsError(true);
+        setError('Failed to save edit');
+      }
+    },
+    [refetch, tenderId]
+  );
+
+  const getSectionData = useCallback(
+    (section: ReviewSection): unknown => {
+      if (!session) return null;
+      return session.sectionStatuses.find((s) => s.section === section) ?? null;
+    },
+    [session]
+  );
+
+  const getSectionStatus = useCallback(
+    (section: ReviewSection): SectionStatus | undefined => {
+      return session?.sectionStatuses.find((s) => s.section === section);
+    },
+    [session]
+  );
+
+  const getComments = useCallback(
+    (section?: ReviewSection): ReviewComment[] => {
+      if (!session) return [];
+      if (!section) return session.comments;
+      return session.comments.filter((c) => c.section === section);
+    },
+    [session]
+  );
+
+  const getAuditLog = useCallback((): AuditEntry[] => session?.auditLog || [], [session]);
+  const getChanges = useCallback((): ChangeRecord[] => session?.changes || [], [session]);
 
   return {
     session,
@@ -118,7 +206,9 @@ export function useReviewApi(tenderId?: string): UseReviewApiReturn {
     refetch,
     submitApproval,
     requestChanges,
+    addComment,
     regenerateSection,
+    saveFieldEdit,
     getSectionData,
     getSectionStatus,
     getComments,
@@ -127,17 +217,9 @@ export function useReviewApi(tenderId?: string): UseReviewApiReturn {
   };
 }
 
-interface UseReviewSectionsReturn {
-  selectedSection: ReviewSection;
-  setSelectedSection: (section: ReviewSection) => void;
-  sections: readonly { id: ReviewSection; label: string; icon: string }[];
-  getSectionStatus: (section: ReviewSection) => SectionStatus | undefined;
-  getSectionProgress: (section: ReviewSection) => number;
-}
-
-export function useReviewSections(): UseReviewSectionsReturn {
+export function useReviewSections() {
   const { selectedSection, setSelectedSection, session } = useReviewStore();
-  
+
   const sections = [
     { id: 'summary' as ReviewSection, label: 'Summary', icon: 'file-text' },
     { id: 'eligibility' as ReviewSection, label: 'Eligibility', icon: 'check-circle' },
@@ -149,13 +231,12 @@ export function useReviewSections(): UseReviewSectionsReturn {
   ];
 
   const getSectionStatus = (section: ReviewSection): SectionStatus | undefined => {
-    return session?.sectionStatuses.find(s => s.section === section);
+    return session?.sectionStatuses.find((s) => s.section === section);
   };
 
   const getSectionProgress = (section: ReviewSection): number => {
     const status = getSectionStatus(section);
     if (!status) return 0;
-    
     if (status.approvalStatus === 'approved') return 100;
     if (status.approvalStatus === 'rejected') return 0;
     if (status.hasChanges) return 75;
@@ -171,24 +252,28 @@ export function useReviewSections(): UseReviewSectionsReturn {
   };
 }
 
-interface UseEditWorkflowReturn {
-  editState: {
-    section: ReviewSection | null;
-    field: string | null;
-    isEditing: boolean;
-    originalValue: unknown;
-    currentValue: unknown;
-  };
-  startEdit: (section: ReviewSection, field: string, value: unknown) => void;
-  updateEditValue: (value: unknown) => void;
-  saveEdit: () => Promise<void>;
-  cancelEdit: () => void;
-  isSaving: boolean;
-}
+export function useEditWorkflow(tenderId?: string) {
+  const id = tenderId ?? useReviewStore((s) => s.activeTenderId) ?? undefined;
+  const { editState, startEdit, updateEditValue, cancelEdit, isSaving, setSaving, setSession } =
+    useReviewStore();
 
-export function useEditWorkflow(): UseEditWorkflowReturn {
-  const { editState, startEdit, updateEditValue, saveEdit, cancelEdit, isSaving } = useReviewStore();
-  
+  const saveEdit = useCallback(async () => {
+    if (!id || !editState.section || !editState.field) return;
+    setSaving(true);
+    try {
+      await api.post(`/api/v1/review/session/${id}/edit`, {
+        section: editState.section,
+        field: editState.field,
+        new_value: String(editState.currentValue ?? ''),
+      });
+      const loaded = await loadReviewSession(id);
+      setSession(loaded);
+      cancelEdit();
+    } finally {
+      setSaving(false);
+    }
+  }, [cancelEdit, editState, id, setSaving, setSession]);
+
   return {
     editState,
     startEdit,
@@ -199,24 +284,41 @@ export function useEditWorkflow(): UseEditWorkflowReturn {
   };
 }
 
-interface UseApprovalWorkflowReturn {
-  workflow: ReviewSession['workflow'] | null;
-  isLoading: boolean;
-  submitApproval: (action: ApprovalAction, comments?: string) => Promise<void>;
-  requestChanges: (sections: string[], comments: string) => Promise<void>;
-  canApprove: boolean;
-  currentStepName: string;
-}
+export function useApprovalWorkflow(tenderId?: string) {
+  const id = tenderId ?? useReviewStore((s) => s.activeTenderId) ?? undefined;
+  const { session, isLoading, setSession } = useReviewStore();
 
-export function useApprovalWorkflow(): UseApprovalWorkflowReturn {
-  const { session, isLoading, submitApproval, requestChanges } = useReviewApi();
-  
+  const submitApproval = useCallback(
+    async (action: ApprovalAction, comments?: string) => {
+      if (!id) return;
+      const apiAction =
+        action === 'request_changes' ? 'request_changes' : action === 'reject' ? 'reject' : 'approve';
+      await api.post(`/api/v1/review/session/${id}/approval`, { action: apiAction, comments });
+      setSession(await loadReviewSession(id));
+    },
+    [id, setSession]
+  );
+
+  const requestChanges = useCallback(
+    async (sections: string[], comments: string) => {
+      if (!id) return;
+      await api.post(`/api/v1/review/session/${id}/approval`, {
+        action: 'request_changes',
+        sections,
+        comments,
+      });
+      setSession(await loadReviewSession(id));
+    },
+    [id, setSession]
+  );
+
   return {
     workflow: session?.workflow || null,
     isLoading,
     submitApproval,
     requestChanges,
     canApprove: true,
-    currentStepName: session?.workflow.steps.find(s => s.status === 'in_progress')?.name || 'Unknown',
+    currentStepName:
+      session?.workflow.steps.find((s) => s.status === 'in_progress')?.name || 'Unknown',
   };
 }

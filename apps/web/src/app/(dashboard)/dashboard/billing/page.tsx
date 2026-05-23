@@ -30,12 +30,7 @@ import { cn } from '@/lib/utils';
 export default function BillingPage() {
   const [activeTab, setActiveTab] = useState('plans');
   const { currentSubscription, isProcessing } = useBillingStore();
-  const {
-    isLoading,
-    changePlan,
-    cancelSubscription: apiCancelSubscription,
-    initialize,
-  } = useBillingApi();
+  const { isLoading, error, changePlan, initialize } = useBillingApi();
   const { getAllQuotaStatus, getUpgradePrompt } = useQuotaEnforcement();
 
   useEffect(() => {
@@ -59,6 +54,12 @@ export default function BillingPage() {
           Open Billing Portal
         </Button>
       </div>
+
+      {error && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="py-4 text-sm text-destructive">{error}</CardContent>
+        </Card>
+      )}
 
       {warningQuotas.length > 0 && (
         <Card className="border-yellow-200 bg-yellow-50">

@@ -1,5 +1,7 @@
 # TenderIQ Database Performance Optimization Guide
 
+> **Database:** MySQL 8+ in production. PostgreSQL / `postgresql.conf` sections are legacy reference only.
+
 ## Index Strategy
 
 ### High-Frequency Query Indexes
@@ -105,7 +107,9 @@ class TenderRepository:
 
 ## Caching Strategy
 
-### Redis Caching
+> **Optional:** Redis examples below are not required for the default MySQL + `run.bat` stack.
+
+### Redis Caching (optional)
 ```python
 async def get_cached_tender(tender_id: str, tenant_id: str):
     key = f'tender:{tenant_id}:{tender_id}'
@@ -172,9 +176,13 @@ engine = create_async_engine(
 
 ## Recommended Configuration
 
-### PostgreSQL Settings
+### MySQL 8 (primary)
+
+See [MYSQL_SETUP.md](./MYSQL_SETUP.md). Typical tuning: `innodb_buffer_pool_size`, slow query log, indexes on `tenant_id` foreign keys.
+
+### PostgreSQL Settings (legacy reference only)
 ```ini
-# postgresql.conf
+# postgresql.conf — not used by TenderIQ default deploy
 shared_buffers = 256MB          # 25% of RAM
 effective_cache_size = 768MB    # 75% of RAM
 maintenance_work_mem = 64MB

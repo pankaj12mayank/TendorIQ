@@ -6,6 +6,7 @@ import { FileText, RefreshCw, AlertTriangle, CheckCircle2, Loader2, Eye } from '
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { isAppFeatureEnabled } from '@/lib/feature-flags';
 import { useOCRApi, OCRStatus } from '@/hooks/use-ocr';
 interface OCRStatusCardProps {
   documentId: string;
@@ -31,6 +32,7 @@ export function OCRStatusCard({
   autoPoll = false,
   className,
 }: OCRStatusCardProps) {
+  const ocrEnabled = isAppFeatureEnabled('document_ocr');
   const { getStatus, pollStatus, retryOCR, loading } = useOCRApi();
   const [status, setStatus] = useState<OCRStatus | null>(null);
   const [isPolling, setIsPolling] = useState(false);
@@ -56,8 +58,8 @@ export function OCRStatusCard({
           toast.error('OCR processing failed', { description: documentName });
         }
       })
-      .catch(() => {
-        toast.error('OCR polling failed');
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : 'OCR polling failed');
       })
       .finally(() => {
         setIsPolling(false);
@@ -83,6 +85,17 @@ export function OCRStatusCard({
       toast.error('Failed to retry OCR');
     }
   };
+
+  if (!ocrEnabled) {
+    return (
+      <Card className={cn('overflow-hidden', className)}>
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          Document OCR is disabled. Enable <code className="text-xs">NEXT_PUBLIC_FEATURE_DOCUMENT_OCR</code> to
+          process scans.
+        </CardContent>
+      </Card>
+    );
+  }
 
   const statusKey = status?.ocr_status || 'uploaded';
   const config = (statusConfig[statusKey] || statusConfig.uploaded)!;

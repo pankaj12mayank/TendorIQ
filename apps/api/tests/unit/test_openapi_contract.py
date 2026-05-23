@@ -31,12 +31,32 @@ def _openapi_paths(client: TestClient) -> set[str]:
     return set(client.get('/openapi.json').json()['paths'].keys())
 
 
+def _segments_align(spec_parts: list[str], contract_parts: list[str]) -> bool:
+    """Match OpenAPI paths where {param} segments sit between contract literals."""
+    if len(spec_parts) < len(contract_parts):
+        return False
+    si = 0
+    for part in contract_parts:
+        while si < len(spec_parts) and spec_parts[si].startswith('{') and spec_parts[si].endswith('}'):
+            si += 1
+        if si >= len(spec_parts) or spec_parts[si] != part:
+            return False
+        si += 1
+    while si < len(spec_parts) and spec_parts[si].startswith('{') and spec_parts[si].endswith('}'):
+        si += 1
+    return si == len(spec_parts)
+
+
 def _path_covered(spec_paths: set[str], contract_path: str) -> bool:
     if contract_path in spec_paths:
         return True
     base = contract_path.rstrip('/')
+    contract_parts = [p for p in base.split('/') if p]
     for spec in spec_paths:
         if spec == base or spec.startswith(base + '/'):
+            return True
+        spec_parts = [p for p in spec.rstrip('/').split('/') if p]
+        if _segments_align(spec_parts, contract_parts):
             return True
     return False
 

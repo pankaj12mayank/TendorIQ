@@ -13,6 +13,7 @@ from ..dependencies.rbac_deps import (
     require_tenant_member,
 )
 from ..services.document_service import document_service
+from ...core.config import settings
 from ...core.storage import storage_service
 from ...core.ocr.paddle_ocr import paddle_ocr_service
 from ...core.logging import get_logger
@@ -35,7 +36,12 @@ router = APIRouter(
 logger = get_logger('ocr_api')
 
 
-@router.post('/process/{document_id}')
+async def require_document_ocr_enabled() -> None:
+    if not settings.FEATURE_DOCUMENT_OCR:
+        raise HTTPException(status_code=403, detail='Document OCR is disabled')
+
+
+@router.post('/process/{document_id}', dependencies=[Depends(require_document_ocr_enabled)])
 async def process_document_ocr(
     document_id: str,
     current_user: RequireDocumentCreate,
@@ -93,7 +99,7 @@ async def process_document_ocr(
         raise HTTPException(status_code=500, detail='Failed to queue OCR job')
 
 
-@router.get('/status/{document_id}', response_model=OCRStatusResponse)
+@router.get('/status/{document_id}', response_model=OCRStatusResponse, dependencies=[Depends(require_document_ocr_enabled)])
 async def get_ocr_status(
     document_id: str,
     current_user: RequireDocumentRead,
@@ -191,7 +197,7 @@ async def get_ocr_status(
     )
 
 
-@router.get('/result/{document_id}')
+@router.get('/result/{document_id}', dependencies=[Depends(require_document_ocr_enabled)])
 async def get_ocr_result(
     document_id: str,
     current_user: RequireDocumentRead,
@@ -238,7 +244,7 @@ async def get_ocr_result(
     }
 
 
-@router.post('/retry', response_model=OCRRetryResponse)
+@router.post('/retry', response_model=OCRRetryResponse, dependencies=[Depends(require_document_ocr_enabled)])
 async def retry_ocr(
     data: OCRRetryRequest,
     current_user: RequireDocumentCreate,
@@ -295,7 +301,7 @@ async def retry_ocr(
     )
 
 
-@router.get('/quality/{document_id}', response_model=QualityAssessmentResponse)
+@router.get('/quality/{document_id}', response_model=QualityAssessmentResponse, dependencies=[Depends(require_document_ocr_enabled)])
 async def assess_document_quality(
     document_id: str,
     current_user: RequireDocumentRead,
@@ -365,7 +371,7 @@ async def assess_document_quality(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/batch-status')
+@router.get('/batch-status', dependencies=[Depends(require_document_ocr_enabled)])
 async def get_batch_ocr_status(
     current_user: RequireDocumentRead,
     document_ids: str = Query(...),

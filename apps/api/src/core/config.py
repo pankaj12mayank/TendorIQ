@@ -296,6 +296,14 @@ class Settings(BaseSettings):
         return v
 
     @property
+    def resend_api_key_configured(self) -> bool:
+        """True when Resend can send via env (EMAIL_API_KEY or RESEND_API_KEY)."""
+        import os
+
+        key = (os.environ.get('RESEND_API_KEY') or self.EMAIL_API_KEY or '').strip()
+        return bool(key) and 'placeholder' not in key.lower()
+
+    @property
     def database_url_sync(self) -> str:
         """Sync driver URL for Alembic (pymysql)."""
         url = self.DATABASE_URL

@@ -16,6 +16,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { ReviewSection } from '../types';
+import { useEditWorkflow } from '@/hooks/use-review';
 import { useReviewStore } from '../store';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +39,9 @@ export function EditableField({
   disabled = false,
   className,
 }: EditableFieldProps) {
-  const { editState, startEdit, updateEditValue, saveEdit, cancelEdit, isSaving } = useReviewStore();
+  const tenderId = useReviewStore((s) => s.activeTenderId);
+  const { editState, startEdit, updateEditValue, saveEdit, cancelEdit, isSaving } =
+    useEditWorkflow(tenderId ?? undefined);
   
   const isEditing = editState.section === section && editState.field === field;
 

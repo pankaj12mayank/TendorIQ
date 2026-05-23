@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Invoice, PaymentMethod, InvoiceStatus, PaymentMethodType } from '../types';
 import { formatCurrency, formatDate, INVOICE_STATUS_COLORS } from '../constants';
+import { useBillingApi } from '@/hooks/use-billing';
 import { useBillingStore } from '../store';
 import { cn } from '@/lib/utils';
 
@@ -147,7 +148,8 @@ interface PaymentMethodsCardProps {
 }
 
 export function PaymentMethodsCard({ className }: PaymentMethodsCardProps) {
-  const { paymentMethods, updatePaymentMethod, removePaymentMethod, isProcessing } = useBillingStore();
+  const { paymentMethods, isProcessing } = useBillingStore();
+  const { updatePaymentMethod, removePaymentMethod } = useBillingApi();
   const [showAddForm, setShowAddForm] = useState(false);
 
   const getCardIcon = (brand?: string) => {

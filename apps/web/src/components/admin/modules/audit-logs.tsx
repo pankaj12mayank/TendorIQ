@@ -75,8 +75,10 @@ export function AuditLogs() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Audit Logs</h2>
-          <p className="text-muted-foreground">Complete history of all system actions</p>
+          <h2 className="text-2xl font-bold">Platform Audit Logs</h2>
+          <p className="text-muted-foreground">
+            Cross-tenant trail via platform export (not tenant `/api/v1/audit/export`).
+          </p>
         </div>
         <Button variant="outline" onClick={() => void exportLogs('csv')}>
           <Download className="w-4 h-4 mr-2" />

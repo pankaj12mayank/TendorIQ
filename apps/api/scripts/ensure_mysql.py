@@ -82,7 +82,7 @@ def main() -> int:
         server = _connect_server(cfg)
     except Exception as exc:
         print(
-            f'ERROR: Cannot reach MySQL at {cfg["host"]}:{cfg["port"]} — {exc}',
+            f'ERROR: Cannot reach MySQL at {cfg["host"]}:{cfg["port"]} - {exc}',
             file=sys.stderr,
         )
         print(
@@ -102,7 +102,7 @@ def main() -> int:
             server.commit()
             print(f'OK database `{db_name}` ready')
         except Exception as exc:
-            print(f'ERROR: Could not create database `{db_name}` — {exc}', file=sys.stderr)
+            print(f'ERROR: Could not create database `{db_name}` - {exc}', file=sys.stderr)
             server.close()
             return 1
 
@@ -113,7 +113,7 @@ def main() -> int:
         conn.close()
     except Exception as exc:
         print(
-            f'ERROR: Cannot connect to database `{cfg["database"]}` — {exc}',
+            f'ERROR: Cannot connect to database `{cfg["database"]}` - {exc}',
             file=sys.stderr,
         )
         return 1

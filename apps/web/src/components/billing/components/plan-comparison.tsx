@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Plan, BillingInterval } from '../types';
 import { PLANS, PLAN_COLORS, formatCurrency, getDaysRemaining } from '../constants';
+import { useBillingApi } from '@/hooks/use-billing';
 import { useBillingStore } from '../store';
 import { cn } from '@/lib/utils';
 
@@ -272,7 +273,8 @@ interface SubscriptionStatusCardProps {
 }
 
 export function SubscriptionStatusCard({ className }: SubscriptionStatusCardProps) {
-  const { currentSubscription, isProcessing, cancelSubscription, reactivateSubscription } = useBillingStore();
+  const { currentSubscription, isProcessing } = useBillingStore();
+  const { cancelSubscription, reactivateSubscription } = useBillingApi();
 
   if (!currentSubscription) {
     return (

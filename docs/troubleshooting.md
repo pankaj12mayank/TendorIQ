@@ -1,5 +1,18 @@
 # Troubleshooting Guide
 
+> **Local dev:** MySQL + `run.bat` / `run.bat check` — not PostgreSQL or Redis. See [MYSQL_SETUP.md](./MYSQL_SETUP.md).
+
+## Local quick checks
+
+```batch
+run.bat check
+```
+
+Fails on MySQL → start MySQL service, fix `DATABASE_URL` in `.env`.  
+Fails on migrations → `cd apps\api` then `python -m alembic upgrade head` with `DOTENV_PATH=../../.env`.
+
+---
+
 ## Common Issues
 
 ### API Issues
@@ -41,9 +54,9 @@ docker logs tenderiq-api
 ```
 
 **Common Causes:**
-- Database connection failed
-- Redis connection failed
+- MySQL connection failed (`DATABASE_URL` wrong or service stopped)
 - Unhandled exception in code
+- Optional: Redis only if you enabled distributed rate limiting
 
 **Solutions:**
 ```python
@@ -83,18 +96,17 @@ except Exception as e:
 
 #### Connection Refused
 
-**Error:** `could not connect to server`
+**Error:** `Can't connect to MySQL server` / connection refused
 
 **Solutions:**
 ```bash
-# 1. Check DATABASE_URL format
-postgresql://user:pass@host:5432/db
+# 1. Check DATABASE_URL (MySQL only)
+# mysql+aiomysql://user:pass@localhost:3306/tenderiq?charset=utf8mb4
 
 # 2. Verify database exists
-psql $DATABASE_URL -c "SELECT 1"
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS tenderiq CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-# 3. Check network/firewall
-# Ensure port 5432 is accessible
+# 3. Windows: start MySQL80 service; Linux: systemctl start mysql
 ```
 
 ---
@@ -115,29 +127,26 @@ EXPLAIN ANALYZE SELECT * FROM tenders WHERE ...
 
 ---
 
-### Queue Issues
+### Queue & background jobs
+
+TenderIQ uses **inline** `email_process` jobs in the API process (no ARQ worker). Platform queue UI: **Admin → Queue** (`/dashboard/admin?module=queue`).
 
 #### Jobs Not Processing
 
-**Symptoms:** Queue stuck, jobs pending
+**Symptoms:** Email stuck pending, OCR not advancing
 
 **Solutions:**
 ```bash
-# 1. Check Redis connection
-redis-cli ping
-# Should return PONG
+# 1. API must be running (run.bat or uvicorn)
+curl http://localhost:8000/health
 
-# 2. Check worker is running
-# Start worker:
-cd apps/api
-uv run python -m core.queue.worker
+# 2. Super admin: retry from Admin → Queue or Failed Jobs
+# POST /api/v1/admin/platform/queue/jobs/{id}/retry
 
-# 3. Check queue health
-curl https://api.tenderiq.com/queue/health
-
-# 4. Retry failed jobs
-curl -X POST https://api.tenderiq.com/queue/failed/{job_id}/retry
+# 3. Email queue: Admin → Email System → Queue tab → Retry
 ```
+
+Optional **Redis** is not required for the default queue; only for experimental distributed rate limits.
 
 ---
 

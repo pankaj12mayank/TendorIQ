@@ -194,6 +194,12 @@ async def complete_upload(
     if not meta.get('success'):
         raise HTTPException(status_code=400, detail='File not found in storage')
 
+    from ...core.security.upload_scan import assert_upload_clean
+
+    read_result = await storage_service.read_file(doc.storage_key)
+    if read_result.get('success') and read_result.get('content'):
+        await assert_upload_clean(read_result['content'], doc.file_name)
+
     await file_service.update_document(
         db,
         UUID(document_id),
@@ -232,6 +238,10 @@ async def direct_upload(
         raise HTTPException(status_code=400, detail='Tenant context required')
 
     contents = await file.read()
+
+    from ...core.security.upload_scan import assert_upload_clean
+
+    await assert_upload_clean(contents, file.filename or 'upload')
 
     is_valid, error_msg = storage_service.validate_file(
         filename=file.filename or 'unknown',

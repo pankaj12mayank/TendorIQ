@@ -1,251 +1,148 @@
 # Deployment Guide
 
-## Overview
-
-This guide covers deploying TenderIQ to production environments.
+> **Stack:** MySQL 8+ for persistence. Background work (email, OCR) uses **in-process** `core.tasks.inline` — **Redis and ARQ are not required**.  
+> **Local dev:** use `run.bat` (see [local-setup.md](local-setup.md) and [MYSQL_SETUP.md](MYSQL_SETUP.md)).
 
 ---
 
 ## Prerequisites
 
-- [ ] PostgreSQL 15+ database (Neon, Supabase, or self-hosted)
-- [ ] Redis 7+ (Redis Cloud or self-hosted)
-- [ ] Domain configured with SSL
-- [ ] Sentry project created for error tracking
+- [ ] **MySQL 8+** (managed or self-hosted)
+- [ ] Domain + TLS (production)
+- [ ] `JWT_SECRET` (32+ characters) and other secrets from [.env.production.example](../.env.production.example)
+- [ ] Optional: **Redis** only if you enable distributed rate limiting (`RATE_LIMIT_ENABLED` + Redis client wiring)
 
 ---
 
-## Environment Setup
+## Environment
 
-### 1. Create Environment File
+Copy `.env.production.example` → `.env` (or set variables in Railway/Vercel).
 
-```bash
-# Production environment variables
-DATABASE_URL=postgresql://user:pass@host:5432/tenderiq
-REDIS_URL=redis://:password@host:6379/0
-
-# Auth (Clerk)
-CLERK_PUBLISHABLE_KEY=pk_test_xxx
-CLERK_SECRET_KEY=sk_test_xxx
-
-# AI Providers
-OPENAI_API_KEY=sk-xxx
-ANTHROPIC_API_KEY=sk-ant-xxx
-
-# Security
-SECRET_KEY=<generate-32-char-random-string>
-
-# Sentry
-SENTRY_DSN=https://xxx@sentry.io/xxx
-
-# Production URLs
-APP_URL=https://tenderiq.com
-API_URL=https://api.tenderiq.com
-
-# CORS
-CORS_ORIGINS=https://tenderiq.com
+```env
+DATABASE_URL=mysql+aiomysql://user:pass@host:3306/tenderiq?charset=utf8mb4
+JWT_SECRET=<32-char-minimum>
+FRONTEND_URL=https://app.example.com
+API_URL=https://api.example.com
+CORS_ORIGINS=https://app.example.com
 ```
 
-### 2. Generate Secret Key
-
-```bash
-# Python
-python -c "import secrets; print(secrets.token_hex(32))"
-```
+Email, Stripe, AI keys: see [environment-config.md](environment-config.md).
 
 ---
 
-## Deployment Options
+## Local / Windows (recommended for developers)
 
-### Option 1: Railway (Recommended)
-
-```bash
-# Install Railway CLI
-npm i -g @railway/cli
-
-# Login
-railway login
-
-# Initialize
-railway init tenderiq
-
-# Add variables
-railway variables set DATABASE_URL=...
-
-# Deploy
-railway up
+```batch
+copy .env.example .env
+REM Set DATABASE_URL to your MySQL password
+run.bat
 ```
 
-**Railway Configuration (`apps/api/railway.json`):** installs runtime deps with pip from `requirements.txt` (same as Docker). See the checked-in file for `buildCommand` / `startCommand`.
+- **`run.bat check`** — compile, import, MySQL, `alembic upgrade head` (no servers)
+- **`run.bat stop`** — stop API and web
 
-### Option 2: Docker
+No `docker compose up` required for day-to-day development.
 
-Use the production Dockerfile at **`apps/api/Dockerfile`** (pip + `requirements.txt` only — no dev tools in the image):
+---
+
+## Production options
+
+### Option 1: Railway / managed API + MySQL
+
+1. Provision **MySQL** (Railway plugin, PlanetScale, RDS, etc.).
+2. Set `DATABASE_URL` with the `mysql+aiomysql://` driver.
+3. Deploy API from `apps/api` (`requirements.txt`, `uvicorn src.main:app`).
+4. Deploy web to Vercel with `NEXT_PUBLIC_API_URL`.
+
+### Option 2: Docker (API + MySQL only)
+
+```bash
+docker compose up -d mysql api
+```
+
+Optional Redis (rate limiting experiments):
+
+```bash
+docker compose --profile with-redis up -d
+```
+
+Build API image manually (`apps/api/Dockerfile` uses `apps/api/requirements.txt`):
 
 ```bash
 docker build -t tendoriq-api apps/api
 docker run -d -p 8000:8000 --env-file .env.production tendoriq-api
 ```
 
-Health check: `GET /health`.
+Health: `GET /health`.
 
-### Option 3: Vercel + Neon
+### Option 3: Vercel (frontend) + hosted MySQL API
 
-1. Connect GitHub to Vercel
-2. Add environment variables
-3. Deploy with `pnpm vercel:deploy`
-
----
-
-## Database Setup
-
-### 1. Run Migrations
+1. Connect repo to Vercel for `apps/web`.
+2. Point `NEXT_PUBLIC_API_URL` at your API host.
+3. Run migrations on the API host before traffic:
 
 ```bash
 cd apps/api
-uv run alembic upgrade head
-```
-
-### 2. Seed Initial Data
-
-```bash
-uv run python -m scripts.seed_db
+python -m alembic upgrade head
 ```
 
 ---
 
-## Frontend Deployment
+## Database migrations
 
-### Vercel (Recommended)
+```bash
+cd apps/api
+set DOTENV_PATH=../../.env   # Windows
+export DOTENV_PATH=../../.env # Linux/macOS
+python -m alembic upgrade head
+```
+
+See [database-migrations.md](database-migrations.md).
+
+---
+
+## Frontend
 
 ```bash
 cd apps/web
-npx vercel --prod
-```
-
-### Netlify
-
-```bash
-cd apps/web
-netlify deploy --prod --dir=.next
+pnpm install
+pnpm build
+# Vercel: pnpm exec vercel --prod
 ```
 
 ---
 
-## SSL & Domain
+## Post-deployment checklist
 
-### Using Cloudflare
-
-1. Add domain to Cloudflare
-2. Create CNAME record pointing to deployment
-3. Enable "Full" SSL mode
-4. Enable "Always Use HTTPS"
-
----
-
-## Post-Deployment Checklist
-
-- [ ] Health endpoint returns 200
-- [ ] Database connection working
-- [ ] Redis connection working
-- [ ] Authentication working
-- [ ] File uploads working
-- [ ] AI features working
-- [ ] Sentry receiving errors
-- [ ] Metrics visible
+- [ ] `GET /health` → 200
+- [ ] `DATABASE_URL` uses MySQL driver (`mysql+aiomysql` or `mysql+pymysql` for Alembic sync URL)
+- [ ] `alembic upgrade head` succeeded on production DB
+- [ ] Sign-in and tenant flows work
+- [ ] Stripe webhook URL configured (if billing enabled)
+- [ ] Sentry DSN set (optional)
 
 ---
 
-## Monitoring
+## Scaling (current vs future)
 
-### Health Checks
+| Today | Future (optional) |
+|-------|-------------------|
+| Inline email/OCR jobs in API process | Dedicated worker process |
+| MySQL connection pool in SQLAlchemy | Read replicas |
+| In-memory / DB-backed queue tables | Redis for distributed rate limits |
 
-```bash
-# Basic
-curl https://api.tenderiq.com/health
-
-# Readiness (includes DB + Redis)
-curl https://api.tenderiq.com/health/ready
-```
-
-### Logs
-
-```bash
-# Railway
-railway logs
-
-# Docker
-docker logs tenderiq-api
-
-# CloudWatch (if using AWS)
-aws logs tail /aws/lambda/tenderiq
-```
+See [scaling-strategy.md](scaling-strategy.md) for roadmap notes (some diagrams are aspirational).
 
 ---
 
-## Scaling
-
-### Horizontal Scaling (Multiple Instances)
-
-1. Use Redis for session storage (already configured)
-2. Use database-backed job queue (ARQ)
-3. Enable sticky sessions or move to stateless
-
-### Database Scaling
-
-- **Read Replicas**: For heavy read loads
-- **Connection Pooling**: Use PgBouncer
-- **Caching**: Add Redis cache layer
-
----
-
-## Rollback
-
-### Railway
+## Backup
 
 ```bash
-railway rollback
-```
-
-### Docker
-
-```bash
-docker pull tenderiq-api:previous-tag
-docker-compose up -d
-```
-
----
-
-## Security Hardening
-
-1. **Firewall**: Only allow ports 80, 443
-2. **Rate Limiting**: Already enabled
-3. **CORS**: Restrict to production domain
-4. **Headers**: Security headers via middleware
-5. **Secrets**: Rotate regularly
-
----
-
-## Backup & Recovery
-
-### Database Backup
-
-```bash
-# PostgreSQL
-pg_dump $DATABASE_URL > backup.sql
-
-# Schedule daily backups via cron
-0 2 * * * pg_dump $DATABASE_URL > /backups/tenderiq-$(date +\%Y\%m\%d).sql
-```
-
-### Restore
-
-```bash
-psql $DATABASE_URL < backup.sql
+mysqldump -h HOST -u USER -p tenderiq > backup-$(date +%Y%m%d).sql
 ```
 
 ---
 
 ## Troubleshooting
 
-See [Troubleshooting Guide](docs/troubleshooting.md) for common issues.
+See [troubleshooting.md](troubleshooting.md).

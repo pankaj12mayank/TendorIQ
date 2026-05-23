@@ -1,5 +1,8 @@
 # TenderIQ Local Setup Guide
 
+> **Database:** MySQL 8+ only. **Jobs:** in-process (no Redis, PostgreSQL, or Docker required).  
+> See also [MYSQL_SETUP.md](./MYSQL_SETUP.md) and [deployment.md](./deployment.md).
+
 ## Quick Start (recommended)
 
 ### Prerequisites
@@ -78,7 +81,7 @@ See [MYSQL_SETUP.md](./MYSQL_SETUP.md) and [database-migrations.md](./database-m
 
 1. Start the **MySQL** Windows service (Services app or `net start MySQL80`).
 2. Confirm password in `.env` matches your MySQL user.
-3. Run `run.bat check` — step `[3/5] MySQL reachability` must pass.
+3. Run `run.bat check` — MySQL reachability step must pass.
 4. Create DB manually if needed:
 
 ```sql

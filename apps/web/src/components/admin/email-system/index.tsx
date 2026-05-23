@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Mail,
@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { KpiCard } from '@/components/design-system';
-import { useEmailSystem, type EmailTemplate } from '@/hooks/use-email-system';
+import { useEmailSystem, type EmailQueueRow, type EmailTemplate } from '@/hooks/use-email-system';
 import { cn } from '@/lib/utils';
 import { staggerContainer, staggerItem } from '@/design-system/motion';
 
@@ -58,6 +58,7 @@ export function EmailSystem() {
     updateEvent,
     saveSmtp,
     testSmtp,
+    retryQueueItem,
   } = useEmailSystem();
 
   const [tab, setTab] = useState('templates');
@@ -85,6 +86,26 @@ export function EmailSystem() {
     fetchSmtp();
   }, [fetchTemplates, fetchEvents, fetchAnalytics, fetchLogs, fetchQueue, fetchSmtp]);
 
+  const stalledProcessing = useMemo(() => {
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    return queue.filter((q) => {
+      if (q.status !== 'processing') return false;
+      if (!q.created_at) return true;
+      const ts = Date.parse(q.created_at);
+      return Number.isNaN(ts) || ts < cutoff;
+    });
+  }, [queue]);
+
+  useEffect(() => {
+    const processing = analytics?.queue_processing ?? 0;
+    if (processing <= 0 && stalledProcessing.length === 0) return;
+    const id = window.setInterval(() => {
+      void fetchQueue();
+      void fetchAnalytics();
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [analytics?.queue_processing, stalledProcessing.length, fetchQueue, fetchAnalytics]);
+
   useEffect(() => {
     if (templates.length && !selected) {
       setSelected(templates[0]);
@@ -110,6 +131,19 @@ export function EmailSystem() {
           Event-driven transactional email — templates are never hard-deleted.
         </p>
       </div>
+
+      {(analytics?.queue_processing ?? 0) > 0 || stalledProcessing.length > 0 ? (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium text-amber-900 dark:text-amber-100">
+            {stalledProcessing.length > 0
+              ? `${stalledProcessing.length} queue item(s) stuck in processing`
+              : `${analytics?.queue_processing ?? 0} item(s) processing`}
+          </p>
+          <p className="text-muted-foreground mt-1">
+            Queue refreshes every 30s. Use Retry on stalled rows or open the Queue tab.
+          </p>
+        </div>
+      ) : null}
 
       <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <motion.div variants={staggerItem}>
@@ -369,16 +403,34 @@ export function EmailSystem() {
 
         <TabsContent value="queue" className="mt-4">
           <Card className="surface-card">
-            <CardHeader><CardTitle>Email queue</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Email queue</CardTitle>
+              <Button size="sm" variant="outline" onClick={() => fetchQueue()}>
+                Refresh
+              </Button>
+            </CardHeader>
             <CardContent className="space-y-2">
-              {(queue as { recipient: string; status: string; retry_count: number; event_name: string }[]).map((q, i) => (
-                <div key={i} className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                  <span>{q.recipient}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{q.event_name}</span>
-                  <StatusBadge status={q.status} />
-                  <span className="text-xs">retries: {q.retry_count}</span>
-                </div>
-              ))}
+              {queue.map((q: EmailQueueRow) => {
+                const stalled =
+                  q.status === 'processing' &&
+                  (!q.created_at || Date.parse(q.created_at) < Date.now() - 5 * 60 * 1000);
+                return (
+                  <div
+                    key={q.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
+                  >
+                    <span>{q.recipient}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{q.event_name}</span>
+                    <StatusBadge status={q.status} />
+                    <span className="text-xs">retries: {q.retry_count}</span>
+                    {(stalled || q.status === 'retry' || q.status === 'dead_letter') && (
+                      <Button size="sm" variant="outline" onClick={() => retryQueueItem(q.id)}>
+                        Retry
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         </TabsContent>

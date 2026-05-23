@@ -1,5 +1,7 @@
 # Missing Dependency Checks
 
+> **Infrastructure:** MySQL 8+ required. Redis optional. See [MYSQL_SETUP.md](./MYSQL_SETUP.md).
+
 ## Production Readiness
 
 ### Required Dependencies
@@ -57,8 +59,8 @@ pnpm add @sentry/react @tanstack/react-virtual
 
 | Service | Status | Notes |
 |---------|--------|-------|
-| PostgreSQL 15+ | ✅ Configured | Multi-tenant ready |
-| Redis 7+ | ✅ Configured | Queue + cache |
+| MySQL 8+ | ✅ Required | `DATABASE_URL` with `mysql+aiomysql` |
+| Redis 7+ | ⚪ Optional | Rate limiting only; queues are in-process |
 | S3/Blob Storage | ⚠️ Config | Verify credentials |
 | Stripe | ⚠️ Webhook | Verify endpoint |
 
@@ -116,7 +118,7 @@ curl -f http://localhost:8000/health || exit 1
 - [ ] No hardcoded secrets in code
 - [ ] Environment variables used for all secrets
 - [ ] Database credentials rotated
-- [ ] Redis password set
+- [ ] Redis password set (if using Redis)
 - [ ] API keys are production values (not test)
 - [ ] Sentry DSN is production project
 - [ ] CORS restricted to production domain

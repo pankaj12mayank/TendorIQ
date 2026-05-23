@@ -176,15 +176,11 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   toggleRealTime: (active) => set({ isRealTimeActive: active }),
 
   refreshUsage: async () => {
-    set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    set({ isLoading: false });
+    // Wired to billing APIs by useUsageApi.registerRefreshHandlers()
   },
 
   refreshAlerts: async () => {
-    set({ isLoading: true });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    set({ isLoading: false });
+    // Wired to notifications API by useUsageApi.registerRefreshHandlers()
   },
 }));
 
