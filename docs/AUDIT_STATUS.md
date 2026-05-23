@@ -1,9 +1,24 @@
 # TenderIQ — Audit remediation status
 
 **Canonical report:** [AUDIT_REPORT.md](../AUDIT_REPORT.md)  
+**E2E methodology & root causes:** [audit-methodology.md](./audit-methodology.md) · [AUDIT_REPORT — System reliability](../AUDIT_REPORT.md#system-reliability--root-causes)  
 **Superseded:** `FIX_PLAN.md`, `AGENTS.md` (removed; do not recreate)
 
 Track fixes by audit layer. **Issue count = fixed count** per layer when marked complete.
+
+> **Important:** Layer rows below mean **code/remediation items** were addressed. **Operational “system works”** requires passing reliability gates **G1–G5** in the audit report (import, compile, start script, MySQL). Do not treat this table alone as E2E sign-off.
+
+## Reliability status (E2E)
+
+| Gate | Description | Status |
+|------|-------------|--------|
+| G1 | `compileall` on `apps/api/src` | Run locally after pull |
+| G2 | `scripts/verify_import.py` with `DOTENV_PATH=<repo>/.env` | Run locally after pull |
+| G3 | `pip install -r requirements.txt` when requirements change | Enforced by `tenderiq-start.ps1` |
+| G4 | `tenderiq-start.ps1` → API `/health` + web :3000 | Requires MySQL |
+| G5 | Migrations + demo/super-admin login | Requires MySQL |
+
+Root-cause IDs **RC-01–RC-07**: see audit report reliability section.
 
 | Layer | Title | Issues | Fixed | Status |
 |-------|--------|--------|-------|--------|

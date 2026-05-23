@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from ..rbac import permissions_for_role
+from ..local_auth import permissions_for_role
 from ..roles import MEMBERSHIP_ROLES, normalize_membership_role
 
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ class SSOHandler:
         return {
             'roles': roles if roles else ['member'],
             'membership_role': primary,
-            'permissions': list(permissions_for_role(primary)),
+            'permissions': permissions_for_role(primary, primary),
         }
 
 

@@ -11,7 +11,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Monorepo root .env (run.bat / uvicorn cwd may be apps/api)
 import os
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# config.py → core → src → api → apps → repo root
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _DOTENV_OVERRIDE = os.environ.get('DOTENV_PATH', '').strip()
 _ENV_FILE = (
     Path(_DOTENV_OVERRIDE)
@@ -303,9 +304,14 @@ class Settings(BaseSettings):
 
 
 def get_settings() -> Settings:
-    """Load settings; root .env wins over stale process env (e.g. old changeme)."""
-    if _ENV_FILE.is_file():
-        load_dotenv(_ENV_FILE, override=True)
+    """Load settings; monorepo root .env wins over stale process env."""
+    env_path = _ENV_FILE
+    if not env_path.is_file():
+        fallback = Path.cwd() / '.env'
+        if fallback.is_file():
+            env_path = fallback
+    if env_path.is_file():
+        load_dotenv(env_path, override=True)
     return Settings()
 
 

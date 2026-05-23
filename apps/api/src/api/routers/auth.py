@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from svix.webhooks import Webhook, WebhookVerificationError
 
 from ...core.config import get_settings, settings
 from ...core.auth import AuthService, AuthContext, ClerkAuthService
@@ -455,6 +454,14 @@ async def clerk_webhook(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='Clerk webhooks are not configured',
         )
+
+    try:
+        from svix.webhooks import Webhook, WebhookVerificationError
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail='Clerk webhooks require the svix package (pip install -r requirements.txt)',
+        ) from exc
 
     wh = Webhook(secret)
     try:

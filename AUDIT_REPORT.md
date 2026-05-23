@@ -462,7 +462,60 @@
 | L35-6 | Widespread optional `tenant_id` | `tenant_types.py`, UUID validation in `require_tenant_member` |
 | L35-7 | Untested drift | `test_layer35_type_drift.py`, Vitest mapper tests |
 
-**All 35 audit layers complete.**
+**All 35 code layers complete.** Operational sign-off requires [reliability gates](#reliability-gates-mandatory) below.
+
+---
+
+# System reliability & root causes
+
+> **Honest gap:** Layers L1–L35 were closed using **static/file tests** and targeted fixes. They did **not** originally require `import app`, `compileall`, or `tenderiq-start.ps1` health checks. That is why the app could show “audit 100%” while **`run.bat` / startup still failed**.
+
+## Reliability gates (mandatory)
+
+| Gate | Command | Pass criteria |
+|------|---------|---------------|
+| **G1 Compile** | `cd apps/api && python -m compileall -q src` | Exit 0 |
+| **G2 Import** | `DOTENV_PATH=<repo>/.env python scripts/verify_import.py` (from `apps/api`) | Prints `OK TenderIQ` |
+| **G3 Deps** | `pip install -r requirements.txt` when `requirements.txt` hash changes | All imports in G2 succeed |
+| **G4 Stack** | `scripts/tenderiq-start.ps1` | `/health` → `healthy`, frontend HTTP &lt; 500 |
+| **G5 DB** | MySQL up + `alembic upgrade head` | Login / tenders list returns data |
+
+Methodology: [docs/audit-methodology.md](docs/audit-methodology.md)
+
+## Root-cause register (startup / E2E failures)
+
+| RC-ID | Symptom | Root cause | Why layer audit missed it | Fix | Gate |
+|-------|---------|------------|---------------------------|-----|------|
+| **RC-01** | `DATABASE_URL` / `JWT_SECRET` validation error on import | `_PROJECT_ROOT` in `config.py` pointed at `apps/` not repo root; `.env` never loaded | No test imported `Settings()` with real `.env` | `parents[4]` + `get_settings()` fallback path | G2 |
+| **RC-02** | `ModuleNotFoundError: svix` | Venv created once; start script skipped `pip install` when venv existed | Layer tests don’t install or import full app | Requirements hash stamp + reinstall in `tenderiq-start.ps1` | G3, G2 |
+| **RC-03** | `SyntaxError: non-default argument follows default argument` | FastAPI routes put `RequireAnalyticsView` / `RequireApiAccess` **after** `Query(...)` parameters | Static tests never `compileall` routers | Reordered params in `audit.py`, `export.py`, `sso.py` | G1, G2 |
+| **RC-04** | `SyntaxError` in `audit.py` `log_action` | `action_type=` default before required `resource_type` | Same as RC-03 | Swapped parameter order in `dependencies/audit.py` | G1 |
+| **RC-05** | `SyntaxError` in `admin_auth.py` | UTF-8 BOM + escaped `\"\"\"` docstrings | File not compiled in CI | Cleaned docstrings / BOM | G1 |
+| **RC-06** | `ImportError: permissions_for_role from rbac` | SSO imported symbol from `core.rbac` but implementation lives in `core.local_auth` | `test_layer18` only checked string presence in SSO file | Import from `local_auth` | G2 |
+| **RC-07** | “Audit complete” but E2E broken | **Process:** closure = 7/7 static items, not gates G1–G5 | Methodology gap | This section + `audit-methodology.md` | All gates |
+
+## Systemic root cause (meta)
+
+**Treatment of audit as documentation/checklist instead of runnable system verification.**
+
+| Desired state | Current guard |
+|---------------|---------------|
+| Every merge blocks on import | `apps/api/scripts/verify_import.py` + G2 in start script |
+| No silent skip of dependencies | `venv/.requirements.sha256` in `tenderiq-start.ps1` |
+| Root causes tracked | Table above + RC-ID in future layer notes |
+
+## E2E smoke paths (manual until Playwright matrix exists)
+
+| # | Flow | Steps | Depends on |
+|---|------|-------|------------|
+| E2E-1 | Health | `GET /health` | G2 |
+| E2E-2 | Demo login | Sign in with `DEMO_USER_*` from `.env` | MySQL, migrations |
+| E2E-3 | Tenders | Dashboard → Tenders list → open analysis | JWT `tenant_id`, G4 |
+| E2E-4 | Create tender | `/dashboard/tenders/new` → save | RBAC `tender:create` |
+| E2E-5 | Document upload | Upload on tender (direct or presign) | Storage provider, quotas |
+| E2E-6 | Super admin | `/admin` with `SUPER_ADMIN_*` | Platform routes |
+
+Layer **L27** added CI/tests but not **G2 import** on every PR — recommend adding `verify_import.py` to `.github/workflows/ci.yml`.
 
 ---
 
@@ -478,4 +531,4 @@ JWT `tenant_id`, `X-Tenant-ID`, Clerk middleware conditional, tenders/analysis/b
 
 ---
 
-*Last updated: Layer 35 completed 7/7 (100%) — audit remediation complete.*
+*Last updated: Layer 35 code complete; reliability gates and root-cause register added (2026-05-23).*

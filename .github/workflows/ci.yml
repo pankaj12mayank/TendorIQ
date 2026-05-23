@@ -130,6 +130,15 @@ jobs:
           cd apps/api
           uv sync
 
+      - name: Reliability gate — compile & import app
+        env:
+          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tendoriq_test?charset=utf8mb4
+          JWT_SECRET: ci-test-secret-key-at-least-32-characters-long
+        run: |
+          cd apps/api
+          uv run python -m compileall -q src
+          uv run python scripts/verify_import.py
+
       - name: Run API unit & contract tests
         env:
           DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tendoriq_test?charset=utf8mb4

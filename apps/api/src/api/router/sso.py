@@ -131,8 +131,8 @@ async def disable_sso(
 
 @router.get('/login-url')
 async def get_sso_login_url(
-    redirect_uri: str = Query(...),
     current_user: TenantMember,
+    redirect_uri: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
     _require_sso_feature()

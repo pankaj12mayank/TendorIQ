@@ -230,11 +230,11 @@ async def export_risk_analysis_compat(
 @router.post('/export/report/{tender_id}')
 async def export_tender_report(
     tender_id: str,
-    format: ExportFormat = Query(ExportFormat.PDF),
-    template_id: Optional[str] = Query(None),
     current_user: RequireApiAccess,
     service: ExportService = Depends(get_export_service),
     db: AsyncSession = Depends(get_db),
+    format: ExportFormat = Query(ExportFormat.PDF),
+    template_id: Optional[str] = Query(None),
 ):
     organization_id = _tenant_org_id(current_user)
     tenant_uuid = parse_tenant_uuid(current_user.tenant_id)

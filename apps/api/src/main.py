@@ -66,7 +66,10 @@ async def lifespan(app: FastAPI):
     from .core.observability.sentry import init_sentry
 
     set_app_start_time()
-    init_sentry()
+    try:
+        init_sentry()
+    except Exception as exc:
+        logger.warning('Sentry init skipped: %s', exc)
 
     await init_db()
 

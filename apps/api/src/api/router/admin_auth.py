@@ -1,4 +1,4 @@
-﻿\"\"\"Admin Service Management - Check user roles and service purchases\"\"\"
+﻿"""Admin Service Management - Check user roles and service purchases"""
 
 import logging
 from uuid import UUID
@@ -47,7 +47,7 @@ async def whoami(
     current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    \"\"\"Check current user's role and permissions\"\"\"
+    """Check current user's role and permissions"""
     is_admin = current_user.role in ['super_admin', 'owner', 'admin', 'tenant_admin']
 
     plan = 'starter'
@@ -72,7 +72,7 @@ async def list_tenant_users(
     current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    \"\"\"List all users in the current tenant (admin only)\"\"\"
+    """List all users in the current tenant (admin only)"""
     if current_user.role not in ['super_admin', 'owner', 'admin', 'tenant_admin']:
         raise HTTPException(status_code=403, detail='Admin access required')
 
@@ -106,7 +106,7 @@ async def list_tenant_users(
 async def get_available_services(
     current_user: AuthContext = Depends(get_current_user),
 ):
-    \"\"\"Get all available services for purchase\"\"\"
+    """Get all available services for purchase"""
     return {
         'services': [
             {
@@ -159,7 +159,7 @@ async def purchase_service(
     current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    \"\"\"Purchase a service for the tenant\"\"\"
+    """Purchase a service for the tenant"""
     if current_user.role not in ['super_admin', 'owner', 'admin', 'tenant_admin']:
         raise HTTPException(status_code=403, detail='Admin access required to purchase services')
 
@@ -190,7 +190,7 @@ async def get_tenant_subscription(
     current_user: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    \"\"\"Get tenant subscription and services\"\"\"
+    """Get tenant subscription and services"""
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='No tenant context')
 

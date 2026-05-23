@@ -4,6 +4,7 @@ import logging
 from functools import wraps
 from typing import Any, Callable, Optional
 
+import sentry_sdk
 from sentry_sdk import (
     init,
     capture_message,
@@ -11,9 +12,6 @@ from sentry_sdk import (
     set_extra,
     set_tag,
     add_breadcrumb,
-    Hub,
-    Transaction,
-    Span,
 )
 from sentry_sdk.integrations.fastapi import FastAPIIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
@@ -113,9 +111,9 @@ class SentryService:
         )
     
     @classmethod
-    def start_transaction(cls, name: str, op: str = 'custom') -> Transaction:
-        """Start a custom transaction"""
-        return Transaction(op=op, name=name)
+    def start_transaction(cls, name: str, op: str = 'custom'):
+        """Start a custom transaction (sentry-sdk 2.x)."""
+        return sentry_sdk.start_transaction(op=op, name=name)
     
     @classmethod
     def trace(cls, name: str, op: str = 'custom'):
@@ -149,9 +147,9 @@ def sentry_middleware(request, call_next):
     if not SentryService._initialized:
         return call_next(request)
     
-    transaction = Hub.current.start_transaction(
-        name=f'{request.method} {request.url.path}',
+    transaction = sentry_sdk.start_transaction(
         op='http.server',
+        name=f'{request.method} {request.url.path}',
     )
     
     try:

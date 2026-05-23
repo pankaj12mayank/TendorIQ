@@ -243,19 +243,27 @@ if (-not (Test-Path $VenvPython)) {
 }
 
 Write-Log "INFO" "Installing Python dependencies..."
-if ($forceSetup -or -not (Test-Path (Join-Path $ApiDir "venv\pyvenv.cfg"))) {
+$reqFile = Join-Path $ApiDir "requirements.txt"
+$reqStamp = Join-Path $ApiDir "venv\.requirements.sha256"
+$reqHash = (Get-FileHash $reqFile -Algorithm SHA256).Hash
+$needsPip = $forceSetup -or (-not (Test-Path $reqStamp)) -or ((Get-Content $reqStamp -Raw).Trim() -ne $reqHash)
+if ($needsPip) {
     & $VenvPython -m pip install --upgrade pip --quiet
-    & $VenvPip install -r (Join-Path $ApiDir "requirements.txt")
+    & $VenvPip install -r $reqFile
     if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
+    Set-Content -Path $reqStamp -Value $reqHash -Encoding ascii -NoNewline
 } else {
-    Write-Log "INFO" "Python dependencies already present, skipping pip install"
+    Write-Log "INFO" "Python dependencies up to date (requirements.txt unchanged)"
 }
 
 Write-Log "INFO" "Verifying backend imports..."
+$rootEnv = Join-Path $Root ".env"
 Push-Location $ApiDir
-& $VenvPython -c "from src.main import app; assert app.title"
+$env:DOTENV_PATH = $rootEnv
+& $VenvPython scripts/verify_import.py
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Backend import check failed" }
 Pop-Location
+Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
 Write-Log "INFO" "Backend verification OK"
 
 Write-Log "INFO" "Installing frontend dependencies (pnpm workspace)..."

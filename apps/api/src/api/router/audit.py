@@ -122,6 +122,8 @@ async def _entries_for_tenant(db, tenant_id: UUID, conditions: list, limit: int,
 
 @router.get('/logs', response_model=list[AuditEntry])
 async def get_audit_logs(
+    current_user: RequireAnalyticsView,
+    db=Depends(get_db),
     action: Optional[str] = Query(None),
     action_type: Optional[str] = Query(None),
     resource_type: Optional[str] = Query(None),
@@ -132,8 +134,6 @@ async def get_audit_logs(
     end_date: Optional[datetime] = Query(None),
     limit: int = Query(50, le=100),
     offset: int = Query(0),
-    current_user: RequireAnalyticsView,
-    db=Depends(get_db),
 ):
     """Get tenant-scoped audit logs with filtering."""
     tenant_id = UUID(current_user.tenant_id)
@@ -178,9 +178,9 @@ async def get_audit_log(
 
 @router.get('/stats', response_model=AuditStats)
 async def get_audit_stats(
-    days: int = Query(30, le=365),
     current_user: RequireAnalyticsView,
     db=Depends(get_db),
+    days: int = Query(30, le=365),
 ):
     """Get audit statistics for the current tenant."""
     tenant_id = UUID(current_user.tenant_id)
@@ -298,17 +298,17 @@ async def export_audit_logs(
 
 @router.post('/track')
 async def track_audit_event(
+    request: Request,
+    current_user: RequireAnalyticsView,
     action: str,
     action_type: str,
     resource_type: str,
+    db=Depends(get_db),
     resource_id: Optional[str] = None,
     resource_name: Optional[str] = None,
     changes: dict = {},
     old_values: dict = {},
     new_values: dict = {},
-    request: Request,
-    current_user: RequireAnalyticsView,
-    db=Depends(get_db),
 ):
     """Track a custom audit event (tenant-scoped)."""
     tenant_id = UUID(current_user.tenant_id)

@@ -12,6 +12,7 @@ echo  ==================================================
 echo.
 
 if /I "%~1"=="stop" goto :do_stop
+if /I "%~1"=="check" goto :do_check
 if /I "%~1"=="setup" goto :do_setup
 if /I "%~1"=="full" goto :do_setup
 
@@ -63,6 +64,23 @@ echo.
 echo Press any key to close this window (servers keep running in background).
 echo To stop servers, run: run.bat stop
 pause >nul
+exit /b 0
+
+:do_check
+echo.
+echo  TenderIQ - Quick check (no servers started)
+echo  ==================================================
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\tenderiq-check.ps1"
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" (
+    echo.
+    echo [FAIL] See output above and .tenderiq\startup.log
+    pause
+    exit /b %EXIT_CODE%
+)
+echo.
+echo [OK] Backend import check passed. Run run.bat to start servers.
+pause
 exit /b 0
 
 :do_stop
