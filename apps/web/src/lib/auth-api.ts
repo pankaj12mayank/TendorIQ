@@ -1,8 +1,7 @@
+import { apiUrl } from '@/lib/api-config';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
 import type { AuthUser } from '@/lib/auth-session';
 import { getRolePermissions } from '@/lib/permissions';
-
-const API_URL = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface ApiSessionPayload {
   access_token: string;
@@ -35,7 +34,7 @@ export async function fetchMeFromApi(
   token: string,
   existingUser?: AuthUser | null
 ): Promise<{ user: AuthUser | null; unauthorized: boolean }> {
-  const res = await fetch(`${API_URL()}/api/v1/auth/me`, {
+  const res = await fetch(apiUrl('/api/v1/auth/me'), {
     headers: {
       'Content-Type': 'application/json',
       ...buildApiAuthHeaders(token, existingUser ?? undefined),
@@ -54,7 +53,7 @@ export async function fetchMeFromApi(
 export async function refreshAccessToken(
   refreshToken: string
 ): Promise<ApiSessionPayload | null> {
-  const res = await fetch(`${API_URL()}/api/v1/auth/refresh`, {
+  const res = await fetch(apiUrl('/api/v1/auth/refresh'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: refreshToken }),
@@ -106,7 +105,7 @@ export interface ClerkSessionExchangeResult {
 export async function exchangeClerkSession(
   clerkToken: string
 ): Promise<ClerkSessionExchangeResult | null> {
-  const res = await fetch(`${API_URL()}/api/v1/auth/clerk/session`, {
+  const res = await fetch(apiUrl('/api/v1/auth/clerk/session'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

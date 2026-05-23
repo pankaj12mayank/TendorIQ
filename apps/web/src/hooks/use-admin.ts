@@ -555,31 +555,30 @@ export function useAuditLogApi() {
     }
   }, []);
 
-  const exportLogs = useCallback(
-    async (format: 'csv' | 'json' | 'pdf') => {
-      setLoading(true);
-      try {
-        const res = await api.post<{ content: string; mime_type: string }>('/api/v1/audit/export', {
-          format,
-        });
-        const blob = new Blob([typeof res.content === 'string' ? res.content : JSON.stringify(res.content)], {
-          type: res.mime_type || 'text/csv',
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `audit-logs.${format}`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success('Audit log export started');
-      } catch (err) {
-        handleApiError(err, 'Export failed');
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
-  );
+  const exportLogs = useCallback(async (format: 'csv' | 'json') => {
+    setLoading(true);
+    try {
+      const res = await api.post<{ content: string | unknown; mime_type: string }>(
+        '/api/v1/audit/export',
+        { format }
+      );
+      const body =
+        typeof res.content === 'string' ? res.content : JSON.stringify(res.content, null, 2);
+      const mime = res.mime_type || (format === 'csv' ? 'text/csv' : 'application/json');
+      const blob = new Blob([body], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-logs.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Audit log export downloaded');
+    } catch (err) {
+      handleApiError(err, 'Export failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const getLogById = useCallback(
     (id: string) => logs.find((l) => l.id === id),

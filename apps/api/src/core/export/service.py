@@ -38,6 +38,10 @@ class ExportService:
         self._pdf = get_pdf_generator()
         self._docx = get_docx_generator()
         self._logs: list[ExportLog] = []
+        self._inline_source: dict[str, dict] = {}
+
+    def set_inline_source(self, job_id: str, data: dict) -> None:
+        self._inline_source[job_id] = data
 
     def _log_action(self, export_id: str, action: str, user_id: str, organization_id: str, **kwargs):
         log = ExportLog(
@@ -94,6 +98,8 @@ class ExportService:
             export_type=request.export_type.value,
             format=request.format.value,
             source_id=request.source_id,
+            job_id=job.job_id,
+            status=job.status.value,
         )
 
         return job
@@ -106,7 +112,9 @@ class ExportService:
 
         self._engine.update_job_status(job_id, ExportStatus.PROCESSING)
 
-        source_data = self._get_source_data(job.source_type, job.source_id)
+        source_data = self._inline_source.pop(job_id, None) or self._get_source_data(
+            job.source_type, job.source_id
+        )
         if not source_data:
             self._engine.update_job_status(
                 job_id,
@@ -167,6 +175,9 @@ class ExportService:
             job.requested_by,
             job.organization_id,
             file_size_bytes=file_size,
+            format=job.format.value,
+            job_id=job.job_id,
+            status=job.status.value,
         )
 
         logger.info(f'Export completed: {job.export_id} ({file_size} bytes)')

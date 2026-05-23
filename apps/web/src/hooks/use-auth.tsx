@@ -19,6 +19,7 @@ import {
   SESSION_MAX_AGE_MS,
   type AuthUser,
 } from '@/lib/auth-session';
+import { apiUrl as resolveApiUrl } from '@/lib/api-config';
 import {
   fetchMeFromApi,
   refreshAccessToken,
@@ -151,10 +152,9 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const token = getStoredSession()?.token;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     if (token) {
       try {
-        await fetch(`${apiUrl}/api/v1/auth/logout`, {
+        await fetch(resolveApiUrl('/api/v1/auth/logout'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -174,8 +174,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithCredentials = useCallback(
     async (email: string, password: string) => {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
+      const res = await fetch(resolveApiUrl('/api/v1/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -212,7 +211,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const onboardingRes = await fetch(`${apiUrl}/api/v1/onboarding/status`, {
+        const onboardingRes = await fetch(resolveApiUrl('/api/v1/onboarding/status'), {
           headers: {
             'Content-Type': 'application/json',
             ...buildApiAuthHeaders(tokens.access_token, authUser),

@@ -25,6 +25,11 @@ def test_tenant_scoped_paths():
 
 def test_onboarding_exempt():
     assert is_tenant_exempt_path('/api/v1/onboarding/step')
+
+
+def test_observability_health_exempt():
+    assert is_tenant_exempt_path('/api/v1/observability/health')
+    assert is_tenant_exempt_path('/api/v1/observability/health/live')
     assert is_tenant_exempt_path('/api/v1/admin/platform/users')
 
 

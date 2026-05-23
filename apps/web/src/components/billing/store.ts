@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api-client';
-import { mapQuotaFromUsageApi, mapSubscriptionFromApi } from '@/lib/billing-api';
+import {
+  mapQuotaFromUsageApi,
+  mapSubscriptionFromApi,
+  parsePaymentMethodsResponse,
+} from '@/lib/billing-api';
 import {
   Plan,
   Subscription,
@@ -103,8 +107,8 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     set({ isProcessing: true, error: null });
     try {
       await api.patch(`/api/v1/billing/payment-methods/${methodId}`, { is_default: isDefault });
-      const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
-      set({ paymentMethods: res.payment_methods, isProcessing: false });
+      const res = await api.get<unknown>('/api/v1/billing/payment-methods');
+      set({ paymentMethods: parsePaymentMethodsResponse(res), isProcessing: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Update failed', isProcessing: false });
     }
@@ -114,8 +118,8 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     set({ isProcessing: true, error: null });
     try {
       await api.post('/api/v1/billing/payment-methods', method);
-      const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
-      set({ paymentMethods: res.payment_methods, isProcessing: false });
+      const res = await api.get<unknown>('/api/v1/billing/payment-methods');
+      set({ paymentMethods: parsePaymentMethodsResponse(res), isProcessing: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Add failed', isProcessing: false });
     }
@@ -125,8 +129,8 @@ export const useBillingStore = create<BillingState>((set, get) => ({
     set({ isProcessing: true, error: null });
     try {
       await api.delete(`/api/v1/billing/payment-methods/${methodId}`);
-      const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
-      set({ paymentMethods: res.payment_methods, isProcessing: false });
+      const res = await api.get<unknown>('/api/v1/billing/payment-methods');
+      set({ paymentMethods: parsePaymentMethodsResponse(res), isProcessing: false });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Remove failed', isProcessing: false });
     }

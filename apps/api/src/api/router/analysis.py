@@ -17,6 +17,7 @@ from ..dependencies.rbac_deps import (
     RequireAnalyticsView,
     require_tenant_member,
 )
+from ..schemas.base import create_paginated_response, create_response
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,12 @@ async def list_analysis(
             .limit(limit)
         )
         rows = (await db.execute(q)).scalars().all()
-        return {'success': True, 'data': [_result_to_dict(r) for r in rows], 'total': total, 'page': page, 'limit': limit}
+        return create_paginated_response(
+            [_result_to_dict(r) for r in rows],
+            page=page,
+            limit=limit,
+            total=total,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -101,7 +107,12 @@ async def get_analysis_by_tender(
             .limit(limit)
         )
         rows = (await db.execute(q)).scalars().all()
-        return {'success': True, 'data': [_result_to_dict(r) for r in rows], 'total': total, 'page': page, 'limit': limit}
+        return create_paginated_response(
+            [_result_to_dict(r) for r in rows],
+            page=page,
+            limit=limit,
+            total=total,
+        )
     except Exception as e:
         logger.exception('Failed to get analysis by tender')
         raise HTTPException(status_code=500, detail=str(e))
@@ -126,7 +137,7 @@ async def get_tender_dashboard_analysis(
             .limit(1)
         )
         row = (await db.execute(q)).scalar_one_or_none()
-        return {'success': True, 'data': analysis_row_to_dashboard(tender_id, row)}
+        return create_response(analysis_row_to_dashboard(tender_id, row))
     except Exception as e:
         logger.exception('Failed to get tender dashboard analysis')
         raise HTTPException(status_code=500, detail=str(e))
@@ -172,7 +183,7 @@ async def patch_tender_dashboard_analysis(
         row.result = dashboard
         await db.commit()
         await db.refresh(row)
-        return {'success': True, 'data': dashboard}
+        return create_response(dashboard)
     except Exception as e:
         await db.rollback()
         logger.exception('Failed to patch tender analysis')
@@ -204,7 +215,7 @@ async def create_analysis(
         db.add(obj)
         await db.commit()
         await db.refresh(obj)
-        return {'success': True, 'data': _result_to_dict(obj)}
+        return create_response(_result_to_dict(obj))
     except Exception as e:
         await db.rollback()
         logger.exception('Failed to create analysis result')
@@ -226,7 +237,7 @@ async def get_analysis(
         row = (await db.execute(q)).scalar_one_or_none()
         if not row:
             raise HTTPException(status_code=404, detail='Analysis result not found')
-        return {'success': True, 'data': _result_to_dict(row)}
+        return create_response(_result_to_dict(row))
     except HTTPException:
         raise
     except Exception as e:

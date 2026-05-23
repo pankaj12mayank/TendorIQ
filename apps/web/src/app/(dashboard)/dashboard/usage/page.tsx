@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useUsageStore } from '@/components/usage/store';
 import { useUsageApi, useQuotaEnforcement } from '@/components/usage/hooks/use-usage';
+import { useObservability } from '@/hooks/use-observability';
 import { 
   AlertPanel, 
   UsageWidget, 
@@ -33,16 +34,18 @@ import { cn } from '@/lib/utils';
 export default function UsagePage() {
   const store = useUsageStore();
   const { quotas, alerts, usageSummary, isLoading, fetchQuotas, fetchAlerts, fetchUsageSummary, subscribeToRealtime, getUsageByCategory } = useUsageApi();
+  const { summary: opsSummary, fetchSummary: fetchOpsSummary } = useObservability();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState<string | null>(null);
 
   useEffect(() => {
     fetchQuotas();
     fetchAlerts();
     fetchUsageSummary();
+    void fetchOpsSummary().catch(() => {});
 
     const unsubscribe = subscribeToRealtime();
     return () => unsubscribe();
-  }, []);
+  }, [fetchQuotas, fetchAlerts, fetchUsageSummary, fetchOpsSummary, subscribeToRealtime]);
 
   const categories = getUsageByCategory();
   const activeAlerts = alerts.filter(a => !a.isDismissed);
@@ -67,6 +70,8 @@ export default function UsagePage() {
           <Button variant="outline" onClick={() => {
             fetchQuotas();
             fetchAlerts();
+            fetchUsageSummary();
+            void fetchOpsSummary();
           }}>
             <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
             Refresh
@@ -120,6 +125,14 @@ export default function UsagePage() {
                 <p className="text-sm text-muted-foreground">Total Used</p>
               </div>
             </div>
+            {opsSummary && (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Operations: {opsSummary.queue.active_jobs} active jobs ·{' '}
+                {opsSummary.queue.failure_rate}% queue failures ·{' '}
+                {opsSummary.ai.total_tokens.toLocaleString()} AI tokens ·{' '}
+                {opsSummary.processing.documents_processed} docs processed (24h)
+              </p>
+            )}
           </CardContent>
         </Card>
 

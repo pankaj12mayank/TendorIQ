@@ -22,7 +22,12 @@ Track fixes by audit layer. **Issue count = fixed count** per layer when marked 
 | L13 | Billing & usage quotas | 7 | 7 | **Completed 100%** |
 | L14 | Email triggers & notifications | 7 | 7 | **Completed 100%** |
 | L15 | Onboarding hardening | 7 | 7 | **Completed 100%** |
-| L16–L35 | See AUDIT_REPORT.md | — | — | Not started |
+| L16 | Export E2E | 7 | 7 | **Completed 100%** |
+| L17 | Observability | 7 | 7 | **Completed 100%** |
+| L18 | Enterprise SSO | 7 | 7 | **Completed 100%** |
+| L19 | API response consistency | 7 | 7 | **Completed 100%** |
+| L20 | Frontend data fetching | 7 | 7 | **Completed 100%** |
+| L21–L35 | See AUDIT_REPORT.md | — | — | Not started |
 
 ## Layer 1 — Completed items
 
@@ -230,3 +235,73 @@ See [ROLES.md](./ROLES.md).
 | L15-7 | Step 4 loads plans from `GET /onboarding/plans` instead of hardcoded FE list |
 
 **Layer 15 completed: 7/7 issues fixed (100%).**
+
+## Layer 16 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L16-1 | `export.py` imports `get_current_user`; download route registered after static paths |
+| L16-2 | FE `risk_analysis` maps to `/export/risk-analysis/*` + compat `/export/risk_analysis/*` |
+| L16-3 | `POST /export/report/{tender_id}` builds analysis payload from DB for PDF/DOCX/JSON/CSV |
+| L16-4 | Export jobs return `{ success, data }`; `export-api.ts` parses envelopes |
+| L16-5 | Analysis export uses `exportTenderReport` + download (no client-side mock delay) |
+| L16-6 | Exports require tenant context (`_tenant_org_id`, no `default` org fallback) |
+| L16-7 | Audit log export limited to `csv`/`json`; history rows map to `ExportJob` shape |
+
+**Layer 16 completed: 7/7 issues fixed (100%).**
+
+## Layer 17 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L17-1 | Removed hardcoded `MOCK_START_TIME`; real uptime via `set_app_start_time()` in lifespan |
+| L17-2 | Tenant metrics require membership; `_tenant_uuid` guard (no cross-tenant null queries) |
+| L17-3 | `build_tenant_metrics_summary` computes queue failure + processing success from DB |
+| L17-4 | `observability_metrics.py` centralizes summary, failure rate, detailed health |
+| L17-5 | `use-observability.ts` + `observability-api.ts`; usage page shows ops summary strip |
+| L17-6 | Health dedup: `/observability/health` documents canonical `GET /health`; detailed health uses DB probe |
+| L17-7 | `use-analytics` export csv/json only; exposes `isError`; realtime metrics null-safe |
+
+**Layer 17 completed: 7/7 issues fixed (100%).**
+
+## Layer 18 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L18-1 | SSO config persisted on `tenants.settings['sso']` via `tenant_store.py` (removed in-memory `SSOService._configs`) |
+| L18-2 | Configure/disable use `RequireOrgUpdate`; read config uses `RequireSettingsRead` (no legacy admin string checks) |
+| L18-3 | `POST /api/v1/sso/session` exchanges IdP token → JWT via `exchange_sso_session` (mirrors Clerk session flow) |
+| L18-4 | Public `GET /sso/public/config` and `/sso/public/login-url`; paths exempt in `tenant_paths.py` |
+| L18-5 | `sso-api.ts` + `use-sso.ts`; sign-in supports `?org=<slug>`; profile shows SSO status |
+| L18-6 | `SSOHandler` dev email tokens + `GROUP_TO_MEMBERSHIP` → membership role and permissions |
+| L18-7 | Routes gated by `FEATURE_SSO`; tests `test_layer18_sso.py` + `sso-api.test.ts` |
+
+**Layer 18 completed: 7/7 issues fixed (100%).**
+
+## Layer 19 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L19-1 | Paginated notifications/analysis use `create_paginated_response` with `meta` (not root `total`/`page`) |
+| L19-2 | Billing subscription, quota, usage summary wrapped in `create_response`; plans keep `plans` alias |
+| L19-3 | `HTTPException` handler returns `{ success: false, error: { code, message, details } }` |
+| L19-4 | `parseApiErrorMessage` / `parseApiErrorCode` handle nested `error` and FastAPI `detail` arrays |
+| L19-5 | `parsePaginated` lifts legacy root pagination fields for backward compatibility |
+| L19-6 | `billing-api.ts` parsers + `use-billing` use envelope-aware unwrap |
+| L19-7 | Tests `test_layer19_api_consistency.py` + extended `api-envelope.test.ts` |
+
+**Layer 19 completed: 7/7 issues fixed (100%).**
+
+## Layer 20 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L20-1 | `api-config.ts` + `api-fetch.ts` centralize base URL, auth headers, and timeouts |
+| L20-2 | Analysis store removed relative `fetch('/api/v1/...')`; uses `analysis-api.ts` + `api` client |
+| L20-3 | `use-analysis` and store share `fetchTenderAnalysis` / `patchTenderAnalysisField` |
+| L20-4 | File upload + export download use `authenticatedFetch` with `UPLOAD_API_TIMEOUT_MS` |
+| L20-5 | Auth/SSO/onboarding raw fetches use `apiUrl()` / `resolveApiUrl()` (no duplicated localhost) |
+| L20-6 | `use-api` exposes `getQueryErrorMessage`, `errorMessage`, and `retry: 1` on tender queries |
+| L20-7 | Tests `test_layer20_fe_fetching.py` + `api-fetch.test.ts` |
+
+**Layer 20 completed: 7/7 issues fixed (100%).**

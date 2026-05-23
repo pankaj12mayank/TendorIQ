@@ -1,4 +1,11 @@
-import type { Plan, Subscription, QuotaStatus, UsageSummary } from '@/components/billing/types';
+import type {
+  Plan,
+  Subscription,
+  QuotaStatus,
+  UsageSummary,
+  Invoice,
+  PaymentMethod,
+} from '@/components/billing/types';
 import type { QuotaStatus as UsageQuotaStatus, UsageSummary as TenantUsageSummary } from '@/components/usage/types';
 import { unwrapData } from '@/lib/api-envelope';
 
@@ -7,21 +14,42 @@ export function mapPlansFromApi(raw: Plan[]): Plan[] {
   return raw;
 }
 
-export function mapSubscriptionFromApi(raw: Subscription): Subscription {
-  return unwrapData(raw) as Subscription;
+export function parsePlansResponse(payload: unknown): Plan[] {
+  if (Array.isArray(payload)) return mapPlansFromApi(payload);
+  const unwrapped = unwrapData<Plan[] | { plans?: Plan[] }>(payload as { data?: unknown });
+  if (Array.isArray(unwrapped)) return mapPlansFromApi(unwrapped);
+  const body = payload as { plans?: Plan[] };
+  return mapPlansFromApi(body.plans ?? (unwrapped as { plans?: Plan[] })?.plans ?? []);
 }
 
-export function mapQuotaFromUsageApi(res: {
-  quota?: QuotaStatus[];
-  quotas?: QuotaStatus[];
-}): QuotaStatus[] {
-  return res.quotas ?? res.quota ?? [];
+export function mapSubscriptionFromApi(raw: unknown): Subscription {
+  return unwrapData(raw as Subscription) as Subscription;
 }
 
-export function mapUsageQuotas(res: { quotas: UsageQuotaStatus[] }): UsageQuotaStatus[] {
-  return res.quotas ?? [];
+export function mapQuotaFromUsageApi(res: unknown): QuotaStatus[] {
+  const body = (unwrapData(res) ?? res) as { quota?: QuotaStatus[]; quotas?: QuotaStatus[] };
+  return body.quotas ?? body.quota ?? [];
 }
 
-export function mapUsageSummary(res: TenantUsageSummary): TenantUsageSummary {
-  return unwrapData(res) as TenantUsageSummary;
+export function mapUsageQuotas(res: unknown): UsageQuotaStatus[] {
+  const body = (unwrapData(res) ?? res) as { quota?: UsageQuotaStatus[]; quotas?: UsageQuotaStatus[] };
+  return body.quotas ?? body.quota ?? [];
+}
+
+export function mapUsageSummary(res: unknown): TenantUsageSummary {
+  return unwrapData(res as TenantUsageSummary) as TenantUsageSummary;
+}
+
+export function parseInvoicesResponse(payload: unknown): Invoice[] {
+  const body = payload as { invoices?: Invoice[]; data?: Invoice[] };
+  if (Array.isArray(body.invoices)) return body.invoices;
+  const unwrapped = unwrapData<Invoice[]>(payload as { data?: Invoice[] });
+  return Array.isArray(unwrapped) ? unwrapped : [];
+}
+
+export function parsePaymentMethodsResponse(payload: unknown): PaymentMethod[] {
+  const body = payload as { payment_methods?: PaymentMethod[]; data?: PaymentMethod[] };
+  if (Array.isArray(body.payment_methods)) return body.payment_methods;
+  const unwrapped = unwrapData<PaymentMethod[]>(payload as { data?: PaymentMethod[] });
+  return Array.isArray(unwrapped) ? unwrapped : [];
 }

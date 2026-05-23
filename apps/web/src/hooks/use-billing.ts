@@ -2,9 +2,11 @@ import { useCallback, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { useBillingStore } from '@/components/billing/store';
 import {
-  mapPlansFromApi,
+  parsePlansResponse,
   mapQuotaFromUsageApi,
   mapSubscriptionFromApi,
+  parseInvoicesResponse,
+  parsePaymentMethodsResponse,
 } from '@/lib/billing-api';
 import {
   Plan,
@@ -58,8 +60,8 @@ export function useBillingApi(): UseBillingApiReturn {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<{ plans: Plan[] }>('/api/v1/billing/plans');
-      const plans = mapPlansFromApi(res.plans);
+      const res = await api.get<unknown>('/api/v1/billing/plans');
+      const plans = parsePlansResponse(res);
       store.setPlans(plans);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch plans');
@@ -88,9 +90,10 @@ export function useBillingApi(): UseBillingApiReturn {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<{ invoices: Invoice[] }>('/api/v1/billing/invoices');
-      store.setInvoices(res.invoices);
-      return res.invoices;
+      const res = await api.get<unknown>('/api/v1/billing/invoices');
+      const invoices = parseInvoicesResponse(res);
+      store.setInvoices(invoices);
+      return invoices;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch invoices');
       throw err;
@@ -206,8 +209,8 @@ export function useBillingApi(): UseBillingApiReturn {
       setProcessing(true);
       try {
         await api.patch(`/api/v1/billing/payment-methods/${methodId}`, { is_default: isDefault });
-        const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
-        store.setPaymentMethods(res.payment_methods);
+        const res = await api.get<unknown>('/api/v1/billing/payment-methods');
+        store.setPaymentMethods(parsePaymentMethodsResponse(res));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to update payment method');
       } finally {
@@ -222,8 +225,8 @@ export function useBillingApi(): UseBillingApiReturn {
       setProcessing(true);
       try {
         const res = await api.post<PaymentMethod>('/api/v1/billing/payment-methods', { token });
-        const pmRes = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
-        store.setPaymentMethods(pmRes.payment_methods);
+        const pmRes = await api.get<unknown>('/api/v1/billing/payment-methods');
+        store.setPaymentMethods(parsePaymentMethodsResponse(pmRes));
         return res;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to add payment method');
@@ -240,8 +243,8 @@ export function useBillingApi(): UseBillingApiReturn {
       setProcessing(true);
       try {
         await api.delete(`/api/v1/billing/payment-methods/${methodId}`);
-        const res = await api.get<{ payment_methods: PaymentMethod[] }>('/api/v1/billing/payment-methods');
-        store.setPaymentMethods(res.payment_methods);
+        const res = await api.get<unknown>('/api/v1/billing/payment-methods');
+        store.setPaymentMethods(parsePaymentMethodsResponse(res));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to remove payment method');
       } finally {

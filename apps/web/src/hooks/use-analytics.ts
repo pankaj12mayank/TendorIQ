@@ -12,10 +12,12 @@ interface UseAnalyticsApiReturn {
   metrics: UsageMetric[];
   cards: AnalyticsCard[];
   isLoading: boolean;
+  isError: boolean;
+  error: string | null;
   timeRange: string;
   setTimeRange: (range: string) => void;
   fetchMetrics: () => Promise<void>;
-  exportReport: (format: 'csv' | 'json' | 'pdf') => Promise<void>;
+  exportReport: (format: 'csv' | 'json') => Promise<void>;
   getMetricByDate: (date: string) => UsageMetric | undefined;
   getTotal: (field: keyof UsageMetric) => number;
 }
@@ -73,15 +75,31 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
   }, [fetchMetrics]);
 
   const exportReport = useCallback(
-    async (format: 'csv' | 'json' | 'pdf') => {
+    async (format: 'csv' | 'json') => {
       setLoading(true);
       try {
-        const data = JSON.stringify({ metrics: allMetrics, cards, summary: storeMetrics }, null, 2);
-        const blob = new Blob([data], { type: 'application/json' });
+        const payload = { metrics: allMetrics, cards, summary: storeMetrics };
+        let body: string;
+        let mime: string;
+        if (format === 'csv') {
+          const header = 'date,apiCalls,documentsProcessed,tokensUsed,cost\n';
+          const rows = allMetrics
+            .map(
+              (m) =>
+                `${m.date},${m.apiCalls ?? 0},${m.documentsProcessed ?? 0},${m.tokensUsed ?? 0},${m.cost ?? 0}`
+            )
+            .join('\n');
+          body = header + rows;
+          mime = 'text/csv';
+        } else {
+          body = JSON.stringify(payload, null, 2);
+          mime = 'application/json';
+        }
+        const blob = new Blob([body], { type: mime });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `analytics-report.${format === 'pdf' ? 'json' : format}`;
+        a.download = `analytics-report.${format}`;
         a.click();
         URL.revokeObjectURL(url);
       } finally {
@@ -109,6 +127,8 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
     metrics: allMetrics,
     cards,
     isLoading,
+    isError,
+    error,
     timeRange,
     setTimeRange,
     fetchMetrics,
@@ -138,13 +158,13 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
     intervalRef.current = window.setInterval(async () => {
       try {
         const res = await api.get<{
-          activeJobs: number;
-          errorRate: number;
-          avgResponseTime: number;
+          activeJobs?: number;
+          errorRate?: number;
+          avgResponseTime?: number;
         }>('/api/v1/admin/platform/analytics/summary');
-        setActiveJobs(res.activeJobs);
-        setErrorRate(res.errorRate);
-        setAvgResponseTime(res.avgResponseTime);
+        setActiveJobs(res.activeJobs ?? 0);
+        setErrorRate(res.errorRate ?? 0);
+        setAvgResponseTime(res.avgResponseTime ?? 0);
       } catch {}
     }, 30000);
   }, []);

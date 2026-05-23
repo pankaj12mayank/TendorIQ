@@ -38,10 +38,13 @@ export function unwrapData<T>(payload: ApiEnvelope<T> | T): T {
   return payload as T;
 }
 
-export function parsePaginationMeta(meta?: Record<string, unknown>): PaginationMeta {
-  const page = Number(meta?.page ?? 1);
-  const limit = Number(meta?.limit ?? 20);
-  const total = Number(meta?.total ?? 0);
+export function parsePaginationMeta(
+  meta?: Record<string, unknown>,
+  legacy?: { page?: unknown; limit?: unknown; total?: unknown }
+): PaginationMeta {
+  const page = Number(meta?.page ?? legacy?.page ?? 1);
+  const limit = Number(meta?.limit ?? legacy?.limit ?? 20);
+  const total = Number(meta?.total ?? legacy?.total ?? 0);
   const totalPages = Number(meta?.totalPages ?? meta?.total_pages ?? 0);
   return {
     page,
@@ -49,6 +52,41 @@ export function parsePaginationMeta(meta?: Record<string, unknown>): PaginationM
     total,
     totalPages: totalPages || (limit > 0 ? Math.ceil(total / limit) : 0),
   };
+}
+
+/** Extract a human-readable message from API or FastAPI error JSON. */
+export function parseApiErrorMessage(errorData: Record<string, unknown>): string {
+  const nested = errorData.error;
+  if (nested && typeof nested === 'object' && nested !== null && 'message' in nested) {
+    return String((nested as { message: unknown }).message);
+  }
+  const detail = errorData.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === 'object' && 'msg' in item) {
+          const loc = Array.isArray((item as { loc?: unknown }).loc)
+            ? (item as { loc: unknown[] }).loc.join('.')
+            : '';
+          return loc ? `${loc}: ${(item as { msg: unknown }).msg}` : String((item as { msg: unknown }).msg);
+        }
+        return String(item);
+      })
+      .join('; ');
+  }
+  if (typeof errorData.message === 'string') return errorData.message;
+  if (typeof errorData.error === 'string') return errorData.error;
+  return 'An error occurred';
+}
+
+export function parseApiErrorCode(errorData: Record<string, unknown>): string | undefined {
+  const nested = errorData.error;
+  if (nested && typeof nested === 'object' && nested !== null && 'code' in nested) {
+    return String((nested as { code: unknown }).code);
+  }
+  if (typeof errorData.code === 'string') return errorData.code;
+  return undefined;
 }
 
 export function parsePaginated<T>(
@@ -60,10 +98,18 @@ export function parsePaginated<T>(
       return direct;
     }
   }
-  const envelope = payload as ApiEnvelope<T[]>;
+  const envelope = payload as ApiEnvelope<T[]> & {
+    page?: number;
+    limit?: number;
+    total?: number;
+  };
   return {
     data: (unwrapData(envelope) ?? []) as T[],
-    meta: parsePaginationMeta(envelope.meta),
+    meta: parsePaginationMeta(envelope.meta, {
+      page: envelope.page,
+      limit: envelope.limit,
+      total: envelope.total,
+    }),
   };
 }
 

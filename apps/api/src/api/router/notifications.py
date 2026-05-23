@@ -13,6 +13,7 @@ from ...core.models import Notification
 from ...core.database import get_db
 from ..dependencies.auth import get_current_user
 from ...core.auth import AuthContext
+from ..schemas.base import create_paginated_response, create_response
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,12 @@ async def list_notifications(
             .limit(limit)
         )
         rows = (await db.execute(q)).scalars().all()
-        return {'success': True, 'data': [_notif_to_dict(r) for r in rows], 'total': total, 'page': page, 'limit': limit}
+        return create_paginated_response(
+            [_notif_to_dict(r) for r in rows],
+            page=page,
+            limit=limit,
+            total=total,
+        )
     except Exception as e:
         logger.exception('Failed to list notifications')
         raise HTTPException(status_code=500, detail=str(e))
@@ -92,7 +98,7 @@ async def mark_as_read(
         row.read_at = datetime.utcnow()
         await db.commit()
         await db.refresh(row)
-        return {'success': True, 'data': _notif_to_dict(row)}
+        return create_response(_notif_to_dict(row))
     except HTTPException:
         raise
     except Exception as e:

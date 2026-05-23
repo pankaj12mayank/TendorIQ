@@ -24,7 +24,7 @@ interface AnalysisState {
   cancelEdit: () => void;
   updateSection: (section: AnalysisSection, data: unknown) => void;
   exportAnalysis: (options: ExportOptions) => Promise<void>;
-  refreshAnalysis: () => Promise<void>;
+  refreshAnalysis: (tenderId: string) => Promise<void>;
 }
 
 export const useAnalysisStore = create<AnalysisState>((set, get) => ({
@@ -90,56 +90,33 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
   exportAnalysis: async (options) => {
     const { analysis } = get();
-    if (!analysis) return;
+    if (!analysis?.tenderId) return;
 
-    set({ isLoading: true });
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const sectionsToExport = Object.fromEntries(
-      Object.entries(analysis).filter(([key]) => 
-        options.includeSections.includes(key as AnalysisSection)
-      )
-    );
-
-    const exportData = options.includeMetadata ? {
-      metadata: {
-        tenderId: analysis.tenderId,
-        exportedAt: new Date().toISOString(),
-        format: options.format
-      },
-      ...sectionsToExport
-    } : sectionsToExport;
-
-    const blob = new Blob(
-      [options.format === 'json' ? JSON.stringify(exportData, null, 2) : JSON.stringify(exportData)],
-      { type: 'application/json' }
-    );
-    
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tender-analysis-${analysis.tenderId}.${options.format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    set({ isLoading: false });
-  },
-
-  refreshAnalysis: async () => {
     set({ isLoading: true });
     try {
-      const res = await fetch('/api/v1/analysis/current');
-      if (res.ok) {
-        const data = await res.json();
-        set({ analysis: data, isLoading: false });
-      } else {
-        set({ isLoading: false });
-      }
+      const { exportTenderReport, downloadExport, getExportFilename, triggerDownload } = await import(
+        '@/lib/export'
+      );
+      const format = options.format === 'docx' ? 'docx' : options.format;
+      const job = await exportTenderReport(analysis.tenderId, format);
+      const blob = await downloadExport(job.export_id);
+      triggerDownload(blob, getExportFilename(job, job.format));
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  refreshAnalysis: async (tenderId: string) => {
+    if (!tenderId) return;
+    set({ isLoading: true });
+    try {
+      const { fetchTenderAnalysis } = await import('@/lib/analysis-api');
+      const data = await fetchTenderAnalysis(tenderId);
+      set({ analysis: data as TenderAnalysis, isLoading: false });
     } catch {
       set({ isLoading: false });
     }
-  }
+  },
 }));
 
 export const formatConfidence = (confidence: ConfidenceScore): string => {

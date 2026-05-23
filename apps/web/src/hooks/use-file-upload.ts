@@ -1,5 +1,8 @@
 import { useState, useCallback } from 'react';
-import { api } from '@/lib/api-client';
+
+import { UPLOAD_API_TIMEOUT_MS } from '@/lib/api-config';
+import { authenticatedFetch } from '@/lib/api-fetch';
+import { parseApiErrorMessage } from '@/lib/api-envelope';
 
 export interface UploadFile {
   name: string;
@@ -80,21 +83,18 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         return { success: false, error: validationError };
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const authHeaders = api.getAuthHeaders() as Record<string, string>;
-
       const params = new URLSearchParams({ category });
       if (tenderId) params.set('tender_id', tenderId);
 
       const formData = new FormData();
       formData.append('file', file);
 
-      const directResponse = await fetch(
-        `${apiUrl}/api/v1/files/upload/direct?${params.toString()}`,
+      const directResponse = await authenticatedFetch(
+        `/api/v1/files/upload/direct?${params.toString()}`,
         {
           method: 'POST',
-          headers: authHeaders,
           body: formData,
+          timeout: UPLOAD_API_TIMEOUT_MS,
         }
       );
 
@@ -111,9 +111,9 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         return result;
       }
 
-      const initResponse = await fetch(`${apiUrl}/api/v1/files/upload/initiate`, {
+      const initResponse = await authenticatedFetch('/api/v1/files/upload/initiate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           file_name: file.name,
           file_size: file.size,
@@ -121,11 +121,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
           tender_id: tenderId,
           category,
         }),
+        timeout: UPLOAD_API_TIMEOUT_MS,
       });
 
       if (!initResponse.ok) {
-        const err = await initResponse.json().catch(() => ({}));
-        throw new Error((err as { detail?: string }).detail || 'Failed to initiate upload');
+        const err = (await initResponse.json().catch(() => ({}))) as Record<string, unknown>;
+        throw new Error(parseApiErrorMessage(err) || 'Failed to initiate upload');
       }
 
       const initData = await initResponse.json();
@@ -144,9 +145,9 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
       setProgress({ loaded: file.size, total: file.size, percent: 100 });
 
-      const completeResponse = await fetch(
-        `${apiUrl}/api/v1/files/upload/complete/${initData.document_id}`,
-        { method: 'POST', headers: authHeaders }
+      const completeResponse = await authenticatedFetch(
+        `/api/v1/files/upload/complete/${initData.document_id}`,
+        { method: 'POST', timeout: UPLOAD_API_TIMEOUT_MS }
       );
 
       if (!completeResponse.ok) {

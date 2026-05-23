@@ -54,6 +54,24 @@ def create_response(data: Any, meta: Optional[PaginationMeta] = None) -> dict[st
     return response
 
 
+def create_paginated_response(
+    data: list[Any],
+    *,
+    page: int,
+    limit: int,
+    total: int,
+) -> dict[str, Any]:
+    """Canonical paginated list: ``{ success, data, meta }``."""
+    total_pages = (total + limit - 1) // limit if limit > 0 else 0
+    meta = PaginationMeta(
+        page=page,
+        limit=limit,
+        total=total,
+        total_pages=total_pages,
+    )
+    return create_response(data, meta)
+
+
 def create_error_response(code: str, message: str, details: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     return {
         'success': False,

@@ -222,9 +222,69 @@
 | L15-6 | Step 4 duplicated plan catalog vs API | `fetchPlans()` drives Step 4 UI |
 | L15-7 | `syncFromServer` omitted `tenantName` | Store sync includes org name from step 1 data |
 
-## Layers 16–35
+## Layer 16 — Export E2E — 7 issues (completed)
 
-Export, observability, SSO, API consistency, FE fetching, routes, UX, admin modules, shared package, DB, security, tests, tooling, email system, audit logs, storage, type drift — see [docs/AUDIT_STATUS.md](docs/AUDIT_STATUS.md).
+| ID | Issue | Fix |
+|----|-------|-----|
+| L16-1 | `get_current_user` missing in export router | Import + auth on download |
+| L16-2 | `/{export_id}/download` shadowed `/history`, `/formats` | Download route moved to end of router |
+| L16-3 | FE `/export/risk_analysis/` vs API `risk-analysis` | Path map + compat route |
+| L16-4 | Entity export responses not parsed on FE | `export-api.ts` `parseExportJob` |
+| L16-5 | Analysis export was mock `setTimeout` + JSON blob | `exportTenderReport` + server-side generators |
+| L16-6 | `organization_id='default'` without tenant | `_tenant_org_id` guard |
+| L16-7 | Export history / audit export shape drift | `mapHistoryRow`; audit export csv/json only |
+
+## Layer 17 — Observability — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L17-1 | Uptime used fixed `MOCK_START_TIME` | `observability_metrics.set_app_start_time()` on API boot |
+| L17-2 | Metrics with `tenant_id=None` returned empty/wrong data | `require_tenant_member` + `_tenant_uuid` on metrics routes |
+| L17-3 | Summary always showed 0% failure/processing | DB-backed `build_tenant_metrics_summary` |
+| L17-4 | Observability logic scattered / untested | `core/observability_metrics.py` module |
+| L17-5 | No tenant FE hook for `/observability/*` | `use-observability` on usage dashboard |
+| L17-6 | Duplicate opaque health endpoints | Canonical `/health` noted; detailed health probes DB |
+| L17-7 | Admin analytics export claimed PDF but saved JSON | csv/json export; error state on `use-analytics` |
+
+## Layer 18 — Enterprise SSO — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L18-1 | SSO config stored in-memory on `SSOService` | `tenant_store.py` persists on `tenants.settings['sso']` |
+| L18-2 | Configure routes used legacy `admin`/`super_admin` string checks | `RequireOrgUpdate` / `RequireSettingsRead` RBAC deps |
+| L18-3 | No org-scoped public session exchange for IdP tokens | `POST /sso/session` + `bootstrap.exchange_sso_session` |
+| L18-4 | Public SSO routes blocked by tenant middleware | Exempt `/sso/session` and `/sso/public/` in `tenant_paths.py` |
+| L18-5 | No FE SSO client or sign-in org slug flow | `sso-api.ts`, `use-sso.ts`, `/sign-in?org=` + profile status card |
+| L18-6 | SSO groups not mapped to membership permissions | `GROUP_TO_MEMBERSHIP` + `permissions_for_role` in `SSOHandler` |
+| L18-7 | Enterprise SSO untested / always on | `FEATURE_SSO` gate; `test_layer18_sso.py` + `sso-api.test.ts` |
+
+## Layer 19 — API response consistency — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L19-1 | Paginated lists put `total`/`page` at JSON root | `create_paginated_response` on notifications + analysis |
+| L19-2 | Billing reads returned bare objects | `create_response` on subscription/quota/summary; dual `plans` key |
+| L19-3 | `HTTPException` returned FastAPI `{detail}` only | Global handler → `create_error_response` envelope |
+| L19-4 | FE `api-client` ignored nested validation errors | `parseApiErrorMessage` / `parseApiErrorCode` in `api-envelope.ts` |
+| L19-5 | Hooks could not parse legacy pagination | `parsePaginated` reads root `page`/`limit`/`total` fallback |
+| L19-6 | Billing hooks assumed non-envelope shapes | `parsePlansResponse`, invoice/payment parsers + unwrap |
+| L19-7 | Envelope helpers untested | `test_layer19_api_consistency.py` + `api-envelope.test.ts` |
+
+## Layer 20 — Frontend data fetching — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L20-1 | Mix of `api` client vs raw `fetch` without base URL/auth | `api-config.ts` + `authenticatedFetch` with session headers |
+| L20-2 | Analysis store used relative unauthenticated `fetch` | `analysis-api.ts`; store `refreshAnalysis(tenderId)` via client |
+| L20-3 | Duplicate analysis fetch logic in hook vs store | Shared `fetchTenderAnalysis` / `patchTenderAnalysisField` |
+| L20-4 | Export download / uploads duplicated API URL + auth | `authenticatedFetch`; 120s upload timeout constant |
+| L20-5 | Auth/Clerk/onboarding scattered `NEXT_PUBLIC_API_URL` | `apiUrl()` / `resolveApiUrl()` across auth flows |
+| L20-6 | React Query errors easy to miss (`throwOnError: false`) | `getQueryErrorMessage`, `errorMessage` on tender hooks, `retry: 1` |
+| L20-7 | Fetch helpers untested | `test_layer20_fe_fetching.py` + `api-fetch.test.ts` |
+
+## Layers 21–35
+
+UI routes, UX, admin modules, shared package, DB, security, tests, tooling, email system, audit logs, storage, type drift — see [docs/AUDIT_STATUS.md](docs/AUDIT_STATUS.md).
 
 ---
 
@@ -240,4 +300,4 @@ JWT `tenant_id`, `X-Tenant-ID`, Clerk middleware conditional, tenders/analysis/b
 
 ---
 
-*Last updated: Layer 15 completed 7/7 (100%).*
+*Last updated: Layer 20 completed 7/7 (100%).*

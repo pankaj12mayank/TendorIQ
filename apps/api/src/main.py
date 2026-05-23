@@ -3,10 +3,12 @@
 import logging
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+
+from .api.schemas.base import create_error_response
 
 from .core.config import settings
 from .core.database import init_db, close_db
@@ -60,7 +62,10 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     logger.info(f'Starting TenderIQ API in {settings.NODE_ENV} mode')
 
+    from .core.observability_metrics import set_app_start_time
     from .core.observability.sentry import init_sentry
+
+    set_app_start_time()
     init_sentry()
 
     await init_db()
@@ -127,6 +132,31 @@ async def log_requests(request: Request, call_next):
     )
 
     return response
+
+
+def _http_exception_message(detail: object) -> str:
+    if isinstance(detail, str):
+        return detail
+    if isinstance(detail, list):
+        parts: list[str] = []
+        for item in detail:
+            if isinstance(item, dict):
+                loc = '.'.join(str(x) for x in item.get('loc', ()))
+                parts.append(f'{loc}: {item.get("msg", "")}'.strip(': '))
+            else:
+                parts.append(str(item))
+        return '; '.join(parts) or 'Request failed'
+    return str(detail)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    message = _http_exception_message(exc.detail)
+    details = None if isinstance(exc.detail, str) else {'detail': exc.detail}
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=create_error_response(f'HTTP_{exc.status_code}', message, details),
+    )
 
 
 @app.exception_handler(RequestValidationError)

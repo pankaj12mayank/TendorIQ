@@ -1,5 +1,5 @@
 import type { Notification } from '@/components/notifications/store';
-import { unwrapData } from './api-envelope';
+import { parsePaginated, unwrapData } from './api-envelope';
 
 const UI_TYPES = ['info', 'success', 'warning', 'error'] as const;
 
@@ -49,7 +49,8 @@ export function mapApiNotification(row: ApiNotificationRow): Notification {
 }
 
 export function parseNotificationsList(payload: unknown): Notification[] {
-  const rows = unwrapData<ApiNotificationRow[]>(payload as { data?: ApiNotificationRow[] });
+  const page = parsePaginated<ApiNotificationRow>(payload as { data?: ApiNotificationRow[] });
+  const rows = page.data.length ? page.data : unwrapData<ApiNotificationRow[]>(payload) ?? [];
   const list = Array.isArray(rows) ? rows : [];
   return list.map(mapApiNotification);
 }

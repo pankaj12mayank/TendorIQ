@@ -1,4 +1,10 @@
 import { api } from './api-client';
+import { authenticatedFetch } from './api-fetch';
+import {
+  entityExportPath,
+  parseExportHistory,
+  parseExportJob,
+} from './export-api';
 
 export type ExportFormat = 'pdf' | 'docx' | 'html' | 'markdown' | 'json' | 'csv';
 export type ExportType = 'proposal' | 'checklist' | 'risk_analysis' | 'tender_document' | 'report';
@@ -74,7 +80,8 @@ export const WATERMARK_PRESETS: WatermarkPreset[] = [
 ];
 
 export async function createExport(request: ExportRequest): Promise<ExportJob> {
-  return api.post('/api/v1/exports/export', request);
+  const res = await api.post<unknown>('/api/v1/exports/export', request);
+  return parseExportJob(res);
 }
 
 export async function exportEntity(
@@ -85,14 +92,20 @@ export async function exportEntity(
 ): Promise<ExportJob> {
   const params: Record<string, string | number | boolean> = { format };
   if (templateId) params.template_id = templateId;
-  return api.post(`/api/v1/exports/export/${entityType}/${entityId}`, undefined, { params });
+  const res = await api.post<unknown>(entityExportPath(entityType, entityId), undefined, { params });
+  return parseExportJob(res);
+}
+
+export async function exportTenderReport(
+  tenderId: string,
+  format: ExportFormat = 'pdf',
+  templateId?: string
+): Promise<ExportJob> {
+  return exportEntity('report', tenderId, format, templateId);
 }
 
 export async function downloadExport(exportId: string): Promise<Blob> {
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/exports/${exportId}/download`,
-    { headers: api.getAuthHeaders() as Record<string, string> }
-  );
+  const response = await authenticatedFetch(`/api/v1/exports/${exportId}/download`);
 
   if (!response.ok) {
     throw new Error('Download failed');
@@ -102,15 +115,16 @@ export async function downloadExport(exportId: string): Promise<Blob> {
 }
 
 export async function getJobStatus(jobId: string): Promise<ExportJob> {
-  return api.get(`/api/v1/exports/jobs/${jobId}`);
+  const res = await api.get<unknown>(`/api/v1/exports/jobs/${jobId}`);
+  return parseExportJob(res);
 }
 
 export async function getExportTemplates(): Promise<ExportTemplate[]> {
-  return api.get('/api/v1/exports/templates');
+  return api.get<ExportTemplate[]>('/api/v1/exports/templates');
 }
 
 export async function createExportTemplate(template: Partial<ExportTemplate>): Promise<ExportTemplate> {
-  return api.post('/api/v1/exports/templates', template);
+  return api.post<ExportTemplate>('/api/v1/exports/templates', template);
 }
 
 export async function getExportFormats(): Promise<{ formats: Array<{ id: string; name: string; description: string }> }> {
@@ -118,11 +132,16 @@ export async function getExportFormats(): Promise<{ formats: Array<{ id: string;
 }
 
 export async function batchExport(exports: ExportRequest[]): Promise<{ batch_id: string; results: ExportJob[] }> {
-  return api.post('/api/v1/exports/batch', exports);
+  const res = await api.post<{ batch_id: string; results: unknown[] }>('/api/v1/exports/batch', exports);
+  return {
+    batch_id: res.batch_id,
+    results: (res.results ?? []).map(parseExportJob),
+  };
 }
 
 export async function getExportHistory(limit = 50): Promise<{ exports: ExportJob[]; total: number }> {
-  return api.get('/api/v1/exports/history', { params: { limit } });
+  const res = await api.get<unknown>('/api/v1/exports/history', { params: { limit } });
+  return parseExportHistory(res);
 }
 
 export function getExportFilename(job: ExportJob, format: ExportFormat): string {

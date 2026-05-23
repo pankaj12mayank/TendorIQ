@@ -27,6 +27,7 @@ from ..dependencies.rbac_deps import (
     RequireAnalyticsView,
     require_tenant_member,
 )
+from ..schemas.base import create_response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.auth import AuthContext
@@ -74,7 +75,7 @@ async def get_subscription(
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = _require_tenant_uuid(current_user)
-    return await build_subscription_view(db, tenant_id)
+    return create_response(await build_subscription_view(db, tenant_id))
 
 
 @router.get('/usage')
@@ -108,7 +109,7 @@ async def get_quota(
 ):
     tenant_id = _require_tenant_uuid(current_user)
     quotas = await build_quota_list(db, tenant_id)
-    return {'quotas': quotas, 'quota': quotas}
+    return create_response({'quotas': quotas, 'quota': quotas})
 
 
 @router.get('/usage/summary')
@@ -117,12 +118,15 @@ async def get_usage_summary(
     db: AsyncSession = Depends(get_db),
 ):
     tenant_id = _require_tenant_uuid(current_user)
-    return await build_usage_summary(db, tenant_id)
+    return create_response(await build_usage_summary(db, tenant_id))
 
 
 @router.get('/plans')
 async def get_plans():
-    return {'plans': build_plans_for_fe()}
+    plans = build_plans_for_fe()
+    body = create_response(plans)
+    body['plans'] = plans
+    return body
 
 
 @router.post('/upgrade')
@@ -215,14 +219,18 @@ async def list_invoices(
     current_user: RequireAnalyticsView,
     db: AsyncSession = Depends(get_db),
 ):
-    return {'invoices': []}
+    body = create_response([])
+    body['invoices'] = []
+    return body
 
 
 @router.get('/payment-methods')
 async def list_payment_methods(
     current_user: RequireAnalyticsView,
 ):
-    return {'payment_methods': []}
+    body = create_response([])
+    body['payment_methods'] = []
+    return body
 
 
 @router.post('/payment-methods')

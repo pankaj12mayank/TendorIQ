@@ -4,6 +4,7 @@ import { SignIn, useUser, useSession } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { apiUrl as resolveApiUrl } from '@/lib/api-config';
 import { exchangeClerkSession } from '@/lib/auth-api';
 import { setStoredSession } from '@/lib/auth-session';
 import { getPostLoginPath } from '@/lib/auth-redirect';
@@ -41,8 +42,7 @@ export default function SignInClerk() {
           return;
         }
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const onboardingRes = await fetch(`${apiUrl}/api/v1/onboarding/status`, {
+        const onboardingRes = await fetch(resolveApiUrl('/api/v1/onboarding/status'), {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiToken}`,

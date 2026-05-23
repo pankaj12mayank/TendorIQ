@@ -2,6 +2,8 @@ import type { ZodSchema } from 'zod';
 
 import { clearStoredSession, getAuthToken } from '@/lib/auth-session';
 import { getSessionRequestHeaders } from '@/lib/api-headers';
+import { getApiBaseUrl, DEFAULT_API_TIMEOUT_MS } from '@/lib/api-config';
+import { parseApiErrorCode, parseApiErrorMessage } from '@/lib/api-envelope';
 
 export class ApiError extends Error {
   constructor(
@@ -18,13 +20,14 @@ export class ApiError extends Error {
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
   schema?: ZodSchema;
+  /** Request timeout in ms (default 30s). Use {@link UPLOAD_API_TIMEOUT_MS} for large uploads. */
   timeout?: number;
 }
 
 class ApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') {
+  constructor(baseUrl: string = getApiBaseUrl()) {
     this.baseUrl = baseUrl;
   }
 
@@ -49,7 +52,7 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { params, schema, timeout = 30000, ...fetchOptions } = options;
+    const { params, schema, timeout = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -85,17 +88,19 @@ class ApiClient {
           errorData = { message: response.statusText };
         }
 
-        const message =
-          (errorData.detail as string) ||
-          (errorData.error as string) ||
-          (errorData.message as string) ||
-          'An error occurred';
+        const message = parseApiErrorMessage(errorData);
+        const nested = errorData.error;
+        const details =
+          (nested &&
+            typeof nested === 'object' &&
+            (nested as { details?: Record<string, unknown> }).details) ||
+          (errorData.details as Record<string, unknown> | undefined);
 
         throw new ApiError(
           response.status,
-          typeof message === 'object' ? JSON.stringify(message) : String(message),
-          (errorData.code as string) || 'UNKNOWN_ERROR',
-          errorData.details as Record<string, unknown> | undefined
+          message,
+          parseApiErrorCode(errorData) || 'UNKNOWN_ERROR',
+          details
         );
       }
 

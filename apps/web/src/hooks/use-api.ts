@@ -11,17 +11,29 @@ import {
 import { type QueryParams, type PaginatedResponse } from '@/lib/query-client';
 import { toast } from 'sonner';
 
+/** Human-readable message from a React Query error (queries use `throwOnError: false`). */
+export function getQueryErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  if (error instanceof Error) return error.message;
+  return 'Request failed';
+}
+
 export function useApiQuery<T>(key: string[], queryFn: () => Promise<T>, options?: {
   enabled?: boolean;
   staleTime?: number;
 }) {
-  return useQuery({
+  const query = useQuery({
     queryKey: key,
     queryFn,
     enabled: options?.enabled,
     staleTime: options?.staleTime,
     throwOnError: false,
+    retry: 1,
   });
+  return {
+    ...query,
+    errorMessage: getQueryErrorMessage(query.error),
+  };
 }
 
 export function useApiMutation<TData, TVariables>(
@@ -66,7 +78,7 @@ export interface Tender {
 }
 
 export function useTenders(params?: QueryParams) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['tenders', params],
     queryFn: async () => {
       const raw = await api.get<ApiEnvelope<ApiTender[]>>('/api/v1/tenders', {
@@ -78,18 +90,30 @@ export function useTenders(params?: QueryParams) {
         meta: page.meta,
       } satisfies PaginatedResponse<Tender>;
     },
+    throwOnError: false,
+    retry: 1,
   });
+  return {
+    ...query,
+    errorMessage: getQueryErrorMessage(query.error),
+  };
 }
 
 export function useTender(id: string) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['tender', id],
     queryFn: async () => {
       const raw = await api.get<ApiEnvelope<ApiTender>>(`/api/v1/tenders/${id}`);
       return mapTenderFromApi(unwrapData(raw));
     },
     enabled: !!id,
+    throwOnError: false,
+    retry: 1,
   });
+  return {
+    ...query,
+    errorMessage: getQueryErrorMessage(query.error),
+  };
 }
 
 export function useCreateTender() {

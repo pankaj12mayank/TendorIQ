@@ -4,6 +4,8 @@
 AUTH_PUBLIC_PREFIXES = (
     '/api/v1/auth/',
     '/api/v1/webhooks/',
+    '/api/v1/sso/session',
+    '/api/v1/sso/public/',
 )
 
 TENANT_EXEMPT_PREFIXES = (
@@ -16,6 +18,9 @@ TENANT_EXEMPT_PREFIXES = (
     '/api/v1/webhooks/',
     '/api/v1/admin/platform',
     '/api/v1/onboarding',
+    '/api/v1/observability/health',
+    '/api/v1/sso/session',
+    '/api/v1/sso/public/',
 )
 
 # Routes that need tenant_id on request.state when user is authenticated

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Shield } from 'lucide-react';
 
@@ -13,11 +14,17 @@ import { isClerkConfigured } from '@/lib/clerk-config';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
 
 export default function SignInPage() {
+  const searchParams = useSearchParams();
+  const orgSlug = (searchParams.get('org') ?? '').trim().toLowerCase();
   const { loginWithCredentials, isAuthenticated, isLoading, user } = useAuthContext();
   const clerkEnabled = isClerkConfigured();
   const ClerkView = useLazyClientModule(
     clerkEnabled,
     () => import('./sign-in-clerk')
+  );
+  const SsoView = useLazyClientModule(
+    Boolean(orgSlug),
+    () => import('./sign-in-sso')
   );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -87,6 +94,20 @@ export default function SignInPage() {
             {submitting ? 'Signing in...' : 'Sign in'}
           </Button>
         </form>
+
+        {orgSlug && SsoView && (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Organization SSO</span>
+              </div>
+            </div>
+            <SsoView orgSlug={orgSlug} />
+          </>
+        )}
 
         {clerkEnabled && ClerkView && (
           <>

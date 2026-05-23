@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { z } from 'zod';
-import { api } from '@/lib/api-client';
-import { unwrapData, type ApiEnvelope } from '@/lib/api-envelope';
+import { fetchTenderAnalysis, patchTenderAnalysisField } from '@/lib/analysis-api';
 import { useAnalysisStore } from '@/components/analysis/store';
 import { TenderAnalysis, AnalysisSection } from '@/components/analysis/types';
 
@@ -67,10 +66,8 @@ export function useAnalysisApi(tenderId?: string): UseAnalysisApiReturn {
     useAnalysisStore.setState({ isLoading: true });
 
     try {
-      const raw = await api.get<ApiEnvelope<TenderAnalysis>>(
-        `/api/v1/analysis/tender/${tenderId}`
-      );
-      setAnalysis(analysisSchema.parse(unwrapData(raw)));
+      const raw = await fetchTenderAnalysis(tenderId);
+      setAnalysis(analysisSchema.parse(raw));
     } catch (err) {
       setIsError(true);
       setError('Failed to fetch analysis');
@@ -91,7 +88,7 @@ export function useAnalysisApi(tenderId?: string): UseAnalysisApiReturn {
     value: unknown
   ) => {
     try {
-      await api.patch(`/api/v1/analysis/tender/${tenderId}`, {
+      await patchTenderAnalysisField(tenderId, {
         section,
         field_id: fieldId,
         value,
