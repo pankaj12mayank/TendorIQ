@@ -1,12 +1,35 @@
 import { Role } from './types';
+import { ROLE_PERMISSIONS_MATRIX } from '@/lib/permissions';
 
-export const MOCK_ROLES: Role[] = [
-  { id: 'super_admin', name: 'Super Admin', description: 'Full system access', permissions: ['all'], userCount: 0 },
-  { id: 'admin', name: 'Admin', description: 'Administrative access', permissions: ['users', 'billing', 'settings', 'analytics'], userCount: 0 },
-  { id: 'manager', name: 'Manager', description: 'Team management', permissions: ['team', 'documents', 'reports'], userCount: 0 },
-  { id: 'analyst', name: 'Analyst', description: 'Analysis access', permissions: ['documents', 'analysis'], userCount: 0 },
-  { id: 'viewer', name: 'Viewer', description: 'Read only access', permissions: ['read'], userCount: 0 },
-];
+const ROLE_LABELS: Record<string, { name: string; description: string }> = {
+  super_admin: { name: 'Super Admin', description: 'Full platform access' },
+  owner: { name: 'Owner', description: 'Tenant owner' },
+  admin: { name: 'Admin', description: 'Administrative access' },
+  manager: { name: 'Manager', description: 'Team management' },
+  analyst: { name: 'Analyst', description: 'Analysis access' },
+  member: { name: 'Member', description: 'Standard member access' },
+  viewer: { name: 'Viewer', description: 'Read-only access' },
+};
+
+/** Role options for admin user forms — derived from the shared permission matrix. */
+export const ADMIN_ROLE_OPTIONS: Role[] = Object.entries(ROLE_PERMISSIONS_MATRIX).map(
+  ([id, permissions]) => {
+    const meta = ROLE_LABELS[id] ?? {
+      name: id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      description: `${id} role`,
+    };
+    return {
+      id,
+      name: meta.name,
+      description: meta.description,
+      permissions: [...permissions],
+      userCount: 0,
+    };
+  }
+);
+
+/** @deprecated Use ADMIN_ROLE_OPTIONS */
+export const MOCK_ROLES = ADMIN_ROLE_OPTIONS;
 
 export const ANALYTICS_CARDS = [
   { title: 'Total Users', value: '—', change: 0, changeType: 'increase' as const, trend: 'up' as const },

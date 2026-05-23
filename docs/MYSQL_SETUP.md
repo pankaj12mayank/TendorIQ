@@ -18,7 +18,13 @@ DATABASE_URL=mysql+aiomysql://root:YOUR_PASSWORD@localhost:3306/tenderiq?charset
 run.bat
 ```
 
-Tables are created on API startup via SQLAlchemy `create_all`.
+Apply schema with Alembic (from `apps/api`):
+
+```bash
+alembic upgrade head
+```
+
+See [database-migrations.md](./database-migrations.md).
 
 ## Removed stack
 

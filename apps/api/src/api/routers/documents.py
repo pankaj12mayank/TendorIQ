@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -17,9 +17,10 @@ from ..dependencies.rbac_deps import (
     RequireDocumentRead,
     require_tenant_member,
 )
+from ..dependencies.audit import tenant_audit
 from ..services.document_service import document_service
 from ..services.file_service import file_service
-from ...core.storage import storage_service
+from ...core.storage import assert_tenant_storage_key, storage_service
 from ...core.config import settings
 from ...core.logging import get_logger
 from ..schemas.document import (
@@ -155,7 +156,7 @@ async def initiate_document_upload(
         created_by_id=UUID(current_user.user_id),
     )
 
-    signed_result = storage_service.generate_signed_upload_url(
+    signed_result = await storage_service.generate_signed_upload_url(
         storage_key=storage_key,
         content_type=mime_type,
         expires_seconds=3600,
@@ -175,6 +176,7 @@ async def initiate_document_upload(
 async def complete_document_upload(
     document_id: str,
     current_user: RequireDocumentCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Mark upload complete and trigger processing"""
@@ -204,6 +206,21 @@ async def complete_document_upload(
     await document_service.update_quota_usage(
         db, UUID(current_user.tenant_id), meta.get('content_length', doc.file_size), True
     )
+
+    try:
+        await tenant_audit.log_create(
+            db,
+            UUID(current_user.tenant_id),
+            UUID(current_user.user_id),
+            resource_type='document',
+            resource_id=UUID(document_id),
+            action_type='upload',
+            resource_name=doc.name,
+            values={'file_name': doc.file_name, 'file_size': doc.file_size},
+            request=request,
+        )
+    except Exception as exc:
+        logger.warning('document upload audit failed id=%s: %s', document_id, exc)
 
     return {
         'success': True,
@@ -327,7 +344,8 @@ async def download_document(
             detail=f'Cannot download document with status: {doc.processing_status}',
         )
 
-    signed_result = storage_service.generate_signed_download_url(
+    assert_tenant_storage_key(doc.storage_key, current_user.tenant_id)
+    signed_result = await storage_service.generate_signed_download_url(
         storage_key=doc.storage_key,
         expires_seconds=expires_seconds,
         filename=doc.file_name,
@@ -522,6 +540,7 @@ async def batch_update_documents(
 async def delete_document(
     document_id: str,
     current_user: RequireDocumentDelete,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     permanently: bool = Query(False),
 ):
@@ -533,10 +552,25 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
 
+    from ...core.row_access import can_modify_tenant_resource, resource_owner_id_from_metadata
+
+    owner_id = resource_owner_id_from_metadata(getattr(doc, 'metadata_json', None))
+    if not can_modify_tenant_resource(
+        user_id=current_user.user_id,
+        membership_role=current_user.membership_role,
+        created_by_id=owner_id,
+        platform_role=current_user.role,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail='You may only delete documents you uploaded',
+        )
+
     file_size = doc.file_size
     storage_key = doc.storage_key
 
     if permanently:
+        assert_tenant_storage_key(storage_key, current_user.tenant_id)
         await storage_service.delete_file(storage_key)
         await document_service.permanent_delete_document(
             db, UUID(document_id), UUID(current_user.tenant_id)
@@ -549,6 +583,21 @@ async def delete_document(
             db, UUID(document_id), UUID(current_user.tenant_id),
             deleted_by_id=UUID(current_user.user_id)
         )
+
+    try:
+        await tenant_audit.log_delete(
+            db,
+            UUID(current_user.tenant_id),
+            UUID(current_user.user_id),
+            resource_type='document',
+            resource_id=UUID(document_id),
+            action_type='document',
+            resource_name=doc.name,
+            old_values={'file_name': doc.file_name, 'permanently': permanently},
+            request=request,
+        )
+    except Exception as exc:
+        logger.warning('document delete audit failed id=%s: %s', document_id, exc)
 
     return {
         'success': True,

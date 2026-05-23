@@ -70,7 +70,9 @@ async def init_db() -> None:
     try:
         async with engine.connect() as conn:
             await conn.execute(text('SELECT 1'))
-        logger.info('Database connection verified')
+        logger.info(
+            'Database connection verified (schema via Alembic: cd apps/api && alembic upgrade head)'
+        )
     except Exception as exc:
         if settings.is_development:
             logger.warning(f'Database unavailable, continuing without persistence: {exc}')

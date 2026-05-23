@@ -1,13 +1,13 @@
-﻿\"\"\"Base Repository Pattern\"\"\"
+﻿"""Base Repository Pattern"""
 
 from typing import Any, Generic, TypeVar, Optional
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
 
 from ...core.logging import get_logger
+from .soft_delete import apply_active_only, mark_soft_deleted, model_has_soft_delete
 
 logger = get_logger(__name__)
 
@@ -17,16 +17,15 @@ UpdateSchemaType = TypeVar('UpdateSchemaType')
 
 
 class BaseRepository(Generic[ModelType]):
-    \"\"\"Base repository with common CRUD operations\"\"\"
+    """Base repository with common CRUD operations"""
 
     def __init__(self, model: type[ModelType], db: AsyncSession):
         self.model = model
         self.db = db
 
     async def get(self, id: Any) -> Optional[ModelType]:
-        result = await self.db.execute(
-            select(self.model).where(self.model.id == id)
-        )
+        query = apply_active_only(select(self.model).where(self.model.id == id), self.model)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_all(
@@ -35,7 +34,7 @@ class BaseRepository(Generic[ModelType]):
         limit: int = 100,
         filters: Optional[dict[str, Any]] = None,
     ) -> list[ModelType]:
-        query = select(self.model)
+        query = apply_active_only(select(self.model), self.model)
 
         if filters:
             for key, value in filters.items():
@@ -63,15 +62,22 @@ class BaseRepository(Generic[ModelType]):
         return db_obj
 
     async def delete(self, id: Any) -> bool:
-        db_obj = await self.get(id)
-        if db_obj:
+        query = select(self.model).where(self.model.id == id)
+        if model_has_soft_delete(self.model):
+            query = query.where(self.model.deleted_at.is_(None))
+        result = await self.db.execute(query)
+        db_obj = result.scalar_one_or_none()
+        if not db_obj:
+            return False
+        if model_has_soft_delete(self.model):
+            mark_soft_deleted(db_obj)
+        else:
             await self.db.delete(db_obj)
-            await self.db.flush()
-            return True
-        return False
+        await self.db.flush()
+        return True
 
     async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
-        query = select(func.count()).select_from(self.model)
+        query = apply_active_only(select(func.count()).select_from(self.model), self.model)
 
         if filters:
             for key, value in filters.items():
@@ -94,8 +100,11 @@ class BaseRepository(Generic[ModelType]):
         limit: int = 100,
         extra_filters: Optional[dict[str, Any]] = None,
     ) -> list[ModelType]:
-        \"\"\"Get all records filtered by tenant_id, with optional extra filters\"\"\"
-        query = select(self.model).where(self.model.tenant_id == tenant_id)
+        """Get all records filtered by tenant_id, with optional extra filters"""
+        query = apply_active_only(
+            select(self.model).where(self.model.tenant_id == tenant_id),
+            self.model,
+        )
 
         if extra_filters:
             for key, value in extra_filters.items():
@@ -111,8 +120,11 @@ class BaseRepository(Generic[ModelType]):
         tenant_id: Any,
         extra_filters: Optional[dict[str, Any]] = None,
     ) -> int:
-        \"\"\"Count records filtered by tenant_id\"\"\"
-        query = select(func.count()).select_from(self.model).where(self.model.tenant_id == tenant_id)
+        """Count records filtered by tenant_id"""
+        query = apply_active_only(
+            select(func.count()).select_from(self.model).where(self.model.tenant_id == tenant_id),
+            self.model,
+        )
 
         if extra_filters:
             for key, value in extra_filters.items():

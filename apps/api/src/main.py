@@ -27,7 +27,7 @@ from .api.routers.organizations import router as organizations_router
 from .api.routers.auth import router as auth_router
 from .api.tenants import router as tenants_router
 from .api.routers.onboarding import router as onboarding_router
-from .api.routers.files import router as files_router
+from .api.routers.files import public_storage_router, router as files_router
 from .api.routers.documents import router as documents_router
 from .api.routers.ocr import router as ocr_router
 from .api.routers.parsing import router as parsing_router
@@ -70,6 +70,12 @@ async def lifespan(app: FastAPI):
 
     await init_db()
 
+    from .core.storage.paths import ensure_local_storage_root
+
+    root = ensure_local_storage_root()
+    if settings.STORAGE_PROVIDER == 'local':
+        logger.info('Local storage root: %s', root)
+
     try:
         from .core.database import async_session_maker
         from .core.email.seed import seed_email_system
@@ -77,7 +83,13 @@ async def lifespan(app: FastAPI):
         async with async_session_maker() as db:
             await seed_email_system(db)
     except Exception as exc:
-        logger.warning('Email system seed skipped: %s', exc)
+        if settings.is_development:
+            logger.error(
+                'Email system seed failed — ensure migrations ran (alembic upgrade head): %s',
+                exc,
+            )
+        else:
+            logger.warning('Email system seed skipped: %s', exc)
 
     yield
 
@@ -100,8 +112,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-    allow_methods=settings.CORS_ALLOW_METHODS,
-    allow_headers=settings.CORS_ALLOW_HEADERS,
+    allow_methods=settings.cors_allow_methods_list,
+    allow_headers=settings.cors_allow_headers_list,
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -180,14 +192,19 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger = get_logger(__name__).bind(request_id=request_id)
     logger.error(f'Unhandled exception: {exc}', exc_info=True)
 
+    error_payload: dict = {
+        'code': 'INTERNAL_ERROR',
+        'message': 'An unexpected error occurred',
+        'request_id': request_id,
+    }
+    if settings.expose_error_details:
+        error_payload['detail'] = str(exc)
+
     return JSONResponse(
         status_code=500,
         content={
             'success': False,
-            'error': {
-                'code': 'INTERNAL_ERROR',
-                'message': 'An unexpected error occurred',
-            },
+            'error': error_payload,
         },
     )
 
@@ -199,6 +216,7 @@ app.include_router(tenders_router, prefix='/api/v1')
 app.include_router(organizations_router, prefix='/api/v1')
 app.include_router(tenants_router, prefix='/api/v1')
 app.include_router(onboarding_router, prefix='/api/v1')
+app.include_router(public_storage_router, prefix='/api/v1')
 app.include_router(files_router, prefix='/api/v1')
 app.include_router(documents_router, prefix='/api/v1')
 app.include_router(ocr_router, prefix='/api/v1')

@@ -676,7 +676,8 @@ async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(
     email = await service.validate_token(body.token)
     if not email:
         raise HTTPException(400, 'Invalid or expired reset token')
-    # Password hashing delegated to auth layer — mark token consumed
+    if not await service.apply_new_password(email, body.new_password):
+        raise HTTPException(400, 'No account found for this email')
     ok = await service.consume_token(body.token)
     if not ok:
         raise HTTPException(400, 'Unable to reset password')

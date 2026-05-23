@@ -1,7 +1,22 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
+import {
+  PLATFORM_AUDIT_EXPORT_MAX_ROWS,
+  PLATFORM_AUDIT_LIST_LIMIT,
+} from '@/lib/audit-constants';
 import { api, ApiError } from '@/lib/api-client';
+import {
+  PLATFORM_AUDIT_EXPORT_MAX_ROWS,
+  PLATFORM_AUDIT_LIST_LIMIT,
+} from '@/lib/audit-constants';
+import {
+  parsePlatformAuditLogsResponse,
+  parsePlatformFailedJobsResponse,
+  parsePlatformProvidersResponse,
+  parsePlatformQueueJobsResponse,
+  parsePlatformUsersResponse,
+} from '@/lib/admin-platform-api';
 import { useAdminStore } from '@/components/admin/store';
 import {
   User,
@@ -42,8 +57,8 @@ export function useAdminUsersApi() {
             params[`filter_${i}_value`] = Array.isArray(f.value) ? f.value.join(',') : f.value;
           });
         }
-        const res = await api.get<{ users: User[] }>('/api/v1/admin/platform/users', { params });
-        setUsers(res.users);
+        const res = await api.get<unknown>('/api/v1/admin/platform/users', { params });
+        setUsers(parsePlatformUsersResponse(res).users);
       } catch (err) {
         setIsError(true);
         setError('Failed to fetch users');
@@ -194,9 +209,9 @@ export function useAIProvidersApi() {
   const fetchProviders = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ providers: AIProvider[] }>('/api/v1/admin/platform/ai-providers');
+      const res = await api.get<unknown>('/api/v1/admin/platform/ai-providers');
       setProviders(
-        res.providers.map((p) => {
+        parsePlatformProvidersResponse(res).map((p) => {
           const row = p as AIProvider & { api_key_masked?: string; is_active?: boolean; is_default?: boolean };
           return {
             ...row,
@@ -458,8 +473,8 @@ export function useQueueApi() {
   const refreshJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ jobs: QueueJob[] }>('/api/v1/admin/platform/queue/jobs');
-      setJobs(res.jobs);
+      const res = await api.get<unknown>('/api/v1/admin/platform/queue/jobs');
+      setJobs(parsePlatformQueueJobsResponse(res));
     } catch (err) {
       handleApiError(err, 'Failed to load queue');
     } finally {
@@ -518,27 +533,6 @@ export function useQueueApi() {
 
 // --- Audit ---
 
-function mapAuditLog(row: Record<string, unknown>): AuditLogEntry {
-  return {
-    id: String(row.id),
-    userId: String(row.user_id ?? ''),
-    userName: String(row.user_name ?? row.user_email ?? 'Unknown'),
-    userRole: String(row.user_role ?? 'user'),
-    action: String(row.action),
-    resource: String(row.resource_type ?? row.resource ?? ''),
-    resourceId: row.resource_id as string | undefined,
-    details: String(
-      row.changes
-        ? JSON.stringify(row.changes)
-        : row.resource_name ?? row.action
-    ),
-    ipAddress: String(row.ip_address ?? ''),
-    userAgent: String(row.user_agent ?? ''),
-    timestamp: String(row.created_at ?? row.timestamp ?? ''),
-    actionType: String(row.action_type ?? 'admin_action'),
-  };
-}
-
 export function useAuditLogApi() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [isLoading, setLoading] = useState(false);
@@ -546,8 +540,10 @@ export function useAuditLogApi() {
   const fetchLogs = useCallback(async (_filters?: AdvancedFilter[]) => {
     setLoading(true);
     try {
-      const res = await api.get<Record<string, unknown>[]>('/api/v1/audit/logs', { params: { limit: 100 } });
-      setLogs(res.map((r) => mapAuditLog(r)));
+      const res = await api.get<unknown>('/api/v1/admin/platform/audit-logs', {
+        params: { limit: PLATFORM_AUDIT_LIST_LIMIT },
+      });
+      setLogs(parsePlatformAuditLogsResponse(res));
     } catch (err) {
       handleApiError(err, 'Failed to load audit logs');
     } finally {
@@ -559,8 +555,8 @@ export function useAuditLogApi() {
     setLoading(true);
     try {
       const res = await api.post<{ content: string | unknown; mime_type: string }>(
-        '/api/v1/audit/export',
-        { format }
+        '/api/v1/admin/platform/audit-logs/export',
+        { format, limit: PLATFORM_AUDIT_EXPORT_MAX_ROWS }
       );
       const body =
         typeof res.content === 'string' ? res.content : JSON.stringify(res.content, null, 2);
@@ -597,8 +593,8 @@ export function useFailedJobsApi() {
   const fetchFailedJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ jobs: FailedJob[] }>('/api/v1/admin/platform/failed-jobs');
-      setJobs(res.jobs);
+      const res = await api.get<unknown>('/api/v1/admin/platform/failed-jobs');
+      setJobs(parsePlatformFailedJobsResponse(res));
     } catch (err) {
       handleApiError(err, 'Failed to load failed jobs');
     } finally {

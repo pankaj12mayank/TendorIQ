@@ -9,6 +9,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...models import User
+from ...passwords import hash_password
 from ..db_models import PasswordResetToken
 from ...config import settings
 from .dispatcher import EmailDispatcher
@@ -79,7 +81,20 @@ class PasswordResetService:
             return None
         return row.email
 
-    async def consume_token(self, raw_token: str, new_password_hash: Optional[str] = None) -> bool:
+    async def apply_new_password(self, email: str, new_password: str) -> bool:
+        """Persist bcrypt hash on the user record. Returns False if no user exists."""
+        normalized = email.lower().strip()
+        result = await self.db.execute(select(User).where(User.email == normalized))
+        user = result.scalar_one_or_none()
+        if not user:
+            return False
+        prefs = dict(user.preferences or {})
+        prefs['password_hash'] = hash_password(new_password)
+        user.preferences = prefs
+        await self.db.flush()
+        return True
+
+    async def consume_token(self, raw_token: str) -> bool:
         """Mark token used after password reset."""
         token_hash = self._hash_token(raw_token)
         result = await self.db.execute(

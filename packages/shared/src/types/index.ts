@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { normalizeBillingCycle, normalizePlanId } from '../plans.js';
+
 /** Platform role (JWT) or effective tenant role for display. */
 export const platformRoleSchema = z.enum(['super_admin', 'user']);
 
@@ -39,7 +41,10 @@ export const tenderSchema = z.object({
   currency: z.string().length(3).default('USD'),
   closingDate: z.date().nullable(),
   createdById: z.string().uuid(),
-  organizationId: z.string().uuid(),
+  /** Tenant that owns the tender (matches API `tenant_id`). */
+  tenantId: z.string().uuid(),
+  /** @deprecated Use tenantId */
+  organizationId: z.string().uuid().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -168,8 +173,15 @@ export const step3Schema = z.object({
 export type Step3Data = z.infer<typeof step3Schema>;
 
 export const step4Schema = z.object({
-  planId: z.enum(['free', 'starter', 'professional', 'enterprise']),
-  billingCycle: z.enum(['monthly', 'yearly']).default('monthly'),
+  planId: z
+    .string()
+    .transform((v) => normalizePlanId(v))
+    .pipe(z.enum(['free', 'starter', 'professional', 'enterprise'])),
+  billingCycle: z
+    .string()
+    .transform((v) => normalizeBillingCycle(v))
+    .pipe(z.enum(['monthly', 'yearly']))
+    .default('monthly'),
   addons: z.array(z.string()).default([]),
 });
 

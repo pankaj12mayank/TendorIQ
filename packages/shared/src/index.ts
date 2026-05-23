@@ -2,6 +2,13 @@ export * from './env.js';
 export * from './constants/index.js';
 export * from './types/index.js';
 export * from './permissions.js';
+export * from './tenders.js';
+export * from './feature-flags-client.js';
+export * from './roles.js';
+export * from './plans.js';
+export * from './notifications.js';
+export * from './auth.js';
+export * from './analysis.js';
 
 export type {
   User,

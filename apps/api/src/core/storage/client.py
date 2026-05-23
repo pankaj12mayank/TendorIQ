@@ -1,10 +1,11 @@
-"""Cloudflare R2 / S3-compatible Storage Client (async via asyncio.to_thread)"""
+"""S3/R2/local storage — boto3 runs in asyncio.to_thread; local uses disk."""
 
 import asyncio
 import hashlib
 import os
 import re
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
@@ -14,6 +15,8 @@ from botocore.exceptions import ClientError
 
 from ..config import settings
 from ..logging import get_logger
+from .keys import assert_tenant_storage_key
+from .tokens import create_storage_token
 
 logger = get_logger('storage')
 
@@ -49,9 +52,25 @@ class StorageService:
         self.region = settings.STORAGE_REGION
         self.max_file_size = settings.max_file_size_bytes
         self.allowed_extensions = settings.allowed_extensions
+        self._local_root = settings.resolved_storage_local_path
+
+    @property
+    def is_local(self) -> bool:
+        return self.provider == 'local'
+
+    def _local_path(self, storage_key: str) -> Path:
+        normalized = storage_key.replace('\\', '/').lstrip('/')
+        if '..' in normalized.split('/'):
+            raise ValueError('Invalid storage key')
+        path = (self._local_root / normalized).resolve()
+        if not str(path).startswith(str(self._local_root)):
+            raise ValueError('Invalid storage key path')
+        return path
 
     @property
     def client(self) -> boto3.client:
+        if self.is_local:
+            raise RuntimeError('S3 client not used when STORAGE_PROVIDER=local')
         if self._client is None:
             self._client = self._create_client()
         return self._client
@@ -136,6 +155,31 @@ class StorageService:
     def compute_checksum(self, file_content: bytes) -> str:
         return hashlib.sha256(file_content).hexdigest()
 
+    async def read_file(self, storage_key: str) -> dict:
+        """Read object bytes (local disk or S3 download)."""
+        if self.is_local:
+            try:
+                path = self._local_path(storage_key)
+
+                def _read() -> bytes:
+                    return path.read_bytes()
+
+                content = await _run_sync(_read)
+                return {'success': True, 'content': content, 'storage_key': storage_key}
+            except Exception as e:
+                return {'success': False, 'error': str(e), 'storage_key': storage_key}
+
+        try:
+            response = await _run_sync(
+                self.client.get_object,
+                Bucket=self.bucket,
+                Key=storage_key,
+            )
+            body = response['Body'].read()
+            return {'success': True, 'content': body, 'storage_key': storage_key}
+        except ClientError as e:
+            return {'success': False, 'error': str(e), 'storage_key': storage_key}
+
     async def upload_file(
         self,
         file_content: bytes,
@@ -144,6 +188,26 @@ class StorageService:
         metadata: Optional[dict] = None,
         acl: Optional[str] = None,
     ) -> dict:
+        if self.is_local:
+            try:
+                path = self._local_path(storage_key)
+                path.parent.mkdir(parents=True, exist_ok=True)
+
+                def _write() -> None:
+                    path.write_bytes(file_content)
+
+                await _run_sync(_write)
+                return {
+                    'success': True,
+                    'storage_key': storage_key,
+                    'file_size': len(file_content),
+                    'checksum': self.compute_checksum(file_content),
+                    'content_type': content_type,
+                }
+            except Exception as e:
+                logger.error('Local upload failed: %s', e, storage_key=storage_key)
+                return {'success': False, 'error': str(e), 'storage_key': storage_key}
+
         try:
             extra_args = {}
             if content_type:
@@ -181,6 +245,19 @@ class StorageService:
             }
 
     async def delete_file(self, storage_key: str) -> dict:
+        if self.is_local:
+            try:
+                path = self._local_path(storage_key)
+
+                def _delete() -> None:
+                    if path.is_file():
+                        path.unlink()
+
+                await _run_sync(_delete)
+                return {'success': True, 'storage_key': storage_key}
+            except Exception as e:
+                return {'success': False, 'error': str(e)}
+
         try:
             await _run_sync(
                 self.client.delete_object,
@@ -195,6 +272,14 @@ class StorageService:
             return {'success': False, 'error': str(e)}
 
     async def delete_files_batch(self, storage_keys: list[str]) -> dict:
+        if self.is_local:
+            deleted = 0
+            for key in storage_keys:
+                result = await self.delete_file(key)
+                if result.get('success'):
+                    deleted += 1
+            return {'success': True, 'deleted': deleted}
+
         try:
             if not storage_keys:
                 return {'success': True, 'deleted': 0}
@@ -218,10 +303,25 @@ class StorageService:
         content_type: Optional[str] = None,
         expires_seconds: Optional[int] = None,
     ) -> dict:
-        try:
-            expire = expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
-            expiration = datetime.now(timezone.utc) + timedelta(seconds=expire)
+        expire = expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
+        expiration = datetime.now(timezone.utc) + timedelta(seconds=expire)
 
+        if self.is_local:
+            token = create_storage_token(storage_key, 'put', expire)
+            encoded_key = storage_key.replace('/', '%2F')
+            upload_url = (
+                f'{settings.api_url}/api/v1/files/blob/{encoded_key}'
+                f'?token={token}'
+            )
+            return {
+                'success': True,
+                'upload_url': upload_url,
+                'storage_key': storage_key,
+                'expires_at': expiration.isoformat(),
+                'expires_in': expire,
+            }
+
+        try:
             extra_args = {}
             if content_type:
                 extra_args['ContentType'] = content_type
@@ -254,10 +354,27 @@ class StorageService:
         expires_seconds: Optional[int] = None,
         filename: Optional[str] = None,
     ) -> dict:
-        try:
-            expire = expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
-            expiration = datetime.now(timezone.utc) + timedelta(seconds=expire)
+        expire = expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
+        expiration = datetime.now(timezone.utc) + timedelta(seconds=expire)
 
+        if self.is_local:
+            token = create_storage_token(storage_key, 'get', expire)
+            encoded_key = storage_key.replace('/', '%2F')
+            q = f'token={token}'
+            if filename:
+                from urllib.parse import quote
+
+                q += f'&filename={quote(filename)}'
+            download_url = f'{settings.api_url}/api/v1/files/blob/{encoded_key}?{q}'
+            return {
+                'success': True,
+                'download_url': download_url,
+                'storage_key': storage_key,
+                'expires_at': expiration.isoformat(),
+                'expires_in': expire,
+            }
+
+        try:
             extra_args = {}
             if filename:
                 extra_args['ResponseContentDisposition'] = f'attachment; filename="{filename}"'
@@ -286,6 +403,27 @@ class StorageService:
             return {'success': False, 'error': str(e)}
 
     async def get_file_metadata(self, storage_key: str) -> dict:
+        if self.is_local:
+            try:
+                path = self._local_path(storage_key)
+
+                def _stat():
+                    st = path.stat()
+                    return st.st_size, st.st_mtime
+
+                size, mtime = await _run_sync(_stat)
+                return {
+                    'success': True,
+                    'storage_key': storage_key,
+                    'content_length': size,
+                    'content_type': self.get_mime_type(path.name),
+                    'last_modified': datetime.fromtimestamp(mtime, tz=timezone.utc),
+                }
+            except FileNotFoundError:
+                return {'success': False, 'error': 'not found'}
+            except Exception as e:
+                return {'success': False, 'error': str(e)}
+
         try:
             response = await _run_sync(
                 self.client.head_object,

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth, useCurrentUser } from '@/hooks/use-auth';
 import { useRouter, usePathname } from 'next/navigation';
 import { canAccessAdminConsole, canAccessTenantDashboard, isSuperAdmin } from '@/lib/permissions';
@@ -8,10 +8,12 @@ import { canAccessAdminConsole, canAccessTenantDashboard, isSuperAdmin } from '@
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/layout/mobile-nav';
+import { DashboardBootLoading, SidebarSkeleton } from '@/components/layout/dashboard-loading';
 import { Toaster } from '@/components/ui/sonner';
-import { useOnboardingStore } from '@/stores/onboarding-store';
 import { useOnboardingApi } from '@/hooks/use-onboarding';
 import { LoadingState } from '@/components/ui/loading-state';
+
+const ONBOARDING_CHECK_TIMEOUT_MS = 8_000;
 
 export default function DashboardLayout({
   children,
@@ -25,7 +27,6 @@ export default function DashboardLayout({
   const isAdminConsole = pathname.startsWith('/dashboard/admin');
   const [mounted, setMounted] = useState(false);
   const [checkedOnboarding, setCheckedOnboarding] = useState(false);
-  const store = useOnboardingStore();
   const { fetchStatus } = useOnboardingApi();
 
   useEffect(() => {
@@ -39,6 +40,12 @@ export default function DashboardLayout({
   }, [isLoaded, userId, router]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) setCheckedOnboarding(true);
+    }, ONBOARDING_CHECK_TIMEOUT_MS);
+
     async function checkOnboarding() {
       if (!isLoaded || !userId) return;
       if (user?.role === 'super_admin') {
@@ -47,16 +54,23 @@ export default function DashboardLayout({
       }
       try {
         const status = await fetchStatus();
+        if (cancelled) return;
         if (!status.is_completed) {
           router.push('/onboarding');
           return;
         }
       } catch {
-        // If error, allow dashboard access (user might have existing tenant)
+        // Fail open — user may already have tenant context from JWT
       }
-      setCheckedOnboarding(true);
+      if (!cancelled) setCheckedOnboarding(true);
     }
-    checkOnboarding();
+
+    void checkOnboarding();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [isLoaded, userId, user?.role, fetchStatus, router]);
 
   useEffect(() => {
@@ -71,12 +85,14 @@ export default function DashboardLayout({
 
   const tenantDashboardAllowed = user ? canAccessTenantDashboard(user.role) : true;
 
+  const bootMessage = useMemo(() => {
+    if (!isLoaded) return 'Loading your session...';
+    if (!checkedOnboarding) return 'Checking workspace setup...';
+    return 'Loading dashboard...';
+  }, [isLoaded, checkedOnboarding]);
+
   if (!mounted || !isLoaded || !checkedOnboarding) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingState message="Loading..." />
-      </div>
-    );
+    return <DashboardBootLoading message={bootMessage} />;
   }
 
   if (!userId) {
@@ -114,7 +130,7 @@ export default function DashboardLayout({
   return (
     <>
       <div className="flex min-h-screen">
-        <Suspense fallback={<aside className="hidden w-64 lg:block" />}>
+        <Suspense fallback={<SidebarSkeleton />}>
           <Sidebar />
         </Suspense>
         <div className="flex min-w-0 flex-1 flex-col">

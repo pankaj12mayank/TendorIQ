@@ -4,8 +4,9 @@ import re
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, UploadFile, File
+from fastapi.responses import FileResponse, StreamingResponse
+from urllib.parse import unquote
 from sqlalchemy.ext.asyncio import AsyncSession
 import io
 
@@ -19,7 +20,8 @@ from ..dependencies.rbac_deps import (
 )
 from ..services.file_service import file_service
 from ..services.tenant_service import tenant_service
-from ...core.storage import storage_service
+from ...core.storage import assert_tenant_storage_key, storage_service
+from ...core.storage.tokens import verify_storage_token
 from ...core.config import settings
 from ...core.logging import get_logger
 from ..schemas.storage import (
@@ -35,6 +37,45 @@ from ..schemas.storage import (
     FileValidationResponse,
     FileValidationError,
 )
+
+# Tokenized blob access (no session — validated via HMAC query token)
+public_storage_router = APIRouter(prefix='/files', tags=['files-storage'])
+
+
+@public_storage_router.put('/blob/{storage_key:path}')
+async def put_blob_with_token(
+    storage_key: str,
+    request: Request,
+    token: str = Query(...),
+):
+    """Tokenized PUT for local storage (presign-compatible upload flow)."""
+    key = unquote(storage_key)
+    if not verify_storage_token(token, key, 'put'):
+        raise HTTPException(status_code=401, detail='Invalid or expired upload token')
+    body = await request.body()
+    result = await storage_service.upload_file(file_content=body, storage_key=key)
+    if not result.get('success'):
+        raise HTTPException(status_code=500, detail=result.get('error', 'Upload failed'))
+    return {'success': True, 'storage_key': key}
+
+
+@public_storage_router.get('/blob/{storage_key:path}')
+async def get_blob_with_token(
+    storage_key: str,
+    token: str = Query(...),
+    filename: Optional[str] = Query(None),
+):
+    """Tokenized GET for local storage downloads."""
+    key = unquote(storage_key)
+    if not verify_storage_token(token, key, 'get'):
+        raise HTTPException(status_code=401, detail='Invalid or expired download token')
+    if not storage_service.is_local:
+        raise HTTPException(status_code=400, detail='Blob route is for local storage only')
+    path = storage_service._local_path(key)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail='File not found')
+    return FileResponse(path, filename=filename or path.name)
+
 
 router = APIRouter(
     prefix='/files',
@@ -113,7 +154,7 @@ async def initiate_upload(
         created_by_id=UUID(current_user.user_id),
     )
 
-    signed_result = storage_service.generate_signed_upload_url(
+    signed_result = await storage_service.generate_signed_upload_url(
         storage_key=storage_key,
         content_type=mime_type,
         expires_seconds=3600,
@@ -273,7 +314,8 @@ async def download_file(
     if str(doc.tenant_id) != current_user.tenant_id:
         raise HTTPException(status_code=403, detail='Access denied')
 
-    signed_result = storage_service.generate_signed_download_url(
+    assert_tenant_storage_key(doc.storage_key, current_user.tenant_id)
+    signed_result = await storage_service.generate_signed_download_url(
         storage_key=doc.storage_key,
         expires_seconds=expires_seconds,
         filename=doc.file_name,
@@ -372,8 +414,23 @@ async def delete_file(
     if str(doc.tenant_id) != current_user.tenant_id:
         raise HTTPException(status_code=403, detail='Access denied')
 
+    from ...core.row_access import can_modify_tenant_resource, resource_owner_id_from_metadata
+
+    owner_id = resource_owner_id_from_metadata(getattr(doc, 'metadata_json', None))
+    if not can_modify_tenant_resource(
+        user_id=current_user.user_id,
+        membership_role=current_user.membership_role,
+        created_by_id=owner_id,
+        platform_role=current_user.role,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail='You may only delete documents you uploaded',
+        )
+
     storage_deleted = False
     if permanently:
+        assert_tenant_storage_key(doc.storage_key, current_user.tenant_id)
         result = await storage_service.delete_file(doc.storage_key)
         storage_deleted = result.get('success', False)
         await file_service.permanent_delete_document(db, UUID(document_id))
@@ -411,14 +468,15 @@ async def generate_signed_url(
 
     expires = data.expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
 
+    assert_tenant_storage_key(doc.storage_key, current_user.tenant_id)
     if data.url_type == 'download':
-        result = storage_service.generate_signed_download_url(
+        result = await storage_service.generate_signed_download_url(
             storage_key=doc.storage_key,
             expires_seconds=expires,
             filename=doc.file_name,
         )
     else:
-        result = storage_service.generate_signed_upload_url(
+        result = await storage_service.generate_signed_upload_url(
             storage_key=doc.storage_key,
             content_type=doc.mime_type,
             expires_seconds=expires,

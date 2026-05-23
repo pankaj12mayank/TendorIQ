@@ -5,10 +5,15 @@ import type { NextRequest } from 'next/server';
 import { isClerkPublishableKeyConfigured } from '@/lib/clerk-env';
 
 const isPublicRoute = createRouteMatcher([
+  '/',
+  '/landing(.*)',
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/',
+  '/forgot-password(.*)',
+  '/reset-password(.*)',
+  '/onboarding(.*)',
   '/admin/login(.*)',
+  '/admin/sign-in(.*)',
   '/api/webhooks(.*)',
   '/_next(.*)',
   '/favicon.ico',

@@ -1,5 +1,8 @@
 export const API_VERSION = 'v1';
 
+/** Canonical REST prefix for FastAPI routes and the web API client. */
+export const API_ROUTE_PREFIX = '/api/v1';
+
 export const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,

@@ -10,7 +10,7 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ...core import admin_store
 from ...core.admin_store import dismiss_failed_job, list_dismissed_failed_jobs
@@ -20,12 +20,21 @@ from ...core.platform_metrics import (
     load_platform_failed_jobs,
     load_platform_queue_jobs,
     platform_analytics_summary,
+    platform_system_health,
 )
+from ...core.audit_limits import (
+    DEFAULT_AUDIT_LIST_LIMIT,
+    MAX_AUDIT_LIST_LIMIT,
+    clamp_export_limit,
+)
+from ...core.audit_present import audit_export_payload, audit_log_to_dict, load_users_by_id
 from ...core.database import get_db
 from ...core.models import (
     AIProvider,
+    AuditLog,
     DismissedFailedJob,
     Membership,
+    QueueJob,
     Tenant,
     User,
 )
@@ -314,16 +323,103 @@ async def list_queue_jobs(_admin: SuperAdmin, db=Depends(get_db)):
     return {'jobs': jobs}
 
 
+async def _resolve_queue_target(db, job_id: str):
+    try:
+        uid = UUID(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='Invalid job id') from exc
+
+    job = await db.get(QueueJob, uid)
+    if job:
+        return 'platform', job
+
+    try:
+        from ...core.email.db_models import EmailQueueItem
+
+        item = await db.get(EmailQueueItem, uid)
+        if item:
+            return 'email', item
+    except Exception:
+        pass
+
+    raise HTTPException(status_code=404, detail='Job not found')
+
+
+@router.post('/queue/jobs/{job_id}/cancel')
+async def cancel_queue_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
+    kind, row = await _resolve_queue_target(db, job_id)
+    if kind == 'platform':
+        if row.status in ('completed', 'cancelled'):
+            raise HTTPException(status_code=400, detail='Job cannot be cancelled')
+        row.status = 'cancelled'
+    else:
+        if row.status in ('completed', 'cancelled'):
+            raise HTTPException(status_code=400, detail='Job cannot be cancelled')
+        row.status = 'cancelled'
+    await db.commit()
+    return {'success': True, 'status': 'cancelled'}
+
+
+@router.post('/queue/jobs/{job_id}/pause')
+async def pause_queue_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
+    kind, row = await _resolve_queue_target(db, job_id)
+    if kind == 'platform':
+        if row.status == 'processing':
+            raise HTTPException(status_code=409, detail='Cannot pause a running job')
+        if row.status not in ('pending',):
+            raise HTTPException(status_code=400, detail='Job is not pausable')
+        row.status = 'pending'
+    else:
+        if row.status == 'processing':
+            raise HTTPException(status_code=409, detail='Cannot pause a running job')
+        if row.status not in ('pending', 'queued'):
+            raise HTTPException(status_code=400, detail='Job is not pausable')
+        row.status = 'pending'
+    await db.commit()
+    return {'success': True, 'status': 'pending'}
+
+
+@router.post('/queue/jobs/{job_id}/resume')
+async def resume_queue_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
+    kind, row = await _resolve_queue_target(db, job_id)
+    if kind == 'platform':
+        if row.status not in ('cancelled', 'failed'):
+            raise HTTPException(status_code=400, detail='Job cannot be resumed')
+        row.status = 'pending'
+        row.error = None
+    else:
+        if row.status not in ('cancelled', 'failed', 'dead_letter'):
+            raise HTTPException(status_code=400, detail='Job cannot be resumed')
+        row.status = 'pending'
+        row.error_message = None
+    await db.commit()
+    return {'success': True, 'status': 'pending'}
+
+
 @router.post('/queue/jobs/{job_id}/retry')
 async def retry_queue_job(job_id: str, _admin: SuperAdmin, db=Depends(get_db)):
+    try:
+        uid = UUID(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail='Invalid job id') from exc
+
+    job = await db.get(QueueJob, uid)
+    if job and job.status in ('failed', 'cancelled'):
+        job.status = 'pending'
+        job.error = None
+        job.attempts = (job.attempts or 0) + 1
+        await db.commit()
+        return {'success': True}
+
     try:
         from ...core.email.db_models import EmailQueueItem
         from ...core.tasks.inline import schedule_job
 
-        item = await db.get(EmailQueueItem, UUID(job_id))
+        item = await db.get(EmailQueueItem, uid)
         if item:
             item.status = 'pending'
             item.retry_count = (item.retry_count or 0) + 1
+            item.error_message = None
             await db.commit()
             schedule_job('email_process', _job_id=str(item.id), queue_item_id=str(item.id))
             return {'success': True}
@@ -377,3 +473,70 @@ async def clear_dismissed(_admin: SuperAdmin, db=Depends(get_db)):
 @router.get('/analytics/summary')
 async def analytics_summary(_admin: SuperAdmin, db=Depends(get_db)):
     return await platform_analytics_summary(db)
+
+
+@router.get('/health')
+async def platform_health(_admin: SuperAdmin, db=Depends(get_db)):
+    return await platform_system_health(db)
+
+
+# --- Platform audit (cross-tenant) ---
+
+class PlatformAuditExportRequest(BaseModel):
+    format: str = Field(default='json', pattern='^(json|csv)$')
+    tenant_id: Optional[str] = None
+    action_type: Optional[str] = None
+    limit: Optional[int] = Field(default=None, ge=1, le=10000)
+
+
+@router.get('/audit-logs')
+async def list_platform_audit_logs(
+    _admin: SuperAdmin,
+    db=Depends(get_db),
+    limit: int = Query(DEFAULT_AUDIT_LIST_LIMIT, le=MAX_AUDIT_LIST_LIMIT),
+    offset: int = Query(0, ge=0),
+    tenant_id: Optional[str] = Query(None),
+    action_type: Optional[str] = Query(None),
+):
+    conditions = []
+    if tenant_id:
+        conditions.append(AuditLog.tenant_id == UUID(tenant_id))
+    if action_type:
+        conditions.append(AuditLog.action_type == action_type)
+
+    count_q = select(func.count(AuditLog.id))
+    list_q = select(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
+    if conditions:
+        count_q = count_q.where(*conditions)
+        list_q = list_q.where(*conditions)
+
+    total = await db.scalar(count_q) or 0
+    rows = (await db.execute(list_q)).scalars().all()
+    user_ids = {r.user_id for r in rows if r.user_id}
+    users_by_id = await load_users_by_id(db, user_ids)
+
+    logs = [audit_log_to_dict(r, users_by_id.get(r.user_id)) for r in rows]
+    return {'logs': logs, 'total': total}
+
+
+@router.post('/audit-logs/export')
+async def export_platform_audit_logs(
+    _admin: SuperAdmin,
+    body: PlatformAuditExportRequest,
+    db=Depends(get_db),
+):
+    conditions = []
+    if body.tenant_id:
+        conditions.append(AuditLog.tenant_id == UUID(body.tenant_id))
+    if body.action_type:
+        conditions.append(AuditLog.action_type == body.action_type)
+
+    export_limit = clamp_export_limit(body.limit)
+    q = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(export_limit)
+    if conditions:
+        q = q.where(*conditions)
+    rows = (await db.execute(q)).scalars().all()
+    user_ids = {r.user_id for r in rows if r.user_id}
+    users_by_id = await load_users_by_id(db, user_ids)
+    logs = [audit_log_to_dict(r, users_by_id.get(r.user_id)) for r in rows]
+    return audit_export_payload(logs, body.format)

@@ -5,8 +5,10 @@ Enterprise event-driven transactional email infrastructure.
 ## Architecture
 
 ```
-Backend Event → EmailDispatcher → email_queue (DB) → ARQ email_process → Provider chain (SMTP/Resend/Mock)
+Backend Event → EmailDispatcher → email_queue (DB) → in-process email_process job → Provider chain (SMTP/Resend/Mock)
 ```
+
+> **Queue runtime:** Jobs are scheduled via `core.tasks.inline.schedule_job` (no Redis worker required).
 
 ### Modules (`apps/api/src/core/email/`)
 
@@ -46,7 +48,7 @@ Super Admin (Bearer JWT) required except:
 
 1. Templates are **never hard deleted** — `archived` + `deleted_at` only
 2. Emails only send if **event enabled** AND **template active**
-3. All sends go through **async queue** (ARQ `email_process`)
+3. All sends go through the **DB queue** (`email_process` inline worker)
 4. Retries: 30s → 2min → 10min → dead letter + admin alert
 5. SMTP credentials encrypted with `ENCRYPTION_KEY` / `JWT_SECRET` derived Fernet key
 
@@ -73,15 +75,12 @@ Super Admin (Bearer JWT) required except:
 cd apps/api && alembic upgrade head
 ```
 
-Revision: `008_email_system`
+Tables are created with `alembic upgrade head` (see `docs/database-migrations.md`).
 
 ## Worker
 
-Ensure ARQ worker processes `email_process`:
-
-```bash
-python scripts/run_worker.py --queue email
-```
+Email queue items are processed automatically in the API process via the inline task runner.
+For manual retries, use `POST /api/v1/email/queue/{id}/retry` (super admin).
 
 ## Environment
 

@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useNotificationStore, Notification } from './store';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useNotifications } from '@/hooks/use-notifications';
+import { ROUTES } from '@/lib/routes';
+import type { Notification } from './store';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -23,8 +26,13 @@ const ICONS = {
 };
 
 export function NotificationBell() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, fetchNotifications } =
+    useNotifications();
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    void fetchNotifications();
+  }, [fetchNotifications]);
 
   const recentNotifications = notifications.slice(0, 5);
 
@@ -140,12 +148,8 @@ export function NotificationBell() {
         </div>
 
         <div className="p-2 border-t">
-          <Button 
-            variant="outline" 
-            className="w-full text-xs"
-            onClick={() => setOpen(false)}
-          >
-            View all notifications
+          <Button variant="outline" className="w-full text-xs" asChild onClick={() => setOpen(false)}>
+            <Link href={ROUTES.notifications}>View all notifications</Link>
           </Button>
         </div>
       </PopoverContent>

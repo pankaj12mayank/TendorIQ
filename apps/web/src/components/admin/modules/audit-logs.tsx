@@ -3,15 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuditLogApi } from '@/hooks/use-admin';
 import { LoadingState } from '@/components/ui/loading-state';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import {
-  FileText,
   Search,
-  Filter,
   Download,
   ChevronDown,
   User,
@@ -20,7 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { AuditLogEntry } from '../types';
 import { cn } from '@/lib/utils';
 import { ROLE_COLORS } from '../constants';
 
@@ -31,10 +27,17 @@ const ACTION_COLORS: Record<string, string> = {
   SETTINGS_UPDATED: 'bg-purple-100 text-purple-800',
   PROMPT_UPDATED: 'bg-orange-100 text-orange-800',
   BILLING_UPDATED: 'bg-yellow-100 text-yellow-800',
+  login: 'bg-slate-100 text-slate-800',
+  delete: 'bg-red-100 text-red-800',
 };
 
 export function AuditLogs() {
   const { logs, isLoading, fetchLogs, exportLogs } = useAuditLogApi();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [actionFilter, setActionFilter] = useState<string | null>(null);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     void fetchLogs();
@@ -43,14 +46,10 @@ export function AuditLogs() {
   if (isLoading && logs.length === 0) {
     return <LoadingState message="Loading audit logs..." />;
   }
-  const [searchQuery, setSearchQuery] = useState('');
-  const [actionFilter, setActionFilter] = useState<string | null>(null);
-  const [expandedLog, setExpandedLog] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
 
   const filteredLogs = logs.filter((log) => {
-    const matchesSearch = log.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch =
+      log.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.resource.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesAction = !actionFilter || log.action.includes(actionFilter);
@@ -58,7 +57,7 @@ export function AuditLogs() {
   });
 
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const totalPages = Math.ceil(filteredLogs.length / pageSize);
+  const totalPages = Math.ceil(filteredLogs.length / pageSize) || 1;
 
   const formatTimestamp = (timestamp: string) => {
     return new Date(timestamp).toLocaleString('en-US', {
@@ -105,7 +104,9 @@ export function AuditLogs() {
               >
                 <option value="">All Actions</option>
                 {uniqueActions.map((action) => (
-                  <option key={action} value={action}>{action}</option>
+                  <option key={action} value={action}>
+                    {action}
+                  </option>
                 ))}
               </select>
             </div>
@@ -152,33 +153,47 @@ export function AuditLogs() {
                       </div>
                     </div>
                   </div>
-                  <ChevronDown className={cn(
-                    'w-5 h-5 text-muted-foreground transition-transform',
-                    expandedLog === log.id && 'rotate-180'
-                  )} />
+                  <ChevronDown
+                    className={cn(
+                      'w-5 h-5 text-muted-foreground transition-transform',
+                      expandedLog === log.id && 'rotate-180'
+                    )}
+                  />
                 </div>
 
                 {expandedLog === log.id && (
                   <div className="mt-4 pt-4 border-t space-y-3">
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
-                        <span className="text-xs text-muted-foreground uppercase tracking-wide">Resource ID</span>
+                        <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                          Resource ID
+                        </span>
                         <p className="text-sm font-mono">{log.resourceId || '-'}</p>
                       </div>
                       <div>
-                        <span className="text-xs text-muted-foreground uppercase tracking-wide">User Agent</span>
+                        <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                          User Agent
+                        </span>
                         <p className="text-sm">{log.userAgent}</p>
                       </div>
                     </div>
                     {log.previousState && log.newState && (
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <span className="text-xs text-red-800 uppercase tracking-wide">Previous State</span>
-                          <pre className="text-xs mt-1 text-red-600">{JSON.stringify(log.previousState, null, 2)}</pre>
+                          <span className="text-xs text-red-800 uppercase tracking-wide">
+                            Previous State
+                          </span>
+                          <pre className="text-xs mt-1 text-red-600">
+                            {JSON.stringify(log.previousState, null, 2)}
+                          </pre>
                         </div>
                         <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <span className="text-xs text-green-800 uppercase tracking-wide">New State</span>
-                          <pre className="text-xs mt-1 text-green-600">{JSON.stringify(log.newState, null, 2)}</pre>
+                          <span className="text-xs text-green-800 uppercase tracking-wide">
+                            New State
+                          </span>
+                          <pre className="text-xs mt-1 text-green-600">
+                            {JSON.stringify(log.newState, null, 2)}
+                          </pre>
                         </div>
                       </div>
                     )}

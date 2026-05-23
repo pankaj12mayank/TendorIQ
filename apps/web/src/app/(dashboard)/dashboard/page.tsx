@@ -28,7 +28,7 @@ import { StatusBadge } from '@/components/design-system/status-badge';
 import { CanCreateTender } from '@/components/auth/rbac';
 import { Button } from '@/components/ui/button';
 import { useTenders } from '@/hooks/use-api';
-import { LoadingState } from '@/components/ui/loading-state';
+import { TableRowSkeleton } from '@/components/design-system/skeleton';
 import { PremiumErrorState } from '@/components/design-system/empty-state';
 import { staggerContainer } from '@/design-system/motion';
 
@@ -45,7 +45,9 @@ export default function DashboardPage() {
   const tenders = data?.data ?? [];
   const activeTenders = tenders.filter(t => t.status === 'published').length;
   const pipelineValue = tenders.reduce((sum, t) => sum + (Number(t.budget) || 0), 0);
-  const organizationCount = new Set(tenders.map(t => t.organizationId).filter(Boolean)).size;
+  const organizationCount = new Set(
+    tenders.map((t) => t.tenantId || t.organizationId).filter(Boolean)
+  ).size;
 
   return (
     <div className="space-y-8">
@@ -89,9 +91,20 @@ export default function DashboardPage() {
             }
           >
             {isLoading ? (
-              <div className="p-8">
-                <LoadingState message="Loading tenders..." />
-              </div>
+              <DataTable>
+                <DataTableHeader>
+                  <tr>
+                    <DataTableHead>Title</DataTableHead>
+                    <DataTableHead>Status</DataTableHead>
+                    <DataTableHead>Created</DataTableHead>
+                  </tr>
+                </DataTableHeader>
+                <DataTableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRowSkeleton key={i} cols={3} />
+                  ))}
+                </DataTableBody>
+              </DataTable>
             ) : isError ? (
               <div className="p-4">
                 <PremiumErrorState onRetry={() => refetch()} />

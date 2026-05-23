@@ -11,6 +11,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { useAuthContext } from '@/hooks/use-auth';
 import { isClerkConfigured } from '@/lib/clerk-config';
+import { isAppFeatureEnabled } from '@/lib/feature-flags';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
 
 export default function SignInPage() {
@@ -22,8 +23,9 @@ export default function SignInPage() {
     clerkEnabled,
     () => import('./sign-in-clerk')
   );
+  const ssoEnabled = isAppFeatureEnabled('sso');
   const SsoView = useLazyClientModule(
-    Boolean(orgSlug),
+    Boolean(orgSlug) && ssoEnabled,
     () => import('./sign-in-sso')
   );
   const [email, setEmail] = useState('');
@@ -80,7 +82,15 @@ export default function SignInPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link
+                href="/forgot-password"
+                className="text-xs text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <PasswordInput
               id="password"
               autoComplete="current-password"

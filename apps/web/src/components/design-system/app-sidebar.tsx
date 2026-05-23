@@ -7,10 +7,13 @@ import { ChevronLeft, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { roleNavGroups } from '@/design-system/icons';
+import { sidebarLayoutTransition } from '@/design-system/motion';
 import type { AppRole } from '@/design-system/tokens';
+import { useReducedMotion } from '@/lib/use-reduced-motion';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/use-auth';
 import { getMembershipRole } from '@/lib/auth-user';
+import { isAppFeatureEnabled } from '@/lib/feature-flags';
 import { hasPermission } from '@/lib/permissions';
 import { useTenantStore } from '@/stores/tenant-store';
 import { Button } from '@/components/ui/button';
@@ -22,7 +25,11 @@ const NAV_ITEM_PERMISSIONS: Record<string, string | undefined> = {
   '/dashboard/billing': 'settings:read',
   '/dashboard/usage': 'analytics:view',
   '/dashboard/settings': 'settings:read',
-  '/dashboard/review': 'tender:read',
+  '/dashboard/tenders/review': 'tender:read',
+};
+
+const NAV_ITEM_FEATURES: Record<string, 'advanced_analytics' | undefined> = {
+  '/dashboard/analytics': 'advanced_analytics',
 };
 
 function resolveRole(membershipRole?: string, platformRole?: string): AppRole {
@@ -42,6 +49,10 @@ function canSeeNavItem(
   permissions?: string[]
 ): boolean {
   const base = href.split('?')[0] ?? href;
+  const feature = NAV_ITEM_FEATURES[base];
+  if (feature && !isAppFeatureEnabled(feature)) {
+    return false;
+  }
   const required = NAV_ITEM_PERMISSIONS[base];
   if (!required) return true;
   return hasPermission(membershipRole, required, permissions);
@@ -63,6 +74,8 @@ export function AppSidebar() {
     .filter((group) => group.items.length > 0);
   const currentOrganization = useTenantStore((s) => s.currentOrganization);
   const [collapsed, setCollapsed] = useState(false);
+  const reducedMotion = useReducedMotion();
+  const layoutTransition = sidebarLayoutTransition(reducedMotion);
 
   return (
     <aside
@@ -123,9 +136,9 @@ export function AppSidebar() {
                     >
                       {isActive && (
                         <motion.span
-                          layoutId="sidebar-active"
+                          layoutId={reducedMotion ? undefined : 'sidebar-active'}
                           className="absolute inset-0 rounded-lg bg-primary"
-                          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                          transition={layoutTransition}
                         />
                       )}
                       <Icon className={cn('relative z-10 h-4 w-4 shrink-0', isActive && 'text-primary-foreground')} />

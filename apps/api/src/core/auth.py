@@ -2,7 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar, Optional
+
 from uuid import uuid4
+
+from .tenant_types import TenantId, UserId
 
 import httpx
 from jose import JWTError, jwt
@@ -219,10 +222,10 @@ class AuthContext:
 
     def __init__(
         self,
-        user_id: str,
+        user_id: UserId,
         email: Optional[str] = None,
         role: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        tenant_id: Optional[TenantId] = None,
         membership_role: Optional[str] = None,
     ):
         self.user_id = user_id

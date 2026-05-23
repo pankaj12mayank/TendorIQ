@@ -1,5 +1,9 @@
 /** Shared API base URL and timeout defaults for the web app. */
 
+import { API_ROUTE_PREFIX } from '@tendoriq/shared/constants';
+
+export { API_ROUTE_PREFIX };
+
 export const DEFAULT_API_TIMEOUT_MS = 30_000;
 export const UPLOAD_API_TIMEOUT_MS = 120_000;
 
@@ -13,5 +17,8 @@ export function apiUrl(path: string): string {
     return path;
   }
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `${getApiBaseUrl()}${normalized}`;
+  if (normalized.startsWith(API_ROUTE_PREFIX)) {
+    return `${getApiBaseUrl()}${normalized}`;
+  }
+  return `${getApiBaseUrl()}${API_ROUTE_PREFIX}${normalized}`;
 }

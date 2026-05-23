@@ -32,7 +32,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Lint Frontend
-        run: pnpm --filter web lint
+        run: pnpm --filter @tendoriq/web lint
 
   lint-python:
     name: Python Lint
@@ -84,7 +84,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: TypeScript Check (web)
-        run: pnpm --filter web typecheck
+        run: pnpm --filter @tendoriq/web typecheck
 
   typecheck-shared:
     name: Typecheck Shared
@@ -110,10 +110,38 @@ jobs:
       - name: TypeScript Check (shared)
         run: pnpm --filter @tendoriq/shared typecheck
 
-  test:
-    name: Test
+  test-api:
+    name: API Unit Tests
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, typecheck-shared, lint-python]
+    needs: [lint-python]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: |
+          cd apps/api
+          uv sync
+
+      - name: Run API unit & contract tests
+        env:
+          DATABASE_URL: mysql+aiomysql://root:test@127.0.0.1:3306/tendoriq_test?charset=utf8mb4
+          JWT_SECRET: ci-test-secret-key-at-least-32-characters-long
+        run: |
+          cd apps/api
+          uv run pytest tests/unit tests/integration -q
+
+  test:
+    name: Web Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, typecheck-shared, test-api]
 
     steps:
       - uses: actions/checkout@v4
@@ -132,12 +160,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run Tests
-        run: pnpm --filter web test
+        run: pnpm --filter @tendoriq/web test -- --run
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test, test-api]
 
     steps:
       - uses: actions/checkout@v4
@@ -156,4 +184,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Frontend
-        run: pnpm --filter web build
+        run: pnpm --filter @tendoriq/web build

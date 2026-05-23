@@ -184,6 +184,7 @@ class ProtectedTenantEndpoint:
             UUID(tenant_id),
             UUID(auth.user_id),
             action='create_attempt',
+            action_type='document',
             resource_type=resource_type,
             request=request,
         )

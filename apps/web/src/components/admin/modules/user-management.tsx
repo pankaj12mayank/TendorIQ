@@ -246,7 +246,7 @@ export function UserManagement() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-5">
-            {(['super_admin', 'admin', 'manager', 'analyst', 'viewer'] as UserRole[]).map((role) => (
+            {(['super_admin', 'owner', 'admin', 'manager', 'analyst', 'member', 'viewer'] as UserRole[]).map((role) => (
               <div key={role} className="p-4 border rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <Badge className={ROLE_COLORS[role]}>{role.replace('_', ' ')}</Badge>

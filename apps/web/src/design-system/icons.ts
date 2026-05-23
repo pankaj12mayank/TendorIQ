@@ -101,7 +101,7 @@ export const roleNavGroups: Record<
         { name: 'Tenders', href: '/dashboard/tenders', icon: FileText },
         { name: 'Bids', href: '/dashboard/bids', icon: Briefcase },
         { name: 'Upload', href: '/dashboard/upload', icon: Upload },
-        { name: 'Review', href: '/dashboard/review', icon: ClipboardCheck },
+        { name: 'Review', href: '/dashboard/tenders/review', icon: ClipboardCheck },
       ],
     },
     {

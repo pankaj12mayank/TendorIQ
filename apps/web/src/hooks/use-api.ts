@@ -1,22 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import {
-  mapTenderFromApi,
-  mapTenderToApi,
   parsePaginated,
   unwrapData,
   type ApiEnvelope,
-  type ApiTender,
 } from '@/lib/api-envelope';
+import {
+  mapTenderFromApi,
+  mapTenderToApi,
+  type ApiTender,
+  type ClientTender,
+} from '@tendoriq/shared/tenders';
 import { type QueryParams, type PaginatedResponse } from '@/lib/query-client';
+import { getQueryErrorMessage } from '@/lib/query-error-message';
 import { toast } from 'sonner';
 
-/** Human-readable message from a React Query error (queries use `throwOnError: false`). */
-export function getQueryErrorMessage(error: unknown): string | null {
-  if (!error) return null;
-  if (error instanceof Error) return error.message;
-  return 'Request failed';
-}
+export { getQueryErrorMessage } from '@/lib/query-error-message';
 
 export function useApiQuery<T>(key: string[], queryFn: () => Promise<T>, options?: {
   enabled?: boolean;
@@ -64,18 +63,7 @@ export function useApiMutation<TData, TVariables>(
   });
 }
 
-export interface Tender {
-  id: string;
-  title: string;
-  description: string;
-  status: 'draft' | 'published' | 'closed' | 'cancelled' | 'awarded';
-  budget: number | null;
-  currency: string;
-  closingDate: string | null;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type Tender = ClientTender;
 
 export function useTenders(params?: QueryParams) {
   const query = useQuery({

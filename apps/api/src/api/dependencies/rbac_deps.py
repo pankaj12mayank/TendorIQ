@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, status
 
 from ...core.auth import AuthContext
+from ...core.tenant_types import parse_tenant_uuid
 from ...core.rbac import Permission
 from .auth import get_current_user
 from .permissions import require_tenant_permission
@@ -26,6 +27,13 @@ async def require_tenant_member(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail='Tenant context required',
+        )
+    try:
+        parse_tenant_uuid(auth.tenant_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Invalid tenant context',
         )
     return auth
 

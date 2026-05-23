@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import { GuardLoadingPlaceholder } from '@/components/layout/dashboard-loading';
 import { useAuthState } from '@/hooks/use-auth';
 import { getMembershipRole } from '@/lib/auth-user';
 import { hasPermission, isSuperAdmin } from '@/lib/permissions';
@@ -25,7 +26,7 @@ export function RoleGuard({ children, allowedRoles, fallback }: RoleGuardProps) 
   const { user, isAuthenticated, isLoading } = useAuthState();
 
   if (isLoading) {
-    return null;
+    return fallback ?? <GuardLoadingPlaceholder />;
   }
 
   if (!isAuthenticated) {
@@ -55,7 +56,7 @@ export function PermissionGuard({ children, permission, fallback }: PermissionGu
   const { user, isAuthenticated, isLoading } = useAuthState();
 
   if (isLoading) {
-    return null;
+    return fallback ?? <GuardLoadingPlaceholder />;
   }
 
   if (!isAuthenticated) {

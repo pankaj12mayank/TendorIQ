@@ -1,4 +1,7 @@
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'analyst' | 'viewer';
+import type { AdminConsoleRole } from '@tendoriq/shared/roles';
+
+/** Super-admin console role filter (includes platform + all membership roles). */
+export type UserRole = AdminConsoleRole;
 export type UserStatus = 'active' | 'inactive' | 'suspended' | 'pending';
 
 export interface User {

@@ -7,8 +7,6 @@ import {
   Zap,
   Clock,
   AlertTriangle,
-  TrendingUp,
-  TrendingDown,
   CheckCircle,
   XCircle,
   Pause,
@@ -16,88 +14,87 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { QueueJob } from '@/components/admin/types';
+import type { PlatformHealthComponent, PlatformQueueStats } from '@/lib/admin-platform-api';
 import { cn } from '@/lib/utils';
 
 interface RealtimeQueueStatusProps {
   className?: string;
+  stats?: PlatformQueueStats | null;
+  isLoading?: boolean;
 }
 
-export function RealtimeQueueStatus({ className }: RealtimeQueueStatusProps) {
-  const stats = {
-    pending: 5,
-    processing: 12,
-    completed: 89,
-    failed: 3,
-    total: 109,
-  };
+export function RealtimeQueueStatus({ className, stats, isLoading }: RealtimeQueueStatusProps) {
+  const pending = stats?.pending ?? 0;
+  const processing = stats?.processing ?? 0;
+  const completed = stats?.completed ?? 0;
+  const failed = stats?.failed ?? 0;
+  const health = stats?.healthPercent ?? 100;
 
   return (
     <Card className={cn(className)}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base">Queue Status</CardTitle>
-        <Badge className="bg-green-100 text-green-800 animate-pulse">Live</Badge>
+        <Badge className={cn(isLoading ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800')}>
+          {isLoading ? 'Syncing' : 'Live'}
+        </Badge>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-4 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-600">{stats.pending}</div>
+            <div className="text-2xl font-bold text-gray-600">{pending}</div>
             <div className="text-xs text-muted-foreground">Pending</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">{stats.processing}</div>
+            <div className="text-2xl font-bold text-blue-600">{processing}</div>
             <div className="text-xs text-muted-foreground">Processing</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
+            <div className="text-2xl font-bold text-green-600">{completed}</div>
             <div className="text-xs text-muted-foreground">Completed</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
+            <div className="text-2xl font-bold text-red-600">{failed}</div>
             <div className="text-xs text-muted-foreground">Failed</div>
           </div>
         </div>
         <div className="mt-4">
           <div className="flex items-center justify-between text-sm mb-1">
             <span className="text-muted-foreground">Queue Health</span>
-            <span className="font-medium">98.2%</span>
+            <span className="font-medium">{health.toFixed(1)}%</span>
           </div>
-          <Progress value={98.2} className="h-2" />
+          <Progress value={health} className="h-2" />
         </div>
       </CardContent>
     </Card>
   );
 }
 
-interface RealtimeMetricsProps {
-  className?: string;
+export interface RealtimeMetricsData {
+  apiCalls: number;
+  activeJobs: number;
+  errorRate: number;
+  avgResponseTime: number;
 }
 
-export function RealtimeMetrics({ className }: RealtimeMetricsProps) {
-  const [metrics, setMetrics] = React.useState({
-    apiCalls: 2150,
-    activeJobs: 12,
-    errorRate: 0.5,
-    avgResponseTime: 245,
-  });
+interface RealtimeMetricsProps {
+  className?: string;
+  metrics?: RealtimeMetricsData | null;
+  isLoading?: boolean;
+}
 
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setMetrics(prev => ({
-        apiCalls: prev.apiCalls + Math.floor(Math.random() * 10) - 3,
-        activeJobs: Math.max(0, prev.activeJobs + Math.floor(Math.random() * 3) - 1),
-        errorRate: Math.max(0, Math.min(5, prev.errorRate + (Math.random() - 0.5) * 0.2)),
-        avgResponseTime: Math.max(100, Math.min(500, prev.avgResponseTime + Math.floor(Math.random() * 40) - 20)),
-      }));
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
+export function RealtimeMetrics({ className, metrics, isLoading }: RealtimeMetricsProps) {
+  const apiCalls = metrics?.apiCalls ?? 0;
+  const activeJobs = metrics?.activeJobs ?? 0;
+  const errorRate = metrics?.errorRate ?? 0;
+  const avgResponseTime = metrics?.avgResponseTime ?? 0;
 
   return (
     <Card className={cn(className)}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-base">Real-time Metrics</CardTitle>
-        <Activity className="w-4 h-4 text-green-600 animate-pulse" />
+        <Activity
+          className={cn('w-4 h-4', isLoading ? 'text-muted-foreground' : 'text-green-600 animate-pulse')}
+        />
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4">
@@ -106,7 +103,7 @@ export function RealtimeMetrics({ className }: RealtimeMetricsProps) {
               <Zap className="w-4 h-4 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics.apiCalls.toLocaleString()}</p>
+              <p className="text-2xl font-bold">{apiCalls.toLocaleString()}</p>
               <p className="text-xs text-muted-foreground">API Calls</p>
             </div>
           </div>
@@ -115,7 +112,7 @@ export function RealtimeMetrics({ className }: RealtimeMetricsProps) {
               <Clock className="w-4 h-4 text-purple-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics.avgResponseTime}ms</p>
+              <p className="text-2xl font-bold">{avgResponseTime}ms</p>
               <p className="text-xs text-muted-foreground">Avg Response</p>
             </div>
           </div>
@@ -124,7 +121,7 @@ export function RealtimeMetrics({ className }: RealtimeMetricsProps) {
               <AlertTriangle className="w-4 h-4 text-orange-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics.errorRate.toFixed(1)}%</p>
+              <p className="text-2xl font-bold">{errorRate.toFixed(1)}%</p>
               <p className="text-xs text-muted-foreground">Error Rate</p>
             </div>
           </div>
@@ -133,7 +130,7 @@ export function RealtimeMetrics({ className }: RealtimeMetricsProps) {
               <Play className="w-4 h-4 text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold">{metrics.activeJobs}</p>
+              <p className="text-2xl font-bold">{activeJobs}</p>
               <p className="text-xs text-muted-foreground">Active Jobs</p>
             </div>
           </div>
@@ -188,12 +185,14 @@ export function JobCard({ job, onRetry, onCancel, onPause }: JobCardProps) {
           {getStatusIcon()}
           <h4 className="font-medium">{job.name}</h4>
         </div>
-        <Badge className={cn(
-          job.priority === 'urgent' && 'bg-red-100 text-red-800',
-          job.priority === 'high' && 'bg-orange-100 text-orange-800',
-          job.priority === 'normal' && 'bg-blue-100 text-blue-800',
-          job.priority === 'low' && 'bg-gray-100 text-gray-800'
-        )}>
+        <Badge
+          className={cn(
+            job.priority === 'urgent' && 'bg-red-100 text-red-800',
+            job.priority === 'high' && 'bg-orange-100 text-orange-800',
+            job.priority === 'normal' && 'bg-blue-100 text-blue-800',
+            job.priority === 'low' && 'bg-gray-100 text-gray-800'
+          )}
+        >
           {job.priority}
         </Badge>
       </div>
@@ -209,27 +208,26 @@ export function JobCard({ job, onRetry, onCancel, onPause }: JobCardProps) {
       )}
 
       {job.error && (
-        <div className="p-2 bg-red-100 rounded text-sm text-red-800 mb-3">
-          {job.error}
-        </div>
+        <div className="p-2 bg-red-100 rounded text-sm text-red-800 mb-3">{job.error}</div>
       )}
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Attempts: {job.attempts}/{job.maxAttempts}</span>
+        <span>
+          Attempts: {job.attempts}/{job.maxAttempts}
+        </span>
         <div className="flex gap-1">
           {job.status === 'failed' && job.retryable && onRetry && (
-            <button
-              onClick={() => onRetry(job.id)}
-              className="p-1 hover:bg-white rounded"
-            >
+            <button type="button" onClick={() => onRetry(job.id)} className="p-1 hover:bg-white rounded">
               <RefreshCw className="w-4 h-4" />
             </button>
           )}
+          {job.status === 'pending' && onPause && (
+            <button type="button" onClick={() => onPause(job.id)} className="p-1 hover:bg-white rounded">
+              <Pause className="w-4 h-4" />
+            </button>
+          )}
           {onCancel && (
-            <button
-              onClick={() => onCancel(job.id)}
-              className="p-1 hover:bg-white rounded"
-            >
+            <button type="button" onClick={() => onCancel(job.id)} className="p-1 hover:bg-white rounded">
               <XCircle className="w-4 h-4" />
             </button>
           )}
@@ -241,16 +239,14 @@ export function JobCard({ job, onRetry, onCancel, onPause }: JobCardProps) {
 
 interface SystemHealthProps {
   className?: string;
+  components?: PlatformHealthComponent[];
+  isLoading?: boolean;
 }
 
-export function SystemHealth({ className }: SystemHealthProps) {
-  const components = [
-    { name: 'API Server', status: 'healthy', uptime: 99.9 },
-    { name: 'Database', status: 'healthy', uptime: 99.95 },
-    { name: 'Queue Worker', status: 'healthy', uptime: 98.5 },
-    { name: 'AI Service', status: 'degraded', uptime: 95.0 },
-    { name: 'Storage', status: 'healthy', uptime: 99.99 },
-  ];
+export function SystemHealth({ className, components, isLoading }: SystemHealthProps) {
+  const rows = components?.length
+    ? components
+    : [{ name: 'Platform', status: isLoading ? 'unknown' : 'degraded', uptime: 0 }];
 
   return (
     <Card className={cn(className)}>
@@ -259,13 +255,15 @@ export function SystemHealth({ className }: SystemHealthProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {components.map((component) => (
+          {rows.map((component) => (
             <div key={component.name} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className={cn(
-                  'w-2 h-2 rounded-full',
-                  component.status === 'healthy' ? 'bg-green-500' : 'bg-yellow-500'
-                )} />
+                <div
+                  className={cn(
+                    'w-2 h-2 rounded-full',
+                    component.status === 'healthy' ? 'bg-green-500' : 'bg-yellow-500'
+                  )}
+                />
                 <span className="text-sm font-medium">{component.name}</span>
               </div>
               <div className="flex items-center gap-2">
@@ -274,7 +272,7 @@ export function SystemHealth({ className }: SystemHealthProps) {
                   className={cn(
                     'text-xs',
                     component.status === 'healthy' && 'bg-green-100 text-green-800',
-                    component.status === 'degraded' && 'bg-yellow-100 text-yellow-800'
+                    component.status !== 'healthy' && 'bg-yellow-100 text-yellow-800'
                   )}
                 >
                   {component.status}

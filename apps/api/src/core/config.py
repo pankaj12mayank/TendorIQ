@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from dotenv import load_dotenv
+
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -67,8 +68,11 @@ class Settings(BaseSettings):
     # ===========================================
     CORS_ORIGINS: str = 'http://localhost:3000'
     CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: list[str] = ['*']
-    CORS_ALLOW_HEADERS: list[str] = ['*']
+    CORS_ALLOW_METHODS: str = 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
+    CORS_ALLOW_HEADERS: str = (
+        'Authorization,Content-Type,Accept,X-Tenant-ID,X-Tenant-Slug,X-Request-ID'
+    )
+    EXPOSE_ERROR_DETAILS: bool = False
 
     # ===========================================
     # AUTH
@@ -132,6 +136,7 @@ class Settings(BaseSettings):
     # STORAGE
     # ===========================================
     STORAGE_PROVIDER: Literal['s3', 'r2', 'local'] = 'local'
+    STORAGE_LOCAL_PATH: str = './uploads'
     STORAGE_BUCKET: str = 'tendoriq-uploads'
     STORAGE_REGION: str = 'us-east-1'
     STORAGE_ACCESS_KEY: str = ''
@@ -141,6 +146,7 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY_ID: str = ''
     R2_SECRET_ACCESS_KEY: str = ''
     STORAGE_SIGNED_URL_EXPIRE_SECONDS: int = 3600
+    STORAGE_TOKEN_CLOCK_SKEW_SECONDS: int = 120
     STORAGE_MAX_FILE_SIZE_MB: int = 50
     STORAGE_ALLOWED_EXTENSIONS: str = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt,.csv'
 
@@ -191,7 +197,25 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(',')]
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(',') if origin.strip()]
+
+    @property
+    def cors_allow_methods_list(self) -> list[str]:
+        raw = self.CORS_ALLOW_METHODS
+        if isinstance(raw, list):
+            return raw
+        return [m.strip().upper() for m in str(raw).split(',') if m.strip()]
+
+    @property
+    def cors_allow_headers_list(self) -> list[str]:
+        raw = self.CORS_ALLOW_HEADERS
+        if isinstance(raw, list):
+            return raw
+        return [h.strip() for h in str(raw).split(',') if h.strip()]
+
+    @property
+    def expose_error_details(self) -> bool:
+        return self.EXPOSE_ERROR_DETAILS or self.is_development
 
     @property
     def is_development(self) -> bool:
@@ -229,6 +253,18 @@ class Settings(BaseSettings):
     def max_file_size_bytes(self) -> int:
         return self.STORAGE_MAX_FILE_SIZE_MB * 1024 * 1024
 
+    @property
+    def resolved_storage_local_path(self) -> Path:
+        """Absolute local disk root (STORAGE_LOCAL_PATH is normalized at load)."""
+        return Path(self.STORAGE_LOCAL_PATH)
+
+    @field_validator('STORAGE_LOCAL_PATH')
+    @classmethod
+    def normalize_storage_local_path(cls, v: str) -> str:
+        from .local_storage_paths import resolve_storage_local_path
+
+        return str(resolve_storage_local_path(v))
+
     @field_validator('JWT_SECRET')
     @classmethod
     def validate_jwt_secret(cls, v: str) -> str:
@@ -236,6 +272,13 @@ class Settings(BaseSettings):
             raise ValueError('JWT_SECRET must be set in .env (min 32 characters)')
         if len(v) < 32:
             raise ValueError('JWT_SECRET must be at least 32 characters')
+        return v
+
+    @field_validator('STORAGE_PROVIDER', mode='before')
+    @classmethod
+    def normalize_storage_provider(cls, v: object) -> object:
+        if v is None or v == '':
+            return 'local'
         return v
 
     @field_validator('DATABASE_URL')

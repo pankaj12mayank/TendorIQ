@@ -104,12 +104,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
-        run: pnpm build:web
+        run: pnpm --filter @tendoriq/web build
       - name: Start preview
+        env:
+          PORT: '3000'
         run: |
-          pnpm preview &
-          sleep 10
+          pnpm --filter @tendoriq/web preview &
+          sleep 15
       - name: Run E2E tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: pnpm --filter @tendoriq/web e2e
       - name: Upload test results
         if: always()
@@ -150,10 +154,8 @@ jobs:
         run: |
           pip install bandit
           bandit -r apps/api/src -f json
-      - name: Run npm audit
-        run: |
-          cd apps/web
-          npm audit --audit-level=high
+      - name: Run pnpm audit (web workspace)
+        run: pnpm --filter @tendoriq/web audit --audit-level=high
 
   test-summary:
     name: Test Summary

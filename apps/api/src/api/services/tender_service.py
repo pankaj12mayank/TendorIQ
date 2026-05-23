@@ -3,11 +3,13 @@
 from typing import Any, Optional
 from collections.abc import AsyncGenerator
 
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import BaseService
 from ...core.logging import get_logger
 from ...core.models import Tender
+from ...core.row_access import can_modify_tenant_resource
 
 logger = get_logger('tender_service')
 
@@ -52,21 +54,50 @@ class TenderService(BaseService):
         tender = await self.create(data)
         return self._tender_to_dict(tender)
 
-    async def update_tender(self, tender_id: str, data: dict[str, Any]) -> Optional[dict]:
+    def _assert_can_modify(self, tender: Tender, membership_role: Optional[str]) -> None:
+        if not self.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='User context required to modify tenders',
+            )
+        if not can_modify_tenant_resource(
+            user_id=self.user_id,
+            membership_role=membership_role,
+            created_by_id=getattr(tender, 'created_by_id', None),
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail='You may only modify tenders you created',
+            )
+
+    async def update_tender(
+        self,
+        tender_id: str,
+        data: dict[str, Any],
+        *,
+        membership_role: Optional[str] = None,
+    ) -> Optional[dict]:
         tender = await self.get(tender_id)
         if not tender:
             return None
         if getattr(tender, 'tenant_id', None) != self.tenant_id:
             return None
+        self._assert_can_modify(tender, membership_role)
         tender = await self.update(tender_id, data)
         return self._tender_to_dict(tender) if tender else None
 
-    async def delete_tender(self, tender_id: str) -> bool:
+    async def delete_tender(
+        self,
+        tender_id: str,
+        *,
+        membership_role: Optional[str] = None,
+    ) -> bool:
         tender = await self.get(tender_id)
         if not tender:
             return False
         if getattr(tender, 'tenant_id', None) != self.tenant_id:
             return False
+        self._assert_can_modify(tender, membership_role)
         return await self.delete(tender_id)
 
     def _tender_to_dict(self, tender: Any) -> dict:
@@ -88,6 +119,7 @@ class TenderService(BaseService):
             'budget': getattr(tender, 'budget'),
             'currency': getattr(tender, 'currency', 'USD'),
             'closingDate': _iso(closing),
+            'tenantId': str(tid),
             'organizationId': str(tid),
             'createdAt': _iso(created),
             'updatedAt': _iso(updated),

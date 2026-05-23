@@ -12,6 +12,8 @@ export const envSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('debug'),
   APP_NAME: z.string().default('TenderIQ'),
   APP_URL: z.string().url().default('http://localhost:3000'),
+  FRONTEND_URL: z.string().url().optional(),
+  API_URL: z.string().url().optional(),
 
   // ===========================================
   // DATABASE - MySQL
@@ -54,8 +56,8 @@ export const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
-  // JWT
-  JWT_SECRET: z.string().min(32),
+  // JWT (dev default applied in buildEnvData when unset)
+  JWT_SECRET: z.string().min(32).optional(),
   JWT_ALGORITHM: z.string().default('HS256'),
   JWT_ACCESS_TOKEN_EXPIRE_MINUTES: z.coerce.number().default(30),
   JWT_REFRESH_TOKEN_EXPIRE_DAYS: z.coerce.number().default(7),
@@ -81,6 +83,8 @@ export const envSchema = z.object({
   // STORAGE - AWS S3 / Cloudflare R2
   // ===========================================
   STORAGE_PROVIDER: z.enum(['s3', 'r2', 'local']).default('local'),
+  STORAGE_TYPE: z.enum(['local', 's3', 'r2']).optional(),
+  STORAGE_LOCAL_PATH: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_REGION: z.string().default('us-east-1'),
@@ -139,6 +143,29 @@ export const envSchema = z.object({
   FEATURE_API_ACCESS: z.coerce.boolean().default(true),
   FEATURE_CUSTOM_DOMAINS: z.coerce.boolean().default(false),
   FEATURE_SSO: z.coerce.boolean().default(false),
+
+  NEXT_PUBLIC_FEATURE_AI_ANALYSIS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_DOCUMENT_OCR: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_ADVANCED_ANALYTICS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_WEBHOOKS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_API_ACCESS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_CUSTOM_DOMAINS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_SSO: z.coerce.boolean().optional(),
+
+  // Client-visible mirrors (Next.js bundles NEXT_PUBLIC_* only)
+  NEXT_PUBLIC_FEATURE_AI_ANALYSIS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_DOCUMENT_OCR: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_ADVANCED_ANALYTICS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_WEBHOOKS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_API_ACCESS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_CUSTOM_DOMAINS: z.coerce.boolean().optional(),
+  NEXT_PUBLIC_FEATURE_SSO: z.coerce.boolean().optional(),
+
+  // Root `.env.example` aliases (optional)
+  FRONTEND_URL: z.string().url().optional(),
+  API_URL: z.string().url().optional(),
+  STORAGE_TYPE: z.enum(['local', 's3', 'r2']).optional(),
+  STORAGE_LOCAL_PATH: z.string().optional(),
 
   // ===========================================
   // RAILWAY-SPECIFIC
@@ -258,6 +285,41 @@ function buildEnvData(): Record<string, unknown> {
     const port = data.REDIS_PORT || 6379;
     const db = data.REDIS_DB || 0;
     data.REDIS_URL = `redis://${pwPart}${host}:${port}/${db}`;
+  }
+
+  if (!data.APP_URL && data.FRONTEND_URL) {
+    data.APP_URL = data.FRONTEND_URL;
+  }
+  if (!data.NEXT_PUBLIC_APP_URL && data.APP_URL) {
+    data.NEXT_PUBLIC_APP_URL = data.APP_URL;
+  }
+  if (!data.NEXT_PUBLIC_API_URL && data.API_URL) {
+    data.NEXT_PUBLIC_API_URL = data.API_URL;
+  }
+  if (!data.STORAGE_PROVIDER && data.STORAGE_TYPE) {
+    data.STORAGE_PROVIDER = data.STORAGE_TYPE;
+  }
+
+  const featurePairs: [string, string][] = [
+    ['FEATURE_AI_ANALYSIS', 'NEXT_PUBLIC_FEATURE_AI_ANALYSIS'],
+    ['FEATURE_DOCUMENT_OCR', 'NEXT_PUBLIC_FEATURE_DOCUMENT_OCR'],
+    ['FEATURE_ADVANCED_ANALYTICS', 'NEXT_PUBLIC_FEATURE_ADVANCED_ANALYTICS'],
+    ['FEATURE_WEBHOOKS', 'NEXT_PUBLIC_FEATURE_WEBHOOKS'],
+    ['FEATURE_API_ACCESS', 'NEXT_PUBLIC_FEATURE_API_ACCESS'],
+    ['FEATURE_CUSTOM_DOMAINS', 'NEXT_PUBLIC_FEATURE_CUSTOM_DOMAINS'],
+    ['FEATURE_SSO', 'NEXT_PUBLIC_FEATURE_SSO'],
+  ];
+  for (const [serverKey, publicKey] of featurePairs) {
+    if (data[publicKey] == null && data[serverKey] != null) {
+      data[publicKey] = data[serverKey];
+    }
+  }
+
+  if (!data.JWT_SECRET) {
+    data.JWT_SECRET =
+      data.NODE_ENV === 'development'
+        ? 'dev-secret-change-in-production-min-32-chars-long'
+        : null;
   }
 
   return data;

@@ -19,7 +19,7 @@
 | **L7** | **7** | **7** | **Completed 100%** |
 | **L8** | **7** | **7** | **Completed 100%** |
 | **L9** | **6** | **6** | **Completed 100%** |
-| L10–L35 | See below | 0 | Not started |
+| L10–L35 | See below | — | **Completed 100%** |
 
 ---
 
@@ -282,9 +282,187 @@
 | L20-6 | React Query errors easy to miss (`throwOnError: false`) | `getQueryErrorMessage`, `errorMessage` on tender hooks, `retry: 1` |
 | L20-7 | Fetch helpers untested | `test_layer20_fe_fetching.py` + `api-fetch.test.ts` |
 
-## Layers 21–35
+## Layer 21 — UI routes & dead links — 7 issues (completed)
 
-UI routes, UX, admin modules, shared package, DB, security, tests, tooling, email system, audit logs, storage, type drift — see [docs/AUDIT_STATUS.md](docs/AUDIT_STATUS.md).
+| ID | Issue | Fix |
+|----|-------|-----|
+| L21-1 | `/dashboard/tenders/new` linked but missing (historical) | Create page exists; `ROUTES.tenderNew` canonical |
+| L21-2 | `/admin/sign-in` vs `/admin/login` drift | `/admin/sign-in` + `/admin/login` redirect to `ROUTES.signIn` |
+| L21-3 | `/` vs `/landing` public path inconsistency | `/landing` → `/`; middleware + `isPublicAppPath` aligned |
+| L21-4 | Sidebar `/dashboard/organizations` 404 | Organizations page + `organizations-api.ts`; API `func` import |
+| L21-5 | Review nav `/dashboard/review` 404 | Nav → `/dashboard/tenders/review`; legacy redirect page |
+| L21-6 | `/dashboard/notifications` missing | Notifications page; bell in header loads API list |
+| L21-7 | Dead links untested | `routes.ts`, sitemap, 404 helpers; layer 21 tests |
+
+## Layer 22 — Dashboard UX & loading — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L22-1 | Dashboard blocked on onboarding check with generic loading | Contextual boot messages + `DashboardBootLoading` chrome |
+| L22-2 | Slow/failed onboarding API could hang dashboard forever | 8s timeout fail-open; errors allow access |
+| L22-3 | `RoleGuard` / `PermissionGuard` returned `null` while loading | `GuardLoadingPlaceholder` pulse skeleton |
+| L22-4 | Sidebar `layoutId` motion ignored reduced-motion preference | `useReducedMotion` + `sidebarLayoutTransition` |
+| L22-5 | Empty Suspense sidebar fallback | `SidebarSkeleton` + segment `loading.tsx` |
+| L22-6 | `GuestRoute` blank screen during auth redirect | `LoadingState` “Redirecting…” |
+| L22-7 | Dashboard home table spinner-only loading | `TableRowSkeleton` rows while tenders load |
+
+## Layer 23 — Admin modules — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L23-1 | `RealtimeQueueStatus` / `RealtimeMetrics` used hardcoded/random data | Props from `useRealtimeMetrics` + DB `queueStats` / analytics summary |
+| L23-2 | `SystemHealth` static mock components | `platform_system_health` + `SystemHealth` wired on analytics tab |
+| L23-3 | Admin API parsing scattered in hooks | `admin-platform-api.ts` parsers + `unwrapData` |
+| L23-4 | `use-admin.ts` assumed raw response shapes | Uses `parsePlatformUsersResponse`, queue, providers, failed jobs |
+| L23-5 | Queue cancel/pause/resume routes missing | `POST /admin/platform/queue/jobs/{id}/cancel|pause|resume` |
+| L23-6 | Audit logs tenant-only / wrong path for super admin | `GET /admin/platform/audit-logs` + FE route switch |
+| L23-7 | `MOCK_ROLES` disconnected from permission matrix | `ADMIN_ROLE_OPTIONS` from `ROLE_PERMISSIONS_MATRIX` |
+
+## Layer 24 — Shared package — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L24-1 | `tenderSchema` used `organizationId` vs API `tenant_id` | `tenantId` required; `organizationId` optional deprecated |
+| L24-2 | Tender mappers duplicated in web only | `@tendoriq/shared/tenders` (`mapTenderFromApi`, `mapTenderToApi`, formatters) |
+| L24-3 | `api-envelope` owned tender mapping | Re-exports shared tender helpers; `use-api` uses `ClientTender` |
+| L24-4 | `.env.example` keys not aligned with shared `env.ts` | `FRONTEND_URL`/`API_URL` aliases, dev JWT default, `NEXT_PUBLIC_FEATURE_*` |
+| L24-5 | Feature flags defined but not consumed in web | `feature-flags-client.ts` + `lib/feature-flags.ts` |
+| L24-6 | API prefix duplicated ad hoc | `API_ROUTE_PREFIX` in shared constants; `api-config` uses it |
+| L24-7 | SSO / advanced analytics always visible | Sidebar, sign-in `?org=`, profile SSO gated by flags |
+
+## Layer 25 — Database & migrations — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L25-1 | Docs claimed `create_all` on API startup | `docs/MYSQL_SETUP.md` + `docs/database-migrations.md`; `init_db` only pings DB |
+| L25-2 | Alembic first revision only created 2 admin tables | `20260522_admin_store` runs `Base.metadata.create_all` for full schema |
+| L25-3 | `layer1` migration failed on DBs that already had columns | Idempotent `migration_utils` + conditional index/column ops |
+| L25-4 | `alembic.ini` URL misleading vs runtime | Comment + `env.py` uses `settings.database_url_sync` |
+| L25-5 | Tender list/delete ignored `deleted_at` | `BaseRepository` filters active rows; soft delete on delete |
+| L25-6 | No documented migrate command | `pnpm --filter @tendoriq/api run db:migrate` / `alembic upgrade head` |
+| L25-7 | Admin store models overlapped partial migration | Single metadata migration includes `AIProvider` + `DismissedFailedJob` |
+
+## Layer 26 — Security (beyond RBAC) — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L26-1 | Any tenant member could mutate all tenders | `row_access.py` + `TenderService._assert_can_modify` (owner/admin/manager vs creator) |
+| L26-2 | Document delete lacked owner checks | `uploaded_by_id` in metadata; row check on files/documents DELETE |
+| L26-3 | CORS allowed `*` methods/headers | Explicit allow-lists in settings + `main.py` |
+| L26-4 | 500 responses could leak exception text | `expose_error_details` / dev-only `detail`; always `request_id` |
+| L26-5 | Production security headers incomplete | HSTS + CSP on API responses when `is_production` |
+| L26-6 | No centralized row-access policy module | `core/row_access.py` + unit tests |
+| L26-7 | `.env.example` missing CORS/security flags | Documented `CORS_*` and `EXPOSE_ERROR_DETAILS` |
+
+## Layer 27 — Testing & CI — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L27-1 | API tests mostly health-only / no contract coverage | `test_openapi_contract.py` + tenant auth integration tests |
+| L27-2 | Playwright `example.spec.ts` only | `e2e/public-routes.spec.ts` route matrix + auth redirect |
+| L27-3 | No FE↔BE path contract | `tests/contracts/fe_api_paths.json` + Vitest `api-contract.test.ts` |
+| L27-4 | Main `ci.yml` skipped API pytest | `test-api` job runs `pytest tests/unit tests/integration` |
+| L27-5 | Hooks/stores untested | `lib/query-error-message.ts` + Vitest unit tests (re-exported from `use-api`) |
+| L27-6 | Integration health test broken import | Fixed `test_health.py`; `tests/conftest.py` env defaults |
+| L27-7 | `organizations.py` syntax error blocked app import | Fixed docstring; [docs/testing.md](docs/testing.md) |
+
+## Layer 28 — Monorepo & tooling — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L28-1 | API excluded from pnpm workspace / inconsistent filters | `apps/*` workspace; scoped `@tendoriq/*` in root scripts and CI |
+| L28-2 | CI mixed `npm` and short `web` filters | `ci.yml` uses `pnpm` + `@tendoriq/web` throughout |
+| L28-3 | E2E workflow called missing `pnpm preview` | Web `preview` script; `automated-tests.yml` starts preview before Playwright |
+| L28-4 | `production-ready` required live secrets + checked `dist/` | Validates `.env.example`; asserts `apps/web/.next` after build |
+| L28-5 | `rm -rf` clean scripts fail on Windows | Shared package `clean` via Node; documented in monorepo guide |
+| L28-6 | Docker build lacked ignore rules | `apps/api/.dockerignore`; Dockerfile comment on requirements source |
+| L28-7 | Dual API client confusion | `@/lib/api` re-export shim + [docs/monorepo-tooling.md](docs/monorepo-tooling.md) |
+
+## Layer 29 — Email system (enterprise) — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L29-1 | Reset endpoint consumed token without updating password | `PasswordResetService.apply_new_password` + bcrypt in `core/passwords.py` |
+| L29-2 | DB users could not use password set via reset at login | `auth/login` verifies `preferences.password_hash` when set |
+| L29-3 | Docs referenced ARQ/Redis worker | [docs/EMAIL_SYSTEM.md](docs/EMAIL_SYSTEM.md) describes inline `email_process` |
+| L29-4 | Missing email encryption env in template | `ENCRYPTION_KEY`, `EMAIL_*` in `.env.example` |
+| L29-5 | FE↔API contract omitted email admin paths | Extended `fe_api_paths.json` |
+| L29-6 | Email seed failures only warned | Development startup logs migration hint on seed error |
+| L29-7 | Sign-in had no forgot-password link | Link on sign-in page; reset/forgot pages wired to API |
+
+## Layer 30 — Audit logs — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L30-1 | Tenant audit API returned empty user fields | `audit_log_to_dict` + `load_users_by_id` |
+| L30-2 | Audit routes lacked RBAC | `RequireAnalyticsView` on `/api/v1/audit/*` |
+| L30-3 | Platform list `total` was page size only | `func.count` + filter query params |
+| L30-4 | Super-admin export hit tenant-only `/audit/export` | `POST /admin/platform/audit-logs/export` |
+| L30-5 | `log_action` calls omitted required `action_type` | Default + fixes in permissions/safe-access |
+| L30-6 | No audit on login or tender delete | `_audit_tenant_login`, `tenant_audit.log_delete` |
+| L30-7 | Admin audit UI hooks bug + missing diff state | Fixed component order; map old/new values |
+
+## Layer 31 — File storage — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L31-1 | Signed URL helpers called without `await` | Awaited in files, documents, OCR, parsing, worker |
+| L31-2 | `local` provider still required boto3 | Filesystem backend under `STORAGE_LOCAL_PATH` |
+| L31-3 | Sync boto3 blocked event loop | `asyncio.to_thread` wrapper retained for S3/R2 |
+| L31-4 | Local dev could not complete presigned PUT flow | HMAC tokens + `/api/v1/files/blob/{key}` |
+| L31-5 | Cross-tenant storage key access possible | `assert_tenant_storage_key` on sensitive routes |
+| L31-6 | OCR/parsing used HTTP for all backends | `read_file()` fast-path when `is_local` |
+| L31-7 | Env/docs drift (`STORAGE_TYPE`) | `STORAGE_PROVIDER` in `.env.example`; [docs/storage.md](docs/storage.md) |
+
+## Layer 32 — Type drift — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L32-1 | Admin `UserRole` omitted `owner` / `member` | `@tendoriq/shared/roles` + `AdminConsoleRole` |
+| L32-2 | Duplicate plan normalization in web only | `@tendoriq/shared/plans`; billing bridge re-exports |
+| L32-3 | Onboarding `plan_pro` / `annual` vs Zod enum | `step4Schema` uses shared transforms |
+| L32-4 | Notification mapper only in web | `@tendoriq/shared/notifications` |
+| L32-5 | `AuthUser` duplicated session shape | `@tendoriq/shared/auth` `SessionUser` |
+| L32-6 | No documented type ownership | [docs/type-drift.md](docs/type-drift.md) |
+| L32-7 | Drift regressions untested | `test_layer32_type_drift.py`, `shared-type-drift.test.ts` |
+
+## Layer 33 — Audit coverage — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L33-1 | Tender create/update not audited | `_audit_tender_mutation` on POST/PATCH |
+| L33-2 | Document mutations under-logged | Audit on upload complete + delete |
+| L33-3 | Platform export fetched unbounded rows | `clamp_export_limit` + `.limit()` |
+| L33-4 | Tenant export unbounded | `AuditExportRequest.limit` + cap |
+| L33-5 | Admin UI hardcoded `limit: 100` | `audit-constants.ts` shared with API |
+| L33-6 | Tender delete audit swallowed errors | Warning log via `_audit_tender_mutation` |
+| L33-7 | No coverage doc/tests | [docs/audit-coverage.md](docs/audit-coverage.md), `test_layer33_audit_coverage.py` |
+
+## Layer 34 — Storage paths & signed URLs — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L34-1 | `./uploads` depended on process CWD | `resolve_storage_local_path` anchored to `apps/api` |
+| L34-2 | Windows/Linux path drift for relative env | Settings validator stores absolute `STORAGE_LOCAL_PATH` |
+| L34-3 | Client re-resolved path inconsistently | `resolved_storage_local_path` property |
+| L34-4 | Local upload dir missing on fresh clone | `ensure_local_storage_root()` in API lifespan |
+| L34-5 | Blob token rejected at expiry boundary | `STORAGE_TOKEN_CLOCK_SKEW_SECONDS` on verify |
+| L34-6 | Docs/env silent on path + skew | `docs/storage.md`, `.env.example` |
+| L34-7 | Regressions untested | `test_layer34_storage_paths.py` |
+
+## Layer 35 — Remaining type drift — 7 issues (completed)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| L35-1 | `use-api` Tender type drift | Re-export `ClientTender`; mappers from `@tendoriq/shared/tenders` |
+| L35-2 | UI `deadline`/`value` vs API `closingDate`/`budget` | Shared formatters + `ClientTender` fields on tender cards |
+| L35-3 | Strict analysis Zod rejected API JSON | `@tendoriq/shared/analysis` loose schema |
+| L35-4 | `keyFindings` vs `keyHighlights` mismatch | `analysis-mapper.ts` normalizes sections |
+| L35-5 | `mandatory_docs` / partial sections broke parse | Mapper defaults + alias handling |
+| L35-6 | Widespread optional `tenant_id` | `tenant_types.py`, UUID validation in `require_tenant_member` |
+| L35-7 | Untested drift | `test_layer35_type_drift.py`, Vitest mapper tests |
+
+**All 35 audit layers complete.**
 
 ---
 
@@ -300,4 +478,4 @@ JWT `tenant_id`, `X-Tenant-ID`, Clerk middleware conditional, tenders/analysis/b
 
 ---
 
-*Last updated: Layer 20 completed 7/7 (100%).*
+*Last updated: Layer 35 completed 7/7 (100%) — audit remediation complete.*

@@ -105,7 +105,7 @@ export function GuestRoute({ children }: GuestRouteProps) {
   }
 
   if (isAuthenticated) {
-    return null;
+    return <LoadingState message="Redirecting..." />;
   }
 
   return <>{children}</>;

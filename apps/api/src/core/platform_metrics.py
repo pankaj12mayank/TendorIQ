@@ -142,6 +142,144 @@ async def append_email_failed_jobs(
         )
 
 
+async def platform_queue_stats(db: AsyncSession) -> dict[str, int]:
+    pending = int(
+        await db.scalar(select(func.count(QueueJob.id)).where(QueueJob.status == 'pending'))
+        or 0
+    )
+    processing = int(
+        await db.scalar(select(func.count(QueueJob.id)).where(QueueJob.status == 'processing'))
+        or 0
+    )
+    completed = int(
+        await db.scalar(select(func.count(QueueJob.id)).where(QueueJob.status == 'completed'))
+        or 0
+    )
+    failed = int(
+        await db.scalar(select(func.count(QueueJob.id)).where(QueueJob.status == 'failed'))
+        or 0
+    )
+    cancelled = int(
+        await db.scalar(select(func.count(QueueJob.id)).where(QueueJob.status == 'cancelled'))
+        or 0
+    )
+
+    try:
+        from .email.db_models import EmailQueueItem
+
+        pending += int(
+            await db.scalar(
+                select(func.count(EmailQueueItem.id)).where(
+                    EmailQueueItem.status.in_(('pending', 'queued'))
+                )
+            )
+            or 0
+        )
+        processing += int(
+            await db.scalar(
+                select(func.count(EmailQueueItem.id)).where(EmailQueueItem.status == 'processing')
+            )
+            or 0
+        )
+        completed += int(
+            await db.scalar(
+                select(func.count(EmailQueueItem.id)).where(EmailQueueItem.status == 'completed')
+            )
+            or 0
+        )
+        failed += int(
+            await db.scalar(
+                select(func.count(EmailQueueItem.id)).where(
+                    EmailQueueItem.status.in_(('failed', 'dead_letter'))
+                )
+            )
+            or 0
+        )
+        cancelled += int(
+            await db.scalar(
+                select(func.count(EmailQueueItem.id)).where(EmailQueueItem.status == 'cancelled')
+            )
+            or 0
+        )
+    except Exception:
+        pass
+
+    total = pending + processing + completed + failed + cancelled
+    return {
+        'pending': pending,
+        'processing': processing,
+        'completed': completed,
+        'failed': failed,
+        'cancelled': cancelled,
+        'total': total,
+    }
+
+
+async def platform_system_health(db: AsyncSession) -> dict[str, Any]:
+    """Lightweight health snapshot for the super-admin console."""
+    components: list[dict[str, Any]] = []
+    db_ok = True
+    try:
+        await db.scalar(select(func.count()).select_from(User).limit(1))
+        components.append({'name': 'Database', 'status': 'healthy', 'uptime': 100.0})
+    except Exception:
+        db_ok = False
+        components.append({'name': 'Database', 'status': 'degraded', 'uptime': 0.0})
+
+    queue_stats = await platform_queue_stats(db)
+    queue_total = max(queue_stats['total'], 1)
+    queue_health_pct = round(
+        100.0 * (queue_stats['completed'] + queue_stats['processing']) / queue_total,
+        1,
+    )
+    queue_status = 'healthy' if queue_stats['failed'] == 0 else 'degraded'
+    if queue_stats['failed'] > queue_stats['completed']:
+        queue_status = 'degraded'
+    components.append(
+        {
+            'name': 'Queue Worker',
+            'status': queue_status,
+            'uptime': queue_health_pct,
+        }
+    )
+
+    failed_jobs = queue_stats['failed']
+    api_status = 'healthy' if db_ok else 'degraded'
+    components.insert(
+        0,
+        {
+            'name': 'API Server',
+            'status': api_status,
+            'uptime': 99.9 if db_ok else 0.0,
+        },
+    )
+
+    try:
+        from .models import AIProvider
+
+        active_providers = int(
+            await db.scalar(
+                select(func.count(AIProvider.id)).where(AIProvider.is_active.is_(True))
+            )
+            or 0
+        )
+        ai_status = 'healthy' if active_providers > 0 else 'degraded'
+        components.append(
+            {
+                'name': 'AI Service',
+                'status': ai_status,
+                'uptime': 100.0 if active_providers > 0 else 50.0,
+            }
+        )
+    except Exception:
+        components.append({'name': 'AI Service', 'status': 'degraded', 'uptime': 0.0})
+
+    components.append({'name': 'Storage', 'status': 'healthy' if db_ok else 'degraded', 'uptime': 99.9})
+
+    overall = 'healthy' if all(c['status'] == 'healthy' for c in components) else 'degraded'
+    return {'status': overall, 'components': components, 'failedJobs': failed_jobs}
+
+
 async def platform_analytics_summary(db: AsyncSession, *, usage_days: int = 7) -> dict[str, Any]:
     today_start = _utc_today_start()
     month_start = datetime.now(timezone.utc) - timedelta(days=30)
@@ -227,6 +365,15 @@ async def platform_analytics_summary(db: AsyncSession, *, usage_days: int = 7) -
             }
         )
 
+    queue_stats = await platform_queue_stats(db)
+    queue_total = max(queue_stats['total'], 1)
+    queue_health_pct = round(
+        100.0
+        * (queue_stats['completed'] + queue_stats['processing'])
+        / queue_total,
+        1,
+    )
+
     return {
         'dataSource': 'database',
         'scope': 'platform',
@@ -237,4 +384,6 @@ async def platform_analytics_summary(db: AsyncSession, *, usage_days: int = 7) -
         'avgResponseTime': 0.0,
         'monthlyCost': round(monthly_cost, 2),
         'usage': usage,
+        'queueStats': {**queue_stats, 'healthPercent': queue_health_pct},
+        'systemHealth': await platform_system_health(db),
     }

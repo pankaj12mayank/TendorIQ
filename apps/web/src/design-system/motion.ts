@@ -46,3 +46,10 @@ export const pageTransition = {
   exit: { opacity: 0, y: -8 },
   transition: easeTransition,
 };
+
+/** Instant transitions when user prefers reduced motion (pass from `useReducedMotion`). */
+export const reducedMotionTransition = { duration: 0 };
+
+export function sidebarLayoutTransition(reducedMotion: boolean) {
+  return reducedMotion ? reducedMotionTransition : springTransition;
+}

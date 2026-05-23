@@ -1,15 +1,7 @@
-export interface AuthUser {
-  id: string;
-  email: string;
-  name: string;
-  imageUrl?: string;
-  /** Platform (`super_admin`) or display role from API. */
-  role?: string;
-  /** Tenant membership role for RBAC (`owner`, `admin`, `manager`, …). */
-  membershipRole?: string;
-  tenantId?: string;
-  permissions?: string[];
-}
+import type { SessionUser } from '@tendoriq/shared/auth';
+
+/** @deprecated Use SessionUser from @tendoriq/shared/auth */
+export type AuthUser = SessionUser;
 
 const TOKEN_KEY = 'tenderiq_auth_token';
 const REFRESH_KEY = 'tenderiq_auth_refresh';

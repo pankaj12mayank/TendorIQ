@@ -1,11 +1,11 @@
-﻿\"\"\"Organizations API Router\"\"\"
+﻿"""Organizations API Router"""
 
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..dependencies.auth import CurrentUser, TenantID
 from ..schemas.base import create_response, PaginatedResponse, PaginationMeta

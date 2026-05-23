@@ -46,18 +46,24 @@ async def process_ocr_job(ctx: dict) -> dict:
 
         storage_key = document.storage_key
 
-        signed_url_result = storage_service.generate_signed_download_url(
-            storage_key=storage_key,
-            expires_seconds=3600,
-        )
+        if storage_service.is_local:
+            read_result = await storage_service.read_file(storage_key)
+            if not read_result.get('success'):
+                raise Exception(f'Failed to read file: {read_result.get("error")}')
+            file_bytes = read_result['content']
+        else:
+            signed_url_result = await storage_service.generate_signed_download_url(
+                storage_key=storage_key,
+                expires_seconds=3600,
+            )
 
-        if not signed_url_result.get('success'):
-            raise Exception(f'Failed to get download URL: {signed_url_result.get("error")}')
+            if not signed_url_result.get('success'):
+                raise Exception(f'Failed to get download URL: {signed_url_result.get("error")}')
 
-        import httpx
-        file_response = httpx.get(signed_url_result['download_url'], timeout=60.0)
-        file_response.raise_for_status()
-        file_bytes = file_response.content
+            import httpx
+            file_response = httpx.get(signed_url_result['download_url'], timeout=60.0)
+            file_response.raise_for_status()
+            file_bytes = file_response.content
 
         is_pdf = document.file_type.lower() in ('pdf', 'pdf/a')
 

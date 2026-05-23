@@ -2,7 +2,11 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+
+from ...core.logging import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dependencies.rbac_deps import (
@@ -22,6 +26,7 @@ from ..schemas.tender import (
     TenderUpdate,
 )
 from ..services.tender_service import TenderService
+from ..dependencies.audit import tenant_audit
 from ...core.database import get_db
 
 router = APIRouter(
@@ -29,6 +34,60 @@ router = APIRouter(
     tags=['Tenders'],
     dependencies=[Depends(require_tenant_member)],
 )
+logger = get_logger('tenders_api')
+
+
+async def _audit_tender_mutation(
+    db: AsyncSession,
+    current_user,
+    *,
+    action: str,
+    tender_id: str,
+    resource_name: str | None = None,
+    old_values: dict | None = None,
+    new_values: dict | None = None,
+    request: Request | None = None,
+) -> None:
+    try:
+        if action == 'create':
+            await tenant_audit.log_create(
+                db,
+                UUID(current_user.tenant_id),
+                UUID(current_user.user_id),
+                resource_type='tender',
+                resource_id=UUID(tender_id),
+                action_type='tender',
+                resource_name=resource_name,
+                values=new_values,
+                request=request,
+            )
+        elif action == 'update':
+            await tenant_audit.log_update(
+                db,
+                UUID(current_user.tenant_id),
+                UUID(current_user.user_id),
+                resource_type='tender',
+                resource_id=UUID(tender_id),
+                action_type='tender',
+                resource_name=resource_name,
+                old_values=old_values,
+                new_values=new_values,
+                request=request,
+            )
+        else:
+            await tenant_audit.log_delete(
+                db,
+                UUID(current_user.tenant_id),
+                UUID(current_user.user_id),
+                resource_type='tender',
+                resource_id=UUID(tender_id),
+                action_type='tender',
+                resource_name=resource_name,
+                old_values=old_values,
+                request=request,
+            )
+    except Exception as exc:
+        logger.warning('tender audit log failed tender_id=%s action=%s: %s', tender_id, action, exc)
 
 
 @router.get('', response_model=PaginatedResponse)
@@ -84,6 +143,7 @@ async def get_tender(
 async def create_tender(
     tender_data: TenderCreate,
     current_user: RequireTenderCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     service = TenderService(db=db, tenant_id=current_user.tenant_id, user_id=current_user.user_id)
@@ -91,6 +151,15 @@ async def create_tender(
     payload = tender_data.model_dump(exclude_none=True)
     payload.pop('organization_id', None)
     tender = await service.create_tender(payload)
+    await _audit_tender_mutation(
+        db,
+        current_user,
+        action='create',
+        tender_id=tender['id'],
+        resource_name=tender.get('title'),
+        new_values={'title': tender.get('title'), 'status': tender.get('status')},
+        request=request,
+    )
     return create_response(tender)
 
 
@@ -99,11 +168,18 @@ async def update_tender(
     tender_id: str,
     tender_data: TenderUpdate,
     current_user: RequireTenderUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     service = TenderService(db=db, tenant_id=current_user.tenant_id, user_id=current_user.user_id)
 
-    tender = await service.update_tender(tender_id, tender_data.model_dump(exclude_unset=True))
+    before = await service.get_tender(tender_id)
+    patch = tender_data.model_dump(exclude_unset=True)
+    tender = await service.update_tender(
+        tender_id,
+        patch,
+        membership_role=current_user.membership_role,
+    )
 
     if not tender:
         raise HTTPException(
@@ -111,6 +187,17 @@ async def update_tender(
             detail='Tender not found',
         )
 
+    old_values = {k: before.get(k) for k in patch.keys()} if before else {}
+    await _audit_tender_mutation(
+        db,
+        current_user,
+        action='update',
+        tender_id=tender_id,
+        resource_name=tender.get('title'),
+        old_values=old_values,
+        new_values={k: tender.get(k) for k in patch.keys()},
+        request=request,
+    )
     return create_response(tender)
 
 
@@ -118,14 +205,29 @@ async def update_tender(
 async def delete_tender(
     tender_id: str,
     current_user: RequireTenderDelete,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> None:
     service = TenderService(db=db, tenant_id=current_user.tenant_id, user_id=current_user.user_id)
+    existing = await service.get_tender(tender_id)
 
-    success = await service.delete_tender(tender_id)
+    success = await service.delete_tender(
+        tender_id,
+        membership_role=current_user.membership_role,
+    )
 
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Tender not found',
         )
+
+    await _audit_tender_mutation(
+        db,
+        current_user,
+        action='delete',
+        tender_id=tender_id,
+        resource_name=existing.get('title') if existing else None,
+        old_values={'title': existing.get('title')} if existing else None,
+        request=request,
+    )

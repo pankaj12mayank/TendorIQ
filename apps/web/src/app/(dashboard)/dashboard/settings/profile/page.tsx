@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrentUser } from '@/hooks/use-auth';
+import { isAppFeatureEnabled } from '@/lib/feature-flags';
 import { useSsoAdmin } from '@/hooks/use-sso';
 
 export default function ProfileSettingsPage() {
@@ -37,31 +38,33 @@ export default function ProfileSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Enterprise SSO</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {isLoading && <p className="text-muted-foreground">Loading SSO settings...</p>}
-          {error && <p className="text-destructive">{error}</p>}
-          {!isLoading && !error && (
-            <>
-              <p>
-                <span className="text-muted-foreground">Status: </span>
-                <span className="font-medium">{config?.enabled ? 'Enabled' : 'Disabled'}</span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Provider: </span>
-                <span className="font-medium">{config?.provider ?? 'none'}</span>
-              </p>
-              <p className="text-muted-foreground">
-                Configure SSO under organization settings (requires org:update). Sign-in URL:{' '}
-                <code className="text-xs">/sign-in?org=&lt;slug&gt;</code>
-              </p>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {isAppFeatureEnabled('sso') && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Enterprise SSO</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {isLoading && <p className="text-muted-foreground">Loading SSO settings...</p>}
+            {error && <p className="text-destructive">{error}</p>}
+            {!isLoading && !error && (
+              <>
+                <p>
+                  <span className="text-muted-foreground">Status: </span>
+                  <span className="font-medium">{config?.enabled ? 'Enabled' : 'Disabled'}</span>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Provider: </span>
+                  <span className="font-medium">{config?.provider ?? 'none'}</span>
+                </p>
+                <p className="text-muted-foreground">
+                  Configure SSO under organization settings (requires org:update). Sign-in URL:{' '}
+                  <code className="text-xs">/sign-in?org=&lt;slug&gt;</code>
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

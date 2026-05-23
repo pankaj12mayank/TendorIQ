@@ -113,87 +113,11 @@ export function parsePaginated<T>(
   };
 }
 
-export interface ApiTender {
-  id: string;
-  title: string;
-  description?: string;
-  status: string;
-  budget?: number | null;
-  currency?: string;
-  closingDate?: string | null;
-  closing_date?: string | null;
-  organizationId?: string;
-  organization_id?: string;
-  tenant_id?: string;
-  createdAt?: string;
-  created_at?: string;
-  updatedAt?: string;
-  updated_at?: string;
-}
-
-export function mapTenderFromApi(raw: ApiTender): {
-  id: string;
-  title: string;
-  description: string;
-  status: 'draft' | 'published' | 'closed' | 'cancelled' | 'awarded';
-  budget: number | null;
-  currency: string;
-  closingDate: string | null;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-} {
-  const status = (raw.status || 'draft') as 'draft' | 'published' | 'closed' | 'cancelled' | 'awarded';
-  const org =
-    raw.organizationId ??
-    raw.organization_id ??
-    (raw.tenant_id != null ? String(raw.tenant_id) : '');
-  return {
-    id: String(raw.id),
-    title: raw.title ?? '',
-    description: raw.description ?? '',
-    status,
-    budget: raw.budget ?? null,
-    currency: raw.currency ?? 'USD',
-    closingDate: toIso(raw.closingDate ?? raw.closing_date),
-    organizationId: org,
-    createdAt: toIso(raw.createdAt ?? raw.created_at) ?? new Date().toISOString(),
-    updatedAt: toIso(raw.updatedAt ?? raw.updated_at) ?? new Date().toISOString(),
-  };
-}
-
-export function mapTenderToApi(
-  input: Partial<{
-    title: string;
-    description: string;
-    status: string;
-    budget: number | null;
-    currency: string;
-    closingDate: string | null;
-  }>
-): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
-  if (input.title !== undefined) body.title = input.title;
-  if (input.description !== undefined) body.description = input.description;
-  if (input.status !== undefined) body.status = input.status;
-  if (input.budget !== undefined) body.budget = input.budget;
-  if (input.currency !== undefined) body.currency = input.currency;
-  if (input.closingDate !== undefined) body.closing_date = input.closingDate;
-  return body;
-}
-
-/** Display helpers for tender list cards */
-export function formatTenderDeadline(tender: { closingDate?: string | null }): string {
-  if (!tender.closingDate) return '—';
-  try {
-    return new Date(tender.closingDate).toLocaleDateString();
-  } catch {
-    return '—';
-  }
-}
-
-export function formatTenderValue(tender: { budget?: number | null; currency?: string }): string {
-  if (tender.budget == null) return '—';
-  const cur = tender.currency ?? 'USD';
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(tender.budget);
-}
+export {
+  mapTenderFromApi,
+  mapTenderToApi,
+  formatTenderDeadline,
+  formatTenderValue,
+  type ApiTender,
+  type ClientTender,
+} from '@tendoriq/shared/tenders';

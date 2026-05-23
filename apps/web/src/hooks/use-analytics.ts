@@ -4,6 +4,12 @@
  */
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { api } from '@/lib/api-client';
+import {
+  parsePlatformAnalyticsSummary,
+  type PlatformAnalyticsSummary,
+  type PlatformHealthComponent,
+  type PlatformQueueStats,
+} from '@/lib/admin-platform-api';
 import { useAnalyticsStore } from '@/components/admin/store';
 import { UsageMetric, AnalyticsCard } from '@/components/admin/types';
 import { ANALYTICS_CARDS } from '@/components/admin/constants';
@@ -36,16 +42,8 @@ export function useAnalyticsApi(): UseAnalyticsApiReturn {
     setIsError(false);
     setError(null);
     try {
-      const res = await api.get<{
-        scope?: string;
-        dataSource?: string;
-        totalUsers: number;
-        apiCallsToday: number;
-        activeJobs: number;
-        errorRate: number;
-        monthlyCost: number;
-        usage: UsageMetric[];
-      }>('/api/v1/admin/platform/analytics/summary');
+      const raw = await api.get<unknown>('/api/v1/admin/platform/analytics/summary');
+      const res = parsePlatformAnalyticsSummary(raw);
 
       setMetrics({
         totalUsers: res.totalUsers,
@@ -143,31 +141,38 @@ interface UseRealtimeMetricsReturn {
   activeJobs: number;
   errorRate: number;
   avgResponseTime: number;
+  queueStats: PlatformQueueStats | null;
+  systemHealth: PlatformHealthComponent[];
+  isLoading: boolean;
+  refresh: () => Promise<void>;
   subscribe: () => void;
   unsubscribe: () => void;
 }
 
 export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
   const { metrics } = useAnalyticsStore();
-  const [activeJobs, setActiveJobs] = useState(0);
-  const [errorRate, setErrorRate] = useState(0);
-  const [avgResponseTime, setAvgResponseTime] = useState(0);
+  const [summary, setSummary] = useState<PlatformAnalyticsSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const intervalRef = useRef<number | undefined>(undefined);
 
-  const subscribe = useCallback(() => {
-    intervalRef.current = window.setInterval(async () => {
-      try {
-        const res = await api.get<{
-          activeJobs?: number;
-          errorRate?: number;
-          avgResponseTime?: number;
-        }>('/api/v1/admin/platform/analytics/summary');
-        setActiveJobs(res.activeJobs ?? 0);
-        setErrorRate(res.errorRate ?? 0);
-        setAvgResponseTime(res.avgResponseTime ?? 0);
-      } catch {}
-    }, 30000);
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const raw = await api.get<unknown>('/api/v1/admin/platform/analytics/summary');
+      setSummary(parsePlatformAnalyticsSummary(raw));
+    } catch {
+      /* keep last snapshot */
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  const subscribe = useCallback(() => {
+    void refresh();
+    intervalRef.current = window.setInterval(() => {
+      void refresh();
+    }, 30000);
+  }, [refresh]);
 
   const unsubscribe = useCallback(() => {
     if (intervalRef.current !== undefined) {
@@ -181,10 +186,14 @@ export function useRealtimeMetrics(): UseRealtimeMetricsReturn {
   }, [unsubscribe]);
 
   return {
-    apiCalls: metrics.apiCallsToday,
-    activeJobs,
-    errorRate,
-    avgResponseTime,
+    apiCalls: summary?.apiCallsToday ?? metrics.apiCallsToday,
+    activeJobs: summary?.activeJobs ?? 0,
+    errorRate: summary?.errorRate ?? 0,
+    avgResponseTime: summary?.avgResponseTime ?? 0,
+    queueStats: summary?.queueStats ?? null,
+    systemHealth: summary?.systemHealth?.components ?? [],
+    isLoading,
+    refresh,
     subscribe,
     unsubscribe,
   };

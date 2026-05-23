@@ -18,6 +18,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTenantStore } from '@/stores/tenant-store';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
+import { ROUTES } from '@/lib/routes';
 
 export function Header() {
   const user = useCurrentUser();
@@ -70,6 +72,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
+        {!isSuperAdmin(user?.role) && <NotificationBell />}
         <Button
           variant="ghost"
           size="icon"
@@ -104,7 +107,7 @@ export function Header() {
               <Link href={settingsHref}>Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/dashboard/settings/profile">Profile</Link>
+              <Link href={ROUTES.settingsProfile}>Profile</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

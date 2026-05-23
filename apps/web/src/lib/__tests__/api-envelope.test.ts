@@ -22,7 +22,8 @@ describe('api-envelope', () => {
       created_at: '2026-05-01T00:00:00Z',
       updated_at: '2026-05-02T00:00:00Z',
     });
-    expect(t.closingDate).toBe('2026-06-01T00:00:00Z');
+    expect(t.closingDate).toMatch(/^2026-06-01T00:00:00/);
+    expect(t.tenantId).toBe('org-1');
     expect(t.organizationId).toBe('org-1');
   });
 

@@ -15,6 +15,8 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from ...core.config import get_settings, settings
 from ...core.auth import AuthService, AuthContext, ClerkAuthService
 from ...core.account_bootstrap import ensure_demo_account, resolve_db_user_session
+from ...core.passwords import verify_password
+from ..dependencies.audit import audit_logger
 from ...core.clerk_bootstrap import ensure_clerk_user, resolve_clerk_tenant_session
 from ...core.database import get_db
 from ...core.logging import get_logger
@@ -145,9 +147,32 @@ async def _resolve_display_name(
 
 # ── Public endpoints (no auth required) ─────────────────────────────
 
+async def _audit_tenant_login(
+    db: AsyncSession,
+    tenant_id: str,
+    user_id: str,
+    email: str,
+    http_request: Request,
+) -> None:
+    try:
+        await audit_logger.log_action(
+            db,
+            UUID(tenant_id),
+            UUID(user_id),
+            action='login',
+            action_type='auth',
+            resource_type='session',
+            resource_name=email,
+            request=http_request,
+        )
+    except Exception:
+        logger.exception('Failed to record login audit event')
+
+
 @router.post('/login', response_model=LoginResponse)
 async def login(
     request: LoginRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Unified email/password login — Super Admin, Demo User (tenant bootstrap), or DB user."""
@@ -205,7 +230,7 @@ async def login(
             tenant_id=tenant_id,
             membership_role=membership_role,
         )
-        return _login_response(
+        response = _login_response(
             'Login successful',
             _login_user_payload(
                 user_id=user_id,
@@ -218,10 +243,20 @@ async def login(
             ),
             tokens,
         )
+        await _audit_tenant_login(db, tenant_id, user_id, demo['email'], http_request)
+        return response
 
     session = await resolve_db_user_session(db, request.email)
     if session:
         user_id, email, tenant_id, membership_role = session
+        user_row = await db.get(User, UUID(user_id))
+        if user_row:
+            stored_hash = (user_row.preferences or {}).get('password_hash')
+            if stored_hash and not verify_password(request.password, stored_hash):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail='Invalid email or password',
+                )
         tokens = issue_session_tokens(
             user_id=user_id,
             email=email,
@@ -230,7 +265,7 @@ async def login(
             membership_role=membership_role,
         )
         display_name = await _resolve_display_name(db, user_id, email, False)
-        return _login_response(
+        response = _login_response(
             'Login successful',
             _login_user_payload(
                 user_id=user_id,
@@ -243,6 +278,8 @@ async def login(
             ),
             tokens,
         )
+        await _audit_tenant_login(db, tenant_id, user_id, email, http_request)
+        return response
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

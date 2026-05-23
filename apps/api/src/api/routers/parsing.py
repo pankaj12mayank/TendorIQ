@@ -45,18 +45,24 @@ async def parse_document(
         raise HTTPException(status_code=400, detail='Document is being processed')
 
     try:
-        signed_result = storage_service.generate_signed_download_url(
-            storage_key=doc.storage_key,
-            expires_seconds=3600,
-        )
+        if storage_service.is_local:
+            read_result = await storage_service.read_file(doc.storage_key)
+            if not read_result.get('success'):
+                raise HTTPException(status_code=500, detail='Failed to read file')
+            file_bytes = read_result['content']
+        else:
+            signed_result = await storage_service.generate_signed_download_url(
+                storage_key=doc.storage_key,
+                expires_seconds=3600,
+            )
 
-        if not signed_result.get('success'):
-            raise HTTPException(status_code=500, detail='Failed to get file')
+            if not signed_result.get('success'):
+                raise HTTPException(status_code=500, detail='Failed to get file')
 
-        import httpx
-        response = httpx.get(signed_result['download_url'], timeout=120.0)
-        response.raise_for_status()
-        file_bytes = response.content
+            import httpx
+            response = httpx.get(signed_result['download_url'], timeout=120.0)
+            response.raise_for_status()
+            file_bytes = response.content
 
         parsed_doc, chunking_result = await parser_service.parse(
             file_bytes=file_bytes,

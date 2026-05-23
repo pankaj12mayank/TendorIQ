@@ -27,7 +27,21 @@ Track fixes by audit layer. **Issue count = fixed count** per layer when marked 
 | L18 | Enterprise SSO | 7 | 7 | **Completed 100%** |
 | L19 | API response consistency | 7 | 7 | **Completed 100%** |
 | L20 | Frontend data fetching | 7 | 7 | **Completed 100%** |
-| L21–L35 | See AUDIT_REPORT.md | — | — | Not started |
+| L21 | UI routes & dead links | 7 | 7 | **Completed 100%** |
+| L22 | Dashboard UX & loading | 7 | 7 | **Completed 100%** |
+| L23 | Admin modules | 7 | 7 | **Completed 100%** |
+| L24 | Shared package | 7 | 7 | **Completed 100%** |
+| L25 | Database & migrations | 7 | 7 | **Completed 100%** |
+| L26 | Security (beyond RBAC) | 7 | 7 | **Completed 100%** |
+| L27 | Testing & CI | 7 | 7 | **Completed 100%** |
+| L28 | Monorepo & tooling | 7 | 7 | **Completed 100%** |
+| L29 | Email system (enterprise) | 7 | 7 | **Completed 100%** |
+| L30 | Audit logs | 7 | 7 | **Completed 100%** |
+| L31 | File storage | 7 | 7 | **Completed 100%** |
+| L32 | Type drift | 7 | 7 | **Completed 100%** |
+| L33 | Audit coverage | 7 | 7 | **Completed 100%** |
+| L34 | Storage paths & signed URLs | 7 | 7 | **Completed 100%** |
+| L35 | Remaining type drift | 7 | 7 | **Completed 100%** |
 
 ## Layer 1 — Completed items
 
@@ -305,3 +319,213 @@ See [ROLES.md](./ROLES.md).
 | L20-7 | Tests `test_layer20_fe_fetching.py` + `api-fetch.test.ts` |
 
 **Layer 20 completed: 7/7 issues fixed (100%).**
+
+## Layer 21 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L21-1 | `/dashboard/tenders/new` create page present (L11); nav uses canonical `ROUTES` |
+| L21-2 | `/admin/sign-in` redirects to `/sign-in`; `/admin/login` uses `ROUTES.signIn` |
+| L21-3 | `/landing` redirects to `/`; public paths in middleware + `isPublicAppPath` |
+| L21-4 | Added `/dashboard/organizations` page (API-backed); fixed `organizations.py` `func` import |
+| L21-5 | Review nav → `/dashboard/tenders/review`; legacy `/dashboard/review` redirect |
+| L21-6 | Added `/dashboard/notifications` page; header `NotificationBell` + view-all link |
+| L21-7 | `lib/routes.ts` + tests `test_layer21_routes.py` / `routes.test.ts`; sitemap auth paths |
+
+**Layer 21 completed: 7/7 issues fixed (100%).**
+
+## Layer 22 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L22-1 | Dashboard boot uses contextual messages + `DashboardBootLoading` shell (not blank spinner only) |
+| L22-2 | Onboarding status check fails open after 8s timeout (no infinite hang on slow API) |
+| L22-3 | `RoleGuard` / `PermissionGuard` show `GuardLoadingPlaceholder` instead of `null` |
+| L22-4 | Sidebar `layoutId` animation respects `prefers-reduced-motion` via `useReducedMotion` |
+| L22-5 | `SidebarSkeleton` for Suspense fallback + `(dashboard)/loading.tsx` segment loader |
+| L22-6 | `GuestRoute` shows loading while redirecting authenticated users |
+| L22-7 | Home dashboard table uses `TableRowSkeleton`; tests `test_layer22_dashboard_ux.py` |
+
+**Layer 22 completed: 7/7 issues fixed (100%).**
+
+## Layer 23 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L23-1 | `RealtimeQueueStatus` / `RealtimeMetrics` consume live `queueStats` + analytics summary (no random intervals) |
+| L23-2 | `platform_system_health` + `SystemHealth` on admin analytics tab |
+| L23-3 | `admin-platform-api.ts` central parsers with envelope unwrap |
+| L23-4 | `use-admin.ts` uses platform parsers for users, queue, providers, failed jobs |
+| L23-5 | Queue `cancel` / `pause` / `resume` routes on `admin_platform` router |
+| L23-6 | Super-admin audit via `GET /admin/platform/audit-logs` |
+| L23-7 | `ADMIN_ROLE_OPTIONS` from `ROLE_PERMISSIONS_MATRIX`; tests layer 23 |
+
+**Layer 23 completed: 7/7 issues fixed (100%).**
+
+## Layer 24 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L24-1 | `tenderSchema.tenantId` replaces required `organizationId`; legacy field optional |
+| L24-2 | `packages/shared/src/tenders.ts` canonical API↔client mapping |
+| L24-3 | Web `api-envelope` re-exports shared tenders; `Tender` type = `ClientTender` |
+| L24-4 | `env.ts` MySQL URL builder + `FRONTEND_URL`/`API_URL`/`STORAGE_TYPE` aliases + feature mirror |
+| L24-5 | `feature-flags-client.ts` (NEXT_PUBLIC only) + `apps/web/src/lib/feature-flags.ts` |
+| L24-6 | `API_ROUTE_PREFIX` constant; `apiUrl()` normalizes `/tenders` → `/api/v1/tenders` |
+| L24-7 | Nav analytics + SSO UI respect `isAppFeatureEnabled`; tests layer 24 |
+
+**Layer 24 completed: 7/7 issues fixed (100%).**
+
+## Layer 25 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L25-1 | `init_db` verifies connection only; migration docs replace startup `create_all` myth |
+| L25-2 | `20260522_admin_store` creates full schema from `Base.metadata` |
+| L25-3 | `alembic/migration_utils.py` + idempotent `layer1` refinements |
+| L25-4 | `alembic.ini` documents runtime URL override via `env.py` |
+| L25-5 | `soft_delete.py` + `BaseRepository` active-only queries and soft deletes |
+| L25-6 | `docs/database-migrations.md`; `db:migrate` script on `@tendoriq/api` |
+| L25-7 | Platform admin tables included in metadata migration (no partial overlap) |
+
+**Layer 25 completed: 7/7 issues fixed (100%).**
+
+## Layer 26 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L26-1 | `can_modify_tenant_resource` — managers+ edit any tenant tender; members only own |
+| L26-2 | Tender PATCH/DELETE return 403 when not owner (unless manager role) |
+| L26-3 | CORS methods/headers explicit lists (no default `*`) |
+| L26-4 | Global 500 handler includes `request_id`; `detail` only when `expose_error_details` |
+| L26-5 | Production HSTS + restrictive CSP on API via `SecurityHeadersMiddleware` |
+| L26-6 | Document uploads store `uploaded_by_id`; delete routes enforce row access |
+| L26-7 | Tests `test_layer26_security.py`, `test_row_access.py` |
+
+**Layer 26 completed: 7/7 issues fixed (100%).**
+
+## Layer 27 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L27-1 | OpenAPI + anonymous-access contract tests for core tenant routes |
+| L27-2 | Playwright public route matrix (`public-routes.spec.ts`) |
+| L27-3 | Shared `fe_api_paths.json` validated from Vitest and OpenAPI |
+| L27-4 | `ci.yml` `test-api` job; web Vitest runs with `--run` |
+| L27-5 | `query-error-message.ts` + Vitest unit tests |
+| L27-6 | `tests/conftest.py`; integration tests fixed |
+| L27-7 | `docs/testing.md`; `organizations.py` import syntax fix |
+
+**Layer 27 completed: 7/7 issues fixed (100%).**
+
+## Layer 28 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L28-1 | `pnpm-workspace.yaml` includes `apps/*`; root/Turbo scripts use `@tendoriq/web` / `@tendoriq/api` filters |
+| L28-2 | `ci.yml` uses scoped pnpm filters consistently (no `npm install`) |
+| L28-3 | `automated-tests.yml` E2E uses `pnpm --filter @tendoriq/web preview`; web `preview` script added |
+| L28-4 | `production-ready.yml` validates `.env.example` + `.next` build output (not `dist` / live secrets) |
+| L28-5 | `@tendoriq/shared` `clean` script uses Node (Windows-safe); root `clean` already cross-platform |
+| L28-6 | API `Dockerfile` documented; `.dockerignore` excludes tests and caches |
+| L28-7 | [docs/monorepo-tooling.md](./monorepo-tooling.md); `@/lib/api` documented as api-client shim |
+
+**Layer 28 completed: 7/7 issues fixed (100%).**
+
+## Layer 29 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L29-1 | `POST /email/auth/reset-password` applies bcrypt hash via `apply_new_password` |
+| L29-2 | DB login verifies `preferences.password_hash` when present |
+| L29-3 | `EMAIL_SYSTEM.md` documents in-process `email_process` queue (not ARQ) |
+| L29-4 | `.env.example` documents `ENCRYPTION_KEY` and email provider settings |
+| L29-5 | `fe_api_paths.json` includes enterprise email + auth reset paths |
+| L29-6 | Startup logs email seed failures clearly in development |
+| L29-7 | Sign-in links to `/forgot-password`; `test_layer29_email_system.py` |
+
+**Layer 29 completed: 7/7 issues fixed (100%).**
+
+## Layer 30 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L30-1 | Shared `audit_present.py` enriches entries with user name/email/role |
+| L30-2 | Tenant `/audit/*` routes require `analytics:view` (`RequireAnalyticsView`) |
+| L30-3 | Platform `audit-logs` returns real `total` count; optional `tenant_id` / `action_type` filters |
+| L30-4 | `POST /admin/platform/audit-logs/export` for super-admin CSV/JSON export |
+| L30-5 | Fixed `AuditLogger.log_action` callers missing `action_type` |
+| L30-6 | Login + tender delete write audit rows; admin export uses platform path |
+| L30-7 | FE audit module: hooks order fixed; `previousState` / `newState` mapped |
+
+**Layer 30 completed: 7/7 issues fixed (100%).**
+
+## Layer 31 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L31-1 | All `storage_service` async methods awaited in files/documents/OCR/parsing |
+| L31-2 | `STORAGE_PROVIDER=local` uses disk under `STORAGE_LOCAL_PATH` (no boto3) |
+| L31-3 | S3/R2 operations run via `asyncio.to_thread` |
+| L31-4 | Tokenized `/files/blob/*` routes for local presign-compatible PUT/GET |
+| L31-5 | `assert_tenant_storage_key` on download/delete/signed-url paths |
+| L31-6 | `read_file()` for OCR/parsing on local storage |
+| L31-7 | [docs/storage.md](./storage.md); `test_layer31_storage.py`; `.env.example` aligned |
+
+**Layer 31 completed: 7/7 issues fixed (100%).**
+
+## Layer 32 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L32-1 | `@tendoriq/shared/roles` — `AdminConsoleRole` includes owner/member; `normalizeDisplayRole` |
+| L32-2 | Admin `UserRole` re-exports shared roles (no stale 5-role enum) |
+| L32-3 | `@tendoriq/shared/plans` — `normalizePlanId` / `normalizeBillingCycle`; web bridge re-exports |
+| L32-4 | `step4Schema` transforms `plan_pro` and `annual` via shared normalizers |
+| L32-5 | `@tendoriq/shared/notifications` — single `mapApiNotification` implementation |
+| L32-6 | `@tendoriq/shared/auth` `SessionUser`; `auth-session.ts` uses it |
+| L32-7 | [docs/type-drift.md](./type-drift.md); `test_layer32_type_drift.py` + Vitest guards |
+
+**Layer 32 completed: 7/7 issues fixed (100%).**
+
+## Layer 33 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L33-1 | Tender **create** writes `tenant_audit` row (`action_type=tender`) |
+| L33-2 | Tender **update** logs diff from pre-update snapshot |
+| L33-3 | Document upload-complete + delete audited (`upload` / `document`) |
+| L33-4 | `audit_limits.py` caps platform + tenant export rows (`clamp_export_limit`) |
+| L33-5 | Admin UI uses `audit-constants.ts` for list/export limits |
+| L33-6 | Tender delete audit failures log warning (no silent `pass`) |
+| L33-7 | [docs/audit-coverage.md](./audit-coverage.md); `test_layer33_audit_coverage.py` |
+
+**Layer 33 completed: 7/7 issues fixed (100%).**
+
+## Layer 34 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L34-1 | `resolve_storage_local_path` — relative `./uploads` anchored to `apps/api` |
+| L34-2 | `STORAGE_LOCAL_PATH` normalized to absolute path in settings validator |
+| L34-3 | `StorageService` uses `settings.resolved_storage_local_path` |
+| L34-4 | `ensure_local_storage_root()` on API startup (local provider) |
+| L34-5 | `STORAGE_TOKEN_CLOCK_SKEW_SECONDS` grace on blob token verify |
+| L34-6 | [docs/storage.md](./storage.md) + `.env.example` clock skew |
+| L34-7 | `test_layer34_storage_paths.py` |
+
+**Layer 34 completed: 7/7 issues fixed (100%).**
+
+## Layer 35 — Completed items
+
+| ID | Resolution |
+|----|------------|
+| L35-1 | `use-api` `Tender` = `ClientTender` from `@tendoriq/shared/tenders` (not duplicate shapes) |
+| L35-2 | Tender list uses `formatTenderDeadline` / `formatTenderValue` on `closingDate` / `budget` |
+| L35-3 | `@tendoriq/shared/analysis` permissive `parseAnalysisDashboard` |
+| L35-4 | `analysis-mapper.ts` maps API → `TenderAnalysis` (`keyFindings` → `keyHighlights`) |
+| L35-5 | `use-analysis` no longer uses strict inline Zod that rejected API JSON |
+| L35-6 | `core/tenant_types.py` + `parse_tenant_uuid` in `require_tenant_member` |
+| L35-7 | `test_layer35_type_drift.py`, `analysis-mapper.test.ts`; `type-drift.md` updated |
+
+**Layer 35 completed: 7/7 issues fixed (100%).**

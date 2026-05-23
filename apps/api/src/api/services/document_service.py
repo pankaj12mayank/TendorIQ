@@ -32,6 +32,9 @@ class DocumentService:
         metadata: Optional[dict] = None,
         created_by_id: Optional[UUID] = None,
     ) -> Document:
+        meta = dict(metadata or {})
+        if created_by_id:
+            meta.setdefault('uploaded_by_id', str(created_by_id))
         doc = Document(
             tenant_id=tenant_id,
             name=name,
@@ -45,10 +48,9 @@ class DocumentService:
             tender_id=tender_id,
             folder=folder,
             tags=tags or [],
-            metadata_json=metadata or {},
+            metadata_json=meta,
             processing_status='uploaded',
             uploaded_at=datetime.now(timezone.utc),
-            created_by_id=created_by_id or UUID('00000000-0000-0000-0000-000000000000'),
         )
         db.add(doc)
         await db.commit()

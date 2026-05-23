@@ -19,6 +19,7 @@ import { EmailSystem } from '@/components/admin/email-system';
 import {
   RealtimeQueueStatus,
   RealtimeMetrics,
+  SystemHealth,
 } from '@/components/admin/monitoring';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,7 +101,17 @@ function AdminConsoleContent() {
   const [collapsed, setCollapsed] = useState(false);
 
   const { isLoading: analyticsLoading, fetchMetrics } = useAnalyticsApi();
-  const { apiCalls, activeJobs, errorRate, subscribe, unsubscribe } = useRealtimeMetrics();
+  const {
+    apiCalls,
+    activeJobs,
+    errorRate,
+    avgResponseTime,
+    queueStats,
+    systemHealth,
+    isLoading: realtimeLoading,
+    subscribe,
+    unsubscribe,
+  } = useRealtimeMetrics();
 
   const syncModuleFromUrl = useCallback(() => {
     const moduleParam = searchParams.get('module');
@@ -227,8 +238,21 @@ function AdminConsoleContent() {
             <div className="flex items-center gap-3">
               {activeModule === 'analytics' && (
                 <>
-                  <RealtimeMetrics className="hidden lg:block" />
-                  <RealtimeQueueStatus className="hidden lg:block" />
+                  <RealtimeMetrics
+                    className="hidden lg:block"
+                    isLoading={realtimeLoading}
+                    metrics={{
+                      apiCalls,
+                      activeJobs,
+                      errorRate,
+                      avgResponseTime,
+                    }}
+                  />
+                  <RealtimeQueueStatus
+                    className="hidden lg:block"
+                    isLoading={realtimeLoading}
+                    stats={queueStats}
+                  />
                 </>
               )}
               <div className="relative hidden md:block">
@@ -254,6 +278,16 @@ function AdminConsoleContent() {
         </div>
 
         <div className="space-y-6 p-6">
+          {activeModule === 'analytics' && (
+            <div className="grid gap-4 lg:grid-cols-3">
+              <SystemHealth
+                className="lg:col-span-1"
+                components={systemHealth}
+                isLoading={realtimeLoading}
+              />
+            </div>
+          )}
+
           {activeModule === 'analytics' && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <Card>
