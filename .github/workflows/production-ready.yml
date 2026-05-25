@@ -154,15 +154,21 @@ if os.path.exists('apps/api/src/config.py'):
         else:
             print('WARN: No production config detected')
 
-# 4. Check Docker healthcheck
-if os.path.exists('apps/api/Dockerfile'):
-    with open('apps/api/Dockerfile') as f:
+# 4. Check API deploy config (Railway / Nixpacks — no Docker)
+if os.path.exists('apps/api/railway.json'):
+    with open('apps/api/railway.json') as f:
         content = f.read()
-        if 'HEALTHCHECK' in content:
-            print('PASS: HEALTHCHECK configured')
+        if '/health' in content and 'uvicorn' in content:
+            print('PASS: railway.json health + start command')
         else:
-            print('FAIL: No HEALTHCHECK in Dockerfile')
-            exit_code = 1
+            print('WARN: railway.json missing health or uvicorn')
+else:
+    print('WARN: apps/api/railway.json not found')
+if os.path.exists('docker-compose.yml') or os.path.exists('apps/api/Dockerfile'):
+    print('FAIL: Docker artifacts should not be in repo')
+    exit_code = 1
+else:
+    print('PASS: No Docker compose/Dockerfile in repo')
 
 # 5. Check env validation
 required_files = ['.env.production.example', '.env']

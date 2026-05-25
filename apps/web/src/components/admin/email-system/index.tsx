@@ -108,7 +108,7 @@ export function EmailSystem() {
 
   useEffect(() => {
     if (templates.length && !selected) {
-      setSelected(templates[0]);
+      setSelected(templates[0] ?? null);
     }
   }, [templates, selected]);
 
@@ -350,7 +350,7 @@ export function EmailSystem() {
               <CardDescription>Credentials stored encrypted. Primary with automatic fallback.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {smtpConfigs.map((c: { id: string; name: string; provider: string; from_email: string; is_primary: boolean; last_test_status?: string }) => (
+              {smtpConfigs.map((c) => (
                 <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div>
                     <p className="font-medium text-sm">{c.name}</p>

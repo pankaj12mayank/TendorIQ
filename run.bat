@@ -7,7 +7,7 @@ cd /d "%ROOT%"
 set "TENDERIQ_FORCE_SETUP=0"
 
 echo.
-echo  TenderIQ - One-click startup (no Docker required)
+echo  TenderIQ - One-click startup (SQLite dev DB, no MySQL required)
 echo  ==================================================
 echo.
 

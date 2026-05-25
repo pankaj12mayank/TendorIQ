@@ -1,22 +1,22 @@
 # Deployment Guide
 
 > **Stack:** MySQL 8+ for persistence. Background work (email, OCR) uses **in-process** `core.tasks.inline` — **Redis and ARQ are not required**.  
-> **Local dev:** use `run.bat` (see [local-setup.md](local-setup.md) and [MYSQL_SETUP.md](MYSQL_SETUP.md)).
+> **Local dev:** `run.bat` only — no Docker ([local-setup.md](local-setup.md), [MYSQL_SETUP.md](MYSQL_SETUP.md)).
 
 ---
 
 ## Prerequisites
 
-- [ ] **MySQL 8+** (managed or self-hosted)
+- [ ] **MySQL 8+** (managed: PlanetScale, Railway MySQL, Aiven, RDS, etc.)
 - [ ] Domain + TLS (production)
 - [ ] `JWT_SECRET` (32+ characters) and other secrets from [.env.production.example](../.env.production.example)
-- [ ] Optional: **Redis** only if you enable distributed rate limiting (`RATE_LIMIT_ENABLED` + Redis client wiring)
+- [ ] Optional: **Redis** only if you enable distributed rate limiting
 
 ---
 
 ## Environment
 
-Copy `.env.production.example` → `.env` (or set variables in Railway/Vercel).
+Copy `.env.production.example` → platform env vars (Railway, Porter, Vercel).
 
 ```env
 DATABASE_URL=mysql+aiomysql://user:pass@host:3306/tenderiq?charset=utf8mb4
@@ -30,61 +30,48 @@ Email, Stripe, AI keys: see [environment-config.md](environment-config.md).
 
 ---
 
-## Local / Windows (recommended for developers)
+## Local / Windows (developers)
 
 ```batch
 copy .env.example .env
-REM Set DATABASE_URL to your MySQL password
+REM Set DATABASE_URL to your local MySQL password
 run.bat
 ```
 
 - **`run.bat check`** — compile, import, MySQL, `alembic upgrade head` (no servers)
 - **`run.bat stop`** — stop API and web
 
-No `docker compose up` required for day-to-day development.
-
 ---
 
-## Production options
+## Production (recommended layout)
 
-### Option 1: Railway / managed API + MySQL
+| Component | Host | Notes |
+|-----------|------|--------|
+| **Web** | **Vercel** | `apps/web`, set `NEXT_PUBLIC_API_URL` |
+| **API** | **Railway / Porter / Render** | `apps/api`, Python + `requirements.txt` |
+| **MySQL** | Managed DB | Connection string in API `DATABASE_URL` |
 
-1. Provision **MySQL** (Railway plugin, PlanetScale, RDS, etc.).
-2. Set `DATABASE_URL` with the `mysql+aiomysql://` driver.
-3. Deploy API from `apps/api` (`requirements.txt`, `uvicorn src.main:app`).
-4. Deploy web to Vercel with `NEXT_PUBLIC_API_URL`.
+### API on Railway / Porter (no Docker)
 
-### Option 2: Docker (API + MySQL only)
-
-```bash
-docker compose up -d mysql api
-```
-
-Optional Redis (rate limiting experiments):
-
-```bash
-docker compose --profile with-redis up -d
-```
-
-Build API image manually (`apps/api/Dockerfile` uses `apps/api/requirements.txt`):
-
-```bash
-docker build -t tendoriq-api apps/api
-docker run -d -p 8000:8000 --env-file .env.production tendoriq-api
-```
-
-Health: `GET /health`.
-
-### Option 3: Vercel (frontend) + hosted MySQL API
-
-1. Connect repo to Vercel for `apps/web`.
-2. Point `NEXT_PUBLIC_API_URL` at your API host.
-3. Run migrations on the API host before traffic:
+1. Create a service with root directory **`apps/api`**.
+2. Build: `pip install -r requirements.txt` (see `apps/api/railway.json` for Nixpacks defaults).
+3. Start: `uvicorn src.main:app --host 0.0.0.0 --port $PORT`
+4. Set `DATABASE_URL` to hosted MySQL (`mysql+aiomysql://...`).
+5. Run migrations once:
 
 ```bash
 cd apps/api
+set DOTENV_PATH=../../.env.production
 python -m alembic upgrade head
 ```
+
+### Frontend on Vercel
+
+1. Connect repo; set root to **`apps/web`** (or monorepo filter `@tendoriq/web`).
+2. `NEXT_PUBLIC_API_URL` → your API URL.
+3. Deploy.
+
+Health: `GET /health` on the API host.
 
 ---
 
@@ -101,13 +88,12 @@ See [database-migrations.md](database-migrations.md).
 
 ---
 
-## Frontend
+## Frontend build
 
 ```bash
 cd apps/web
 pnpm install
 pnpm build
-# Vercel: pnpm exec vercel --prod
 ```
 
 ---
@@ -115,7 +101,7 @@ pnpm build
 ## Post-deployment checklist
 
 - [ ] `GET /health` → 200
-- [ ] `DATABASE_URL` uses MySQL driver (`mysql+aiomysql` or `mysql+pymysql` for Alembic sync URL)
+- [ ] `DATABASE_URL` uses MySQL driver (`mysql+aiomysql`)
 - [ ] `alembic upgrade head` succeeded on production DB
 - [ ] Sign-in and tenant flows work
 - [ ] Stripe webhook URL configured (if billing enabled)
@@ -131,7 +117,7 @@ pnpm build
 | MySQL connection pool in SQLAlchemy | Read replicas |
 | In-memory / DB-backed queue tables | Redis for distributed rate limits |
 
-See [scaling-strategy.md](scaling-strategy.md) for roadmap notes (some diagrams are aspirational).
+See [scaling-strategy.md](scaling-strategy.md).
 
 ---
 

@@ -53,10 +53,12 @@ def test_shared_clean_script_is_cross_platform():
     assert 'node -e' in text
 
 
-def test_api_dockerfile_and_dockerignore_exist():
-    assert (REPO / 'apps' / 'api' / 'Dockerfile').is_file()
-    ignore = (REPO / 'apps' / 'api' / '.dockerignore').read_text(encoding='utf-8')
-    assert 'tests' in ignore
+def test_api_railway_nixpacks_deploy_without_docker():
+    assert (REPO / 'apps' / 'api' / 'railway.json').is_file()
+    railway = (REPO / 'apps' / 'api' / 'railway.json').read_text(encoding='utf-8')
+    assert 'NIXPACKS' in railway
+    assert not (REPO / 'apps' / 'api' / 'Dockerfile').exists()
+    assert not (REPO / 'docker-compose.yml').exists()
 
 
 def test_monorepo_tooling_doc_exists():

@@ -65,7 +65,7 @@ const MODULE_ICONS = {
   email_system: Mail,
 };
 
-const VALID_MODULES = new Set(ADMIN_MODULES.map((m) => m.id));
+const VALID_MODULES = new Set<string>(ADMIN_MODULES.map((m) => m.id));
 
 function RBACGuard({
   children,

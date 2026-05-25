@@ -19,12 +19,11 @@ def test_deployment_mysql_run_bat():
     assert 'ARQ are not required' in text or 'not required' in text
 
 
-def test_docker_compose_mysql_without_redis_dependency():
-    text = (REPO / 'docker-compose.yml').read_text(encoding='utf-8')
-    assert 'mysql:8' in text
-    assert 'profiles:' in text and 'with-redis' in text
-    block = text.split('api:', 1)[1].split('mysql:', 1)[0]
-    assert 'redis:' not in block or 'depends_on' not in block.split('redis')[0]
+def test_no_docker_compose_in_repo():
+    assert not (REPO / 'docker-compose.yml').exists()
+    dep = (REPO / 'docs' / 'deployment.md').read_text(encoding='utf-8')
+    assert 'docker compose' not in dep.lower()
+    assert 'docker build' not in dep.lower()
 
 
 def test_troubleshooting_mysql_not_postgres_primary():

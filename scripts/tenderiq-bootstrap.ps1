@@ -1,6 +1,7 @@
 # Shared bootstrap helpers for tenderiq-start.ps1 and tenderiq-check.ps1
 
 . (Join-Path $PSScriptRoot 'install-python-deps.ps1')
+. (Join-Path $PSScriptRoot 'install-mysql-windows.ps1')
 
 function Get-TenderIqDatabaseUrlFromEnv {
     param([string]$EnvPath)
@@ -15,14 +16,44 @@ function Get-TenderIqDatabaseUrlFromEnv {
     return $null
 }
 
+function Get-TenderIqMySqlPasswordFromEnv {
+    param([string]$EnvPath)
+    if (-not (Test-Path $EnvPath)) { return $null }
+    foreach ($line in Get-Content $EnvPath) {
+        $t = $line.Trim()
+        if ($t -match '^MYSQL_PASSWORD=(.+)$') {
+            return $Matches[1].Trim().Trim('"').Trim("'")
+        }
+    }
+    return $null
+}
+
+function Get-TenderIqDatabaseDriverFromEnv {
+    param([string]$EnvPath)
+    if (-not (Test-Path $EnvPath)) { return 'sqlite' }
+    foreach ($line in Get-Content $EnvPath) {
+        $t = $line.Trim()
+        if ($t -match '^DATABASE_DRIVER=(.+)$') {
+            return $Matches[1].Trim().Trim('"').Trim("'").ToLowerInvariant()
+        }
+    }
+    return 'sqlite'
+}
+
 function Test-TenderIqDatabaseUrlConfigured {
     param([string]$EnvPath)
-    $url = Get-TenderIqDatabaseUrlFromEnv -EnvPath $EnvPath
-    if (-not $url) {
-        throw "DATABASE_URL is missing in $EnvPath - copy .env.example to .env and set your MySQL password."
+    $driver = Get-TenderIqDatabaseDriverFromEnv -EnvPath $EnvPath
+    if ($driver -eq 'sqlite') {
+        Write-Host '[INFO] DATABASE_DRIVER=sqlite (no MySQL required)' -ForegroundColor Cyan
+        return
     }
-    if ($url -match 'changeme|YOUR_MYSQL_PASSWORD') {
-        Write-Host '[WARN] DATABASE_URL still uses a placeholder password - edit .env before login will work.' -ForegroundColor Yellow
+    $pwd = Get-TenderIqMySqlPasswordFromEnv -EnvPath $EnvPath
+    $url = Get-TenderIqDatabaseUrlFromEnv -EnvPath $EnvPath
+    if (-not $pwd -and -not $url) {
+        throw "MYSQL_PASSWORD or DATABASE_URL missing in $EnvPath - copy .env.example to .env"
+    }
+    if ($pwd -match 'changeme|YOUR_MYSQL_PASSWORD' -or ($url -and $url -match 'changeme|YOUR_MYSQL_PASSWORD')) {
+        Write-Host '[WARN] MySQL password still placeholder - set MYSQL_PASSWORD in .env' -ForegroundColor Yellow
     }
 }
 
@@ -35,10 +66,18 @@ function Invoke-TenderIqApiScript {
     )
     Push-Location $ApiDir
     $env:DOTENV_PATH = $EnvPath
-    & $VenvPython (Join-Path $ApiDir 'scripts\ensure_mysql.py') @ScriptArgs
+    $output = & $VenvPython (Join-Path $ApiDir 'scripts\ensure_database.py') @ScriptArgs 2>&1
     $code = $LASTEXITCODE
     Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
     Pop-Location
+    if ($output) {
+        $text = ($output | Out-String).Trim()
+        if ($code -ne 0) {
+            Write-Host $text -ForegroundColor Red
+        } else {
+            Write-Host $text -ForegroundColor DarkGray
+        }
+    }
     return $code
 }
 
@@ -50,16 +89,35 @@ function Initialize-TenderIqMySql {
         [scriptblock]$LogFn = { param($l, $m) Write-Host "[$l] $m" }
     )
     $rootEnv = Join-Path $Root '.env'
-    & $LogFn 'INFO' 'Checking MySQL (DATABASE_URL in .env)...'
+    $driver = Get-TenderIqDatabaseDriverFromEnv -EnvPath $rootEnv
     Test-TenderIqDatabaseUrlConfigured -EnvPath $rootEnv
+
+    if ($driver -eq 'sqlite') {
+        & $LogFn 'INFO' 'Setting up SQLite database (no MySQL)...'
+        $code = Invoke-TenderIqApiScript -VenvPython $VenvPython -ApiDir $ApiDir -EnvPath $rootEnv -ScriptArgs @()
+        if ($code -ne 0) {
+            throw @'
+SQLite database setup failed.
+  Run: run.bat setup
+  Or: cd apps/api; venv/Scripts/pip install -r requirements-dev.txt
+  Common cause: missing aiosqlite (see error above).
+'@
+        }
+        & $LogFn 'INFO' 'SQLite OK'
+        return
+    }
+
+    & $LogFn 'INFO' 'Checking local MySQL (DATABASE_URL in .env)...'
+    if (-not (Initialize-TenderIqLocalMySql -Root $Root -LogFn $LogFn)) {
+        & $LogFn 'WARN' 'Auto MySQL setup did not complete - install manually if winget failed.'
+    }
     $code = Invoke-TenderIqApiScript -VenvPython $VenvPython -ApiDir $ApiDir -EnvPath $rootEnv -ScriptArgs @()
     if ($code -ne 0) {
-        throw @"
-MySQL is not ready.
-  1. Install MySQL 8+ and start the service
-  2. Edit .env: set DATABASE_URL (replace YOUR_MYSQL_PASSWORD or changeme)
-  3. See docs/MYSQL_SETUP.md
-"@
+        throw @'
+Local MySQL is not ready on localhost:3306.
+  Tip: use DATABASE_DRIVER=sqlite in .env (no MySQL install) and run run.bat again.
+  Or fix MYSQL_PASSWORD and start MySQL80 service. See docs/MYSQL_SETUP.md
+'@
     }
     & $LogFn 'INFO' 'MySQL OK'
 }
@@ -95,44 +153,6 @@ function Test-TenderIqApiReady {
     }
 }
 
-function Start-TenderIqDockerMySql {
-    param([string]$Root)
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        return $false
-    }
-    $compose = Join-Path $Root 'docker-compose.yml'
-    if (-not (Test-Path $compose)) {
-        return $false
-    }
-    Write-Host '[INFO] Starting MySQL via docker compose (mysql service)...' -ForegroundColor Yellow
-    Push-Location $Root
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    docker compose up -d mysql 2>&1 | Out-Null
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = $prevEap
-    Pop-Location
-    if ($code -ne 0) {
-        Write-Host '[WARN] docker compose mysql failed (is Docker Desktop running?)' -ForegroundColor Yellow
-        return $false
-    }
-    $deadline = (Get-Date).AddSeconds(90)
-    while ((Get-Date) -lt $deadline) {
-        $healthy = docker compose -f $compose ps mysql 2>$null | Select-String -Pattern 'healthy'
-        if ($healthy) {
-            Write-Host '[INFO] Docker MySQL is healthy on localhost:3306' -ForegroundColor Green
-            return $true
-        }
-        Start-Sleep -Seconds 3
-    }
-    Write-Host '[WARN] Docker MySQL started but health check timed out' -ForegroundColor Yellow
-    return $true
-}
-
-function Get-TenderIqDockerDatabaseUrl {
-    return 'mysql+aiomysql://root:password@localhost:3306/tenderiq?charset=utf8mb4'
-}
-
 function Initialize-TenderIqDatabase {
     param(
         [string]$Root,
@@ -140,6 +160,11 @@ function Initialize-TenderIqDatabase {
         [string]$ApiDir,
         [scriptblock]$LogFn
     )
+    $rootEnv = Join-Path $Root '.env'
     Initialize-TenderIqMySql -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn $LogFn
-    Invoke-TenderIqAlembicUpgrade -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn $LogFn
+    if ((Get-TenderIqDatabaseDriverFromEnv -EnvPath $rootEnv) -eq 'mysql') {
+        Invoke-TenderIqAlembicUpgrade -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn $LogFn
+    } else {
+        & $LogFn 'INFO' 'SQLite dev mode - schema created via ensure_database (no alembic required)'
+    }
 }

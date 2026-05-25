@@ -24,7 +24,7 @@ TenderIQ is a **pnpm + Turbo** monorepo. The API is Python; Node packages exist 
 
 | File | Use |
 |------|-----|
-| `apps/api/requirements.txt` | Production runtime (Docker, Railway pip) |
+| `apps/api/requirements.txt` | Production runtime (Railway / Porter pip) |
 | `apps/api/requirements-dev.txt` | Local `venv`, `run.bat`, **CI** (includes `-r requirements.txt` + pytest, ruff, mypy) |
 
 **Local (Windows):** `run.bat` / `run.bat setup` → `scripts/tenderiq-start.ps1` → `pip install -r requirements-dev.txt` into `apps/api/venv`.
@@ -77,20 +77,15 @@ All workflows share:
 | `ci.yml` | Lint, typecheck, API pytest, web Vitest, production build |
 | `automated-tests.yml` | Extended suites, E2E (Playwright), scheduled runs |
 | `production-ready.yml` | Template + build smoke checks (no live secrets required) |
-| `deploy.yml` | Vercel frontend + Docker API image |
+| `deploy.yml` | Vercel frontend + Railway API (Nixpacks) |
 
 When changing Python or Node versions, update **`.github/actions/setup-api-python`**, root `package.json` engines, and this doc together.
 
-## Docker (API)
+## API deploy (no Docker)
 
-Production image installs **only** `requirements.txt` (no pytest in the image):
+Production API: **`apps/api/railway.json`** (Nixpacks) or equivalent on Porter/Render — `pip install -r requirements.txt`, then `uvicorn src.main:app`.
 
-```bash
-docker build -t tendoriq-api apps/api
-docker run -p 8000:8000 -e DATABASE_URL=... tendoriq-api
-```
-
-See `apps/api/Dockerfile` and `docs/deployment.md`.
+See `docs/deployment.md`.
 
 ## Frontend API client
 

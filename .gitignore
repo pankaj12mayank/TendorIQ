@@ -26,6 +26,9 @@ packages/*/dist/
 .DS_Store
 Thumbs.db
 
+# Local runtime (SQLite DB, logs, PIDs)
+.tenderiq/
+
 # Logs
 *.log
 npm-debug.log*
@@ -73,7 +76,7 @@ migrations/
 *.tfstate
 *.tfstate.*
 
-# Docker
+# Legacy container artifacts (project does not use Docker)
 .docker/
 
 # Turborepo

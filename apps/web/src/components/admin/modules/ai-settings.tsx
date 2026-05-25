@@ -223,7 +223,9 @@ export function AISettings() {
               <Label>Temperature: {settings.temperature}</Label>
               <Slider
                 value={[settings.temperature]}
-                onValueChange={([v]) => setSettings((s) => ({ ...s, temperature: v }))}
+                onValueChange={([v]) =>
+                  setSettings((s) => ({ ...s, temperature: v ?? s.temperature }))
+                }
                 max={2}
                 step={0.1}
               />
@@ -232,7 +234,9 @@ export function AISettings() {
               <Label>Max tokens: {settings.maxTokens}</Label>
               <Slider
                 value={[settings.maxTokens]}
-                onValueChange={([v]) => setSettings((s) => ({ ...s, maxTokens: v }))}
+                onValueChange={([v]) =>
+                  setSettings((s) => ({ ...s, maxTokens: v ?? s.maxTokens }))
+                }
                 min={256}
                 max={8192}
                 step={256}

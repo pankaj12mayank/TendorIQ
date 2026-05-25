@@ -13,6 +13,7 @@ import {
   Bell,
   BellOff,
   X,
+  XCircle,
   RefreshCw,
   ChevronRight,
   Clock,

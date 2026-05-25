@@ -179,9 +179,12 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
       });
       setSyncedUser(sessionUser);
       toast.success('Signed in successfully');
-      router.push(
-        getPostLoginPath(role === 'super_admin' ? role : membershipRole)
+      const postLoginPath = getPostLoginPath(
+        sessionUser.role === 'super_admin'
+          ? sessionUser.role
+          : sessionUser.membershipRole ?? sessionUser.role
       );
+      router.push(postLoginPath);
     },
     [router]
   );

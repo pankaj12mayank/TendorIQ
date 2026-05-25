@@ -30,16 +30,8 @@ This document outlines scaling from startup to enterprise. Align production setu
 - [ ] 99.5% uptime
 
 **Actions:**
-```yaml
-# Add to docker-compose for horizontal scaling
-api:
-  deploy:
-    replicas: 2
-    resources:
-      limits:
-        memory: 1G
-        cpu: 1000m
-```
+- Run multiple API instances behind your host’s load balancer (Railway/Porter scaling).
+- Use managed MySQL with connection limits sized for replica count.
 
 **Monitoring:**
 - Error rate < 1%

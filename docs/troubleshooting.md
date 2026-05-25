@@ -50,7 +50,7 @@ echo $CLERK_SECRET_KEY
 # Check Sentry for error details
 # Or check logs:
 railway logs
-docker logs tenderiq-api
+# or your host logs (Porter / Render dashboard)
 ```
 
 **Common Causes:**
@@ -308,10 +308,7 @@ time curl -w "\nTime: %{time_total}s\n" https://api.tenderiq.com/tenders
 #### High Memory Usage
 
 **Diagnosis:**
-```bash
-# Check API container memory
-docker stats tenderiq-api
-```
+- Check memory on your API host (Railway/Porter metrics or OS task manager).
 
 **Solutions:**
 1. Set query limits

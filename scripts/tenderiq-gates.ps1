@@ -34,18 +34,7 @@ try {
     Test-TenderIqDatabaseUrlConfigured -EnvPath $rootEnv
     $mysqlCode = Invoke-TenderIqApiScript -VenvPython $VenvPython -ApiDir $ApiDir -EnvPath $rootEnv -ScriptArgs @()
     if ($mysqlCode -ne 0) {
-        $dbUrl = Get-TenderIqDatabaseUrlFromEnv -EnvPath $rootEnv
-        if ($dbUrl -match '@localhost:3306' -and (Start-TenderIqDockerMySql -Root $Root)) {
-            if ($dbUrl -match 'changeme|YOUR_MYSQL_PASSWORD') {
-                $gateDatabaseUrl = Get-TenderIqDockerDatabaseUrl
-                $env:DATABASE_URL = $gateDatabaseUrl
-                Write-Host '[INFO] Using Docker MySQL credentials (root:password) for gates' -ForegroundColor Yellow
-            }
-            $mysqlCode = Invoke-TenderIqApiScript -VenvPython $VenvPython -ApiDir $ApiDir -EnvPath $rootEnv -ScriptArgs @()
-        }
-    }
-    if ($mysqlCode -ne 0) {
-        throw 'MySQL not reachable. Start MySQL 8+ or Docker Desktop, then set DATABASE_URL in .env (see docs/MYSQL_SETUP.md).'
+        throw 'Local MySQL not reachable. Start MySQL 8+ on localhost:3306 and set DATABASE_URL in .env (see docs/MYSQL_SETUP.md).'
     }
     Set-GateResult 'G0' $true 'MySQL reachable; database ensured'
 } catch {

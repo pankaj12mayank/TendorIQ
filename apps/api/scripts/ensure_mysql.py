@@ -81,14 +81,22 @@ def main() -> int:
     try:
         server = _connect_server(cfg)
     except Exception as exc:
+        err = str(exc)
         print(
             f'ERROR: Cannot reach MySQL at {cfg["host"]}:{cfg["port"]} - {exc}',
             file=sys.stderr,
         )
-        print(
-            'Fix: Start MySQL 8+ and set DATABASE_URL in .env (see docs/MYSQL_SETUP.md).',
-            file=sys.stderr,
-        )
+        if '1045' in err or 'Access denied' in err:
+            print(
+                'Fix: Wrong password in .env DATABASE_URL — use the MySQL root password '
+                'you set at install. Encode @ as %40 in the URL. See docs/MYSQL_SETUP.md.',
+                file=sys.stderr,
+            )
+        else:
+            print(
+                'Fix: run run.bat (auto-starts MySQL on Windows) or see docs/MYSQL_SETUP.md.',
+                file=sys.stderr,
+            )
         return 1
 
     if not args.check_only:

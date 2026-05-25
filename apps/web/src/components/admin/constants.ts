@@ -1,3 +1,5 @@
+import type { AdminConsoleRole } from '@tendoriq/shared/roles';
+
 import { Role } from './types';
 import { ROLE_PERMISSIONS_MATRIX } from '@/lib/permissions';
 
@@ -19,7 +21,7 @@ export const ADMIN_ROLE_OPTIONS: Role[] = Object.entries(ROLE_PERMISSIONS_MATRIX
       description: `${id} role`,
     };
     return {
-      id,
+      id: id as AdminConsoleRole,
       name: meta.name,
       description: meta.description,
       permissions: [...permissions],

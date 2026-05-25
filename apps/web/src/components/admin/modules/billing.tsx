@@ -24,6 +24,13 @@ import {
 import { BillingPlan, Subscription } from '../types';
 import { cn } from '@/lib/utils';
 
+const STATUS_COLORS: Record<string, string> = {
+  paid: 'bg-green-100 text-green-800',
+  pending: 'bg-yellow-100 text-yellow-800',
+  failed: 'bg-red-100 text-red-800',
+  refunded: 'bg-gray-100 text-gray-800',
+};
+
 export function Billing() {
   const { plans, subscriptions, isLoading, error, fetchBilling } = useBillingApi();
   const [selectedPlan, setSelectedPlan] = useState<string>('professional');

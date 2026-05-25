@@ -48,7 +48,7 @@
 
 | Gate | Command | Status |
 |------|---------|--------|
-| G0 MySQL + DB | `run.bat gates` (step 1) | Auto-starts Docker MySQL if localhost down |
+| G0 MySQL + DB | `run.bat gates` (step 1) | Requires local MySQL on localhost:3306 |
 | G1 `run.bat check` | `run.bat gates` (step 2) | Layer tests + OpenAPI contract |
 | G2 `alembic upgrade head` | `run.bat gates` (step 3) | Requires G0 |
 | G3 Stack | `run.bat gates` (step 4) | API :8000 + web :3000 |

@@ -59,6 +59,15 @@ export interface EmailQueueRow {
   created_at?: string | null;
 }
 
+export interface SmtpConfig {
+  id: string;
+  name: string;
+  provider: string;
+  from_email: string;
+  is_primary: boolean;
+  last_test_status?: string;
+}
+
 export function useEmailSystem() {
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -66,7 +75,7 @@ export function useEmailSystem() {
   const [analytics, setAnalytics] = useState<EmailAnalytics | null>(null);
   const [logs, setLogs] = useState<unknown[]>([]);
   const [queue, setQueue] = useState<EmailQueueRow[]>([]);
-  const [smtpConfigs, setSmtpConfigs] = useState<unknown[]>([]);
+  const [smtpConfigs, setSmtpConfigs] = useState<SmtpConfig[]>([]);
 
   const withLoading = useCallback(async <T>(fn: () => Promise<T>): Promise<T> => {
     setLoading(true);
@@ -105,7 +114,7 @@ export function useEmailSystem() {
   }, [withLoading]);
 
   const fetchSmtp = useCallback(async () => {
-    const data = await withLoading(() => api.get<unknown[]>('/api/v1/email/settings/smtp'));
+    const data = await withLoading(() => api.get<SmtpConfig[]>('/api/v1/email/settings/smtp'));
     setSmtpConfigs(data);
   }, [withLoading]);
 

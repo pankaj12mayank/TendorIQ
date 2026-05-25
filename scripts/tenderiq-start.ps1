@@ -123,16 +123,15 @@ function Ensure-EnvFiles {
             Write-Log "WARN" "Created .env from .env.example - set DATABASE_URL password (replace changeme)"
         }
         if (-not (Test-Path $rootEnv)) {
-            @"
-# TenderIQ - local development (MySQL 8+ required)
-# Edit DATABASE_URL: replace YOUR_MYSQL_PASSWORD with your MySQL root password
+            @'
+# TenderIQ - local development (SQLite, no MySQL required)
 NODE_ENV=development
-DATABASE_URL=mysql+aiomysql://root:YOUR_MYSQL_PASSWORD@localhost:3306/tenderiq?charset=utf8mb4
+DATABASE_DRIVER=sqlite
 JWT_SECRET=dev-secret-key-change-in-production-min-32chars
 CLERK_SECRET_KEY=sk_test_placeholder
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
-"@ | Set-Content $rootEnv -Encoding utf8
-            Write-Log "WARN" "Created .env - edit DATABASE_URL (set your MySQL password) before signing in"
+'@ | Set-Content $rootEnv -Encoding utf8
+            Write-Log "WARN" "Created .env with SQLite - run run.bat setup if first time"
         }
     }
 
@@ -265,6 +264,13 @@ try {
 if (-not (Test-TenderIqPythonDevTools -VenvPython $VenvPython)) {
     throw "pytest/ruff/mypy missing after install - run: run.bat setup"
 }
+if (-not (Test-TenderIqPythonRuntimeDeps -VenvPython $VenvPython)) {
+    Write-Log "WARN" "Runtime deps incomplete (aiosqlite?) - reinstalling requirements-dev.txt..."
+    Install-TenderIqPythonDeps -ApiDir $ApiDir -VenvPython $VenvPython -VenvPip $VenvPip -Force
+    if (-not (Test-TenderIqPythonRuntimeDeps -VenvPython $VenvPython)) {
+        throw "Missing aiosqlite/aiomysql after pip install - run: run.bat setup"
+    }
+}
 
 $rootEnv = Join-Path $Root ".env"
 Initialize-TenderIqDatabase -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn {
@@ -351,14 +357,20 @@ if ($apiAlreadyRunning) {
     $rootEnv = Join-Path $Root ".env"
     $loginEnv = Get-LoginEnvBootstrap -EnvPath $rootEnv
     $reloadFlag = if ($env:TENDERIQ_UVICORN_RELOAD -eq '1') { ' --reload' } else { '' }
+    Set-Content -Path $apiLog -Value "API log $(Get-Date)`n" -Encoding utf8
+    $apiLogEsc = $apiLog -replace "'", "''"
     $apiCmd = @"
 `$ErrorActionPreference = 'Continue'
 Set-Location '$ApiDir'
 $loginEnv
-& '$VenvPython' -m uvicorn src.main:app --host 0.0.0.0 --port $apiPort$reloadFlag 2>&1 | Out-File -FilePath '$apiLog' -Append -Encoding utf8
+& '$VenvPython' -m uvicorn src.main:app --host 0.0.0.0 --port $apiPort$reloadFlag 2>&1 | Tee-Object -FilePath '$apiLogEsc' -Append
 "@
     $apiProc = Start-Process powershell -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $apiCmd) -PassThru
-    Start-Sleep -Seconds 10
+    $apiOk = $false
+    for ($i = 0; $i -lt 30; $i++) {
+        if (Test-ApiHealth -Port $apiPort) { $apiOk = $true; break }
+        Start-Sleep -Seconds 2
+    }
 }
 
 Write-Log "INFO" "Starting frontend on http://localhost:3000 ..."
@@ -374,7 +386,8 @@ $webProc = Start-Process powershell -ArgumentList @("-NoProfile", "-WindowStyle"
     started_at = (Get-Date).ToString("o")
 } | ConvertTo-Json | Set-Content $PidFile -Encoding utf8
 
-$apiOk = $apiAlreadyRunning
+if ($apiAlreadyRunning) { $apiOk = $true }
+if (-not $apiOk) { $apiOk = $false }
 $webOk = $false
 for ($i = 0; $i -lt 25; $i++) {
     Start-Sleep -Seconds 2
@@ -404,7 +417,7 @@ Write-Host "  API Docs:  http://localhost:$apiPort/docs" -ForegroundColor White
 Write-Host "  Frontend:  http://localhost:3000  $(if ($webOk) { '[OK]' } else { '[check .tenderiq\web.log]' })" -ForegroundColor White
 Write-Host "  Logs:      .tenderiq\api.log , web.log , startup.log" -ForegroundColor DarkGray
 Write-Host "  Stop:      run.bat stop" -ForegroundColor DarkGray
-Write-Host "  DB:        MySQL + alembic applied (see startup.log)" -ForegroundColor DarkGray
+Write-Host "  DB:        SQLite (see startup.log)" -ForegroundColor DarkGray
 Write-Host "============================================================" -ForegroundColor Green
 
 if (-not $apiOk) {

@@ -144,6 +144,7 @@ export interface QueueJob {
   completedAt?: string;
   failedAt?: string;
   error?: string;
+  retryable?: boolean;
   payload: Record<string, unknown>;
   result?: Record<string, unknown>;
 }

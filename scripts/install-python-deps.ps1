@@ -43,3 +43,9 @@ function Test-TenderIqPythonDevTools {
     & $VenvPython -c "import pytest, ruff, mypy" 2>$null
     return $LASTEXITCODE -eq 0
 }
+
+function Test-TenderIqPythonRuntimeDeps {
+    param([Parameter(Mandatory = $true)][string]$VenvPython)
+    & $VenvPython -c "import aiosqlite, aiomysql, fastapi" 2>$null
+    return $LASTEXITCODE -eq 0
+}

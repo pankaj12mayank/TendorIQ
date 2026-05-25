@@ -96,8 +96,8 @@ async def lifespan(app: FastAPI):
                 'configure Admin → Email System SMTP or set EMAIL_API_KEY in .env'
             )
     except Exception as exc:
-        if allow_offline:
-            logger.warning('Email system seed skipped (ALLOW_START_WITHOUT_DB): %s', exc)
+        if allow_offline or settings.uses_sqlite:
+            logger.warning('Email system seed skipped: %s', exc)
         else:
             raise RuntimeError(
                 'Email system seed failed. Run alembic upgrade head and ensure MySQL schema is current.'

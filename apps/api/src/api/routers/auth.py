@@ -229,8 +229,7 @@ async def login(
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=(
-                    'Demo tenant setup failed. Ensure MySQL is running, DATABASE_URL is set, '
-                    'and run: alembic upgrade head (or run.bat setup).'
+                    'Demo tenant setup failed. For local dev use DATABASE_DRIVER=sqlite and run run.bat setup.'
                 ),
             ) from exc
 

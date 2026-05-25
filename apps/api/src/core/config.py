@@ -1,7 +1,8 @@
 """Application Configuration - Centralized Settings Management"""
 
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
@@ -19,6 +20,30 @@ _ENV_FILE = (
     if _DOTENV_OVERRIDE and Path(_DOTENV_OVERRIDE).is_file()
     else _PROJECT_ROOT / '.env'
 )
+
+
+def default_sqlite_path() -> Path:
+    return _PROJECT_ROOT / '.tenderiq' / 'data' / 'tenderiq.db'
+
+
+def build_sqlite_database_url(path: Path | None = None) -> str:
+    db_file = (path or default_sqlite_path()).resolve()
+    return f'sqlite+aiosqlite:///{db_file.as_posix()}'
+
+
+def build_mysql_database_url(
+    *,
+    user: str = 'root',
+    password: str = '',
+    host: str = 'localhost',
+    port: int = 3306,
+    database: str = 'tenderiq',
+) -> str:
+    """Build DATABASE_URL with proper encoding (@ and special chars in password)."""
+    return (
+        f'mysql+aiomysql://{quote_plus(user)}:{quote_plus(password)}'
+        f'@{host}:{port}/{database}?charset=utf8mb4'
+    )
 
 
 class Settings(BaseSettings):
@@ -50,7 +75,16 @@ class Settings(BaseSettings):
     # ===========================================
     # DATABASE
     # ===========================================
-    DATABASE_URL: str = ''  # Must be set in .env
+    # sqlite = zero-install local file DB (default dev). mysql = production / advanced local.
+    DATABASE_DRIVER: Literal['sqlite', 'mysql'] = 'sqlite'
+    SQLITE_PATH: str = ''
+    # MySQL only (ignored when DATABASE_DRIVER=sqlite):
+    MYSQL_HOST: str = 'localhost'
+    MYSQL_PORT: int = 3306
+    MYSQL_USER: str = 'root'
+    MYSQL_PASSWORD: str = ''
+    MYSQL_DATABASE: str = 'tenderiq'
+    DATABASE_URL: str = ''  # Set directly, or leave empty when MYSQL_PASSWORD is set
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_ECHO: bool = False
@@ -283,17 +317,62 @@ class Settings(BaseSettings):
             return 'local'
         return v
 
+    @model_validator(mode='before')
+    @classmethod
+    def assemble_database_url(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        driver = str(
+            data.get('DATABASE_DRIVER') or os.environ.get('DATABASE_DRIVER') or 'sqlite'
+        ).strip().lower()
+        if driver == 'sqlite':
+            custom = (data.get('SQLITE_PATH') or os.environ.get('SQLITE_PATH') or '').strip()
+            path = Path(custom) if custom else default_sqlite_path()
+            data['DATABASE_URL'] = build_sqlite_database_url(path)
+            return data
+        pwd = (data.get('MYSQL_PASSWORD') or os.environ.get('MYSQL_PASSWORD') or '').strip()
+        if not pwd:
+            return data
+        host = str(data.get('MYSQL_HOST') or os.environ.get('MYSQL_HOST') or 'localhost').strip()
+        port_raw = data.get('MYSQL_PORT') or os.environ.get('MYSQL_PORT') or 3306
+        user = str(data.get('MYSQL_USER') or os.environ.get('MYSQL_USER') or 'root').strip()
+        database = str(
+            data.get('MYSQL_DATABASE') or os.environ.get('MYSQL_DATABASE') or 'tenderiq'
+        ).strip()
+        data['DATABASE_URL'] = build_mysql_database_url(
+            user=user,
+            password=pwd,
+            host=host,
+            port=int(port_raw),
+            database=database,
+        )
+        return data
+
     @field_validator('DATABASE_URL')
     @classmethod
     def validate_database_url(cls, v: str) -> str:
         if not v:
-            raise ValueError('DATABASE_URL must be set in .env')
+            raise ValueError(
+                'Set MYSQL_PASSWORD in .env (recommended) or DATABASE_URL '
+                '(encode @ in passwords as %40)'
+            )
+        if v.startswith('sqlite'):
+            return v
         if not v.startswith(('mysql', 'mariadb')):
             raise ValueError(
-                'DATABASE_URL must be MySQL '
-                '(e.g. mysql+aiomysql://user:pass@host:3306/db?charset=utf8mb4)'
+                'DATABASE_URL must be sqlite+aiosqlite://... or mysql+aiomysql://...'
             )
         return v
+
+    @model_validator(mode='after')
+    def validate_production_database(self) -> 'Settings':
+        if self.NODE_ENV == 'production' and self.uses_sqlite:
+            raise ValueError('Use DATABASE_DRIVER=mysql in production (SQLite is dev-only)')
+        return self
+
+    @property
+    def uses_sqlite(self) -> bool:
+        return self.DATABASE_URL.startswith('sqlite')
 
     @property
     def resend_api_key_configured(self) -> bool:
@@ -305,10 +384,12 @@ class Settings(BaseSettings):
 
     @property
     def database_url_sync(self) -> str:
-        """Sync driver URL for Alembic (pymysql)."""
+        """Sync driver URL for Alembic / scripts."""
         url = self.DATABASE_URL
         if '+aiomysql' in url:
             return url.replace('+aiomysql', '+pymysql')
+        if '+aiosqlite' in url:
+            return url.replace('+aiosqlite', '')
         return url
 
 

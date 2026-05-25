@@ -13,7 +13,11 @@ from sentry_sdk import (
     set_tag,
     add_breadcrumb,
 )
-from sentry_sdk.integrations.fastapi import FastAPIIntegration
+try:
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+except ImportError:
+    from sentry_sdk.integrations.fastapi import FastAPIIntegration as FastApiIntegration  # type: ignore[attr-defined]
+
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from ..config import settings
@@ -45,7 +49,7 @@ class SentryService:
             traces_sample_rate=SentryConfig.TRACES_SAMPLE_RATE,
             profiles_sample_rate=SentryConfig.PROFILES_SAMPLE_RATE,
             integrations=[
-                FastAPIIntegration(),
+                FastApiIntegration(),
                 SqlalchemyIntegration(),
             ],
             send_default_pii=False,

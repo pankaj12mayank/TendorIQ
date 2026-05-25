@@ -33,11 +33,11 @@ def test_admin_platform_no_json_dismissed_fallback():
     assert 'list_dismissed_failed_jobs_db' in text
 
 
-def test_docker_compose_database_name_tenderiq():
-    text = (REPO / 'docker-compose.yml').read_text(encoding='utf-8')
-    assert 'MYSQL_DATABASE: tenderiq' in text
-    assert '3306/tenderiq' in text
-    assert 'MYSQL_DATABASE: tendoriq' not in text
+def test_railway_config_uses_tenderiq_database():
+    text = (REPO / 'apps' / 'api' / 'railway.json').read_text(encoding='utf-8')
+    assert 'uvicorn src.main:app' in text
+    assert 'requirements.txt' in text
+    assert not (REPO / 'docker-compose.yml').exists()
 
 
 def test_ci_test_api_has_mysql_service():

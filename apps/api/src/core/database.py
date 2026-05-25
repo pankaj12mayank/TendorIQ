@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from .config import settings
 from .logging import get_logger
@@ -15,19 +16,28 @@ logger = get_logger(__name__)
 from .models import Base
 
 
-_connect_args: dict = {}
-if settings.is_development and 'mysql' in settings.DATABASE_URL:
-    _connect_args['connect_timeout'] = 3
+def _engine_kwargs() -> dict:
+    url = settings.DATABASE_URL
+    if url.startswith('sqlite'):
+        return {
+            'echo': settings.DATABASE_ECHO,
+            'connect_args': {'check_same_thread': False},
+            'poolclass': StaticPool,
+        }
+    connect_args: dict = {}
+    if settings.is_development and 'mysql' in url:
+        connect_args['connect_timeout'] = 3
+    return {
+        'echo': settings.DATABASE_ECHO,
+        'pool_size': settings.DATABASE_POOL_SIZE,
+        'max_overflow': settings.DATABASE_MAX_OVERFLOW,
+        'pool_pre_ping': settings.DATABASE_POOL_PRE_PING,
+        'pool_recycle': settings.DATABASE_POOL_RECYCLE,
+        'connect_args': connect_args,
+    }
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DATABASE_ECHO,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_pre_ping=settings.DATABASE_POOL_PRE_PING,
-    pool_recycle=settings.DATABASE_POOL_RECYCLE,
-    connect_args=_connect_args,
-)
+
+engine = create_async_engine(settings.DATABASE_URL, **_engine_kwargs())
 
 async_session_maker = async_sessionmaker(
     engine,
@@ -71,21 +81,26 @@ def _allow_start_without_db() -> bool:
 
 
 async def init_db() -> None:
-    logger.info('Verifying database connection')
+    logger.info('Verifying database connection (%s)', settings.DATABASE_DRIVER)
     try:
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             await conn.execute(text('SELECT 1'))
-        logger.info(
-            'Database connection verified (schema via Alembic: cd apps/api && alembic upgrade head)'
-        )
+            if settings.uses_sqlite:
+                await conn.run_sync(Base.metadata.create_all)
+                logger.info('SQLite schema ready (tables created if missing)')
+            else:
+                logger.info(
+                    'Database connection verified (schema via alembic upgrade head)'
+                )
     except Exception as exc:
         if _allow_start_without_db():
             logger.warning('Database unavailable (ALLOW_START_WITHOUT_DB=1): %s', exc)
             return
-        raise RuntimeError(
-            'Database unavailable. Start MySQL, set DATABASE_URL in .env, '
-            'and run: alembic upgrade head'
-        ) from exc
+        hint = (
+            'Set DATABASE_DRIVER=sqlite in .env for zero-install local dev, '
+            'or fix MySQL and run alembic upgrade head'
+        )
+        raise RuntimeError(f'Database unavailable. {hint}') from exc
 
 
 async def close_db() -> None:

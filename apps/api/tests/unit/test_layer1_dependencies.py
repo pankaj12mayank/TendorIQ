@@ -62,7 +62,9 @@ def test_monorepo_doc_python_versions():
     assert 'requirements-dev.txt' in doc
 
 
-def test_deployment_docker_uses_requirements_txt():
+def test_deployment_uses_requirements_txt_no_docker():
     dep = (REPO / 'docs' / 'deployment.md').read_text(encoding='utf-8')
     assert 'requirements.txt' in dep
-    assert 'apps/api/Dockerfile' in dep or 'apps/api/requirements.txt' in dep
+    assert 'apps/api' in dep
+    assert 'docker compose' not in dep.lower()
+    assert 'Dockerfile' not in dep

@@ -38,50 +38,20 @@ jobs:
           vercel-args: '--prod'
 
   deploy-backend:
-    name: Deploy Backend (Docker)
+    name: Deploy Backend (Railway)
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
 
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      REDIS_URL: ${{ secrets.REDIS_URL }}
-      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-      CLERK_WEBHOOK_SECRET: ${{ secrets.CLERK_WEBHOOK_SECRET }}
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to Docker registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/api
-          push: true
-          tags: ${{ secrets.REGISTRY }}/tendoriq-api:${{ github.sha }},${{ secrets.REGISTRY }}/tendoriq-api:latest
-
-      - name: Deploy to Railway
-        id: deploy
+      # Set Railway service root directory to apps/api in the Railway dashboard.
+      - name: Deploy API to Railway (Nixpacks / requirements.txt)
         uses: railwayapp/action@v1
         with:
           token: ${{ secrets.RAILWAY_TOKEN }}
           service: tendoriq-api
-          image: ${{ secrets.REGISTRY }}/tendoriq-api:${{ github.sha }}
-
-      - name: Rollback on failure
-        if: failure() && steps.deploy.outputs.deployment-id != ''
-        uses: railwayapp/action@v1
-        with:
-          token: ${{ secrets.RAILWAY_TOKEN }}
-          service: tendoriq-api
-          image: ${{ secrets.REGISTRY }}/tendoriq-api:latest
 
   deploy-staging:
     name: Deploy Staging
@@ -115,23 +85,8 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--environment=preview'
 
-      - name: Build and push Docker image (staging)
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push backend (staging)
-        uses: docker/build-push-action@v5
-        with:
-          context: apps/api
-          push: true
-          tags: ${{ secrets.REGISTRY }}/tendoriq-api-staging:${{ github.sha }}
-
-      - name: Deploy Backend to Railway (staging)
+      - name: Deploy API to Railway (staging)
         uses: railwayapp/action@v1
         with:
           token: ${{ secrets.RAILWAY_TOKEN }}
           service: tendoriq-api-staging
-          image: ${{ secrets.REGISTRY }}/tendoriq-api-staging:${{ github.sha }}

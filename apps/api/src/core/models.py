@@ -20,7 +20,7 @@ from sqlalchemy import (
     Enum,
     func,
 )
-from sqlalchemy.orm import relationship, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, foreign, relationship
 
 from .db_types import JsonCol, UuidCol
 
@@ -108,7 +108,14 @@ class Tenant(Base):
     )
 
     memberships = relationship('Membership', back_populates='tenant', cascade='all, delete-orphan')
-    users = relationship('User', secondary='memberships', back_populates='tenants')
+    users = relationship(
+        'User',
+        secondary='memberships',
+        primaryjoin='Tenant.id == foreign(Membership.tenant_id)',
+        secondaryjoin='User.id == foreign(Membership.user_id)',
+        back_populates='tenants',
+        viewonly=True,
+    )
     documents = relationship('Document', back_populates='tenant', cascade='all, delete-orphan')
     tenders = relationship('Tender', back_populates='tenant', cascade='all, delete-orphan')
     subscriptions = relationship('Subscription', back_populates='tenant', cascade='all, delete-orphan')
@@ -144,12 +151,24 @@ class User(Base):
         CheckConstraint("role IN ('owner', 'admin', 'manager', 'analyst', 'member', 'viewer')", name='valid_user_role'),
     )
 
-    memberships = relationship('Membership', back_populates='user', cascade='all, delete-orphan')
-    tenants = relationship('Tenant', secondary='memberships', back_populates='users')
+    memberships = relationship(
+        'Membership',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        foreign_keys='[Membership.user_id]',
+    )
+    tenants = relationship(
+        'Tenant',
+        secondary='memberships',
+        primaryjoin='User.id == foreign(Membership.user_id)',
+        secondaryjoin='Tenant.id == foreign(Membership.tenant_id)',
+        back_populates='users',
+        viewonly=True,
+    )
     audit_logs = relationship('AuditLog', back_populates='user', cascade='all, delete-orphan')
     onboarding_state = relationship('OnboardingState', back_populates='user', uselist=False, cascade='all, delete-orphan')
-    bids = relationship('Bid', back_populates='bidder')
-    proposals = relationship('Proposal', back_populates='bidder')
+    bids = relationship('Bid', back_populates='bidder', foreign_keys='[Bid.bidder_id]')
+    proposals = relationship('Proposal', back_populates='bidder', foreign_keys='[Proposal.bidder_id]')
     usage_logs = relationship('UsageLog', back_populates='user')
 
 
@@ -176,7 +195,7 @@ class Membership(Base):
         CheckConstraint("status IN ('pending', 'active', 'suspended')", name='valid_membership_status'),
     )
 
-    user = relationship('User', back_populates='memberships')
+    user = relationship('User', back_populates='memberships', foreign_keys=[user_id])
     tenant = relationship('Tenant', back_populates='memberships')
 
 
@@ -262,7 +281,7 @@ class Bid(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
     )
 
     tender = relationship('Tender', back_populates='bids')
-    bidder = relationship('User', back_populates='bids')
+    bidder = relationship('User', back_populates='bids', foreign_keys=[bidder_id])
     analysis_results = relationship('AnalysisResult', back_populates='bid', cascade='all, delete-orphan')
 
 
@@ -485,7 +504,7 @@ class Proposal(Base, TenantMixin, TimestampMixin, AuditMixin):
     )
 
     tender = relationship('Tender', back_populates='proposals')
-    bidder = relationship('User', back_populates='proposals')
+    bidder = relationship('User', back_populates='proposals', foreign_keys=[bidder_id])
 
 
 class PromptVersion(Base, TenantMixin, TimestampMixin):

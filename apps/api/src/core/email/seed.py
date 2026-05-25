@@ -89,7 +89,7 @@ async def seed_email_system(db: AsyncSession) -> None:
 
     slug_to_id: dict[str, object] = {}
     for slug, data in DEFAULT_TEMPLATES.items():
-        tpl_id = uuid4()
+        tpl_id = str(uuid4())
         db.add(
             EmailTemplate(
                 id=tpl_id,
@@ -108,7 +108,7 @@ async def seed_email_system(db: AsyncSession) -> None:
     for event_def in EVENT_REGISTRY:
         db.add(
             EmailEvent(
-                id=uuid4(),
+                id=str(uuid4()),
                 event_key=event_def.event_key,
                 name=event_def.name,
                 category=event_def.category,
@@ -120,7 +120,7 @@ async def seed_email_system(db: AsyncSession) -> None:
 
     db.add(
         EmailBranding(
-            id=uuid4(),
+            id=str(uuid4()),
             company_name='TenderIQ',
             primary_color='#2563eb',
             accent_color='#7c3aed',
