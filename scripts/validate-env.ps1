@@ -1,4 +1,4 @@
-# TenderIQ Environment Validation Script
+﻿# TenderIQ Environment Validation Script
 
 $ErrorActionPreference = "Continue"
 
@@ -52,10 +52,10 @@ $allPassed = (Test-Command "Git" "git --version") -and $allPassed
 
 Write-Host ""
 Write-Host "=== File Structure ===" -ForegroundColor Yellow
-$allPassed = (Test-File "Backend Dir" "$PSScriptRoot\..\apps\api") -and $allPassed
-$allPassed = (Test-File "Frontend Dir" "$PSScriptRoot\..\apps\web") -and $allPassed
+$allPassed = (Test-File "Backend Dir" "$PSScriptRoot\..\api") -and $allPassed
+$allPassed = (Test-File "Frontend Dir" "$PSScriptRoot\..\web") -and $allPassed
 $allPassed = (Test-File "Env File" "$PSScriptRoot\..\.env") -and $allPassed
-$allPassed = (Test-File "Requirements" "$PSScriptRoot\..\apps\api\requirements.txt") -and $allPassed
+$allPassed = (Test-File "Requirements" "$PSScriptRoot\..\api\requirements.txt") -and $allPassed
 
 Write-Host ""
 Write-Host "=== Services (Optional) ===" -ForegroundColor Yellow

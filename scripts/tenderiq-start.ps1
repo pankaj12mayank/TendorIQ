@@ -1,9 +1,9 @@
-# TenderIQ - full local bootstrap (no Docker). Called by run.bat
+﻿# TenderIQ - full local bootstrap (no Docker). Called by run.bat
 $ErrorActionPreference = "Stop"
 
 $Root = if ($PSScriptRoot -match 'scripts$') { Split-Path $PSScriptRoot -Parent } else { $PSScriptRoot }
-$ApiDir = Join-Path $Root "apps\api"
-$WebDir = Join-Path $Root "apps\web"
+$ApiDir = Join-Path $Root "api"
+$WebDir = Join-Path $Root "web"
 $LogDir = Join-Path $Root ".tenderiq"
 $PidFile = Join-Path $LogDir "pids.json"
 $LogFile = Join-Path $LogDir "startup.log"
@@ -71,17 +71,6 @@ function Ensure-Pnpm {
     if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
         throw "Could not activate pnpm. Run: corepack enable && corepack prepare pnpm@9.15.4 --activate"
     }
-}
-
-function Ensure-WorkspaceFile {
-    $ws = Join-Path $Root "pnpm-workspace.yaml"
-    if (Test-Path $ws) { return }
-    Write-Log "INFO" "Creating pnpm-workspace.yaml..."
-    @"
-packages:
-  - "apps/*"
-  - "packages/*"
-"@ | Set-Content $ws -Encoding utf8
 }
 
 function Ensure-EnvFileKeys {
@@ -162,7 +151,7 @@ function Sync-WebEnvLocal {
     ) -join "`n"
     $utf8 = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($webEnv, $content + "`n", $utf8)
-    Write-Log "INFO" "Synced apps/web/.env.local (API http://localhost:$ApiPort)"
+    Write-Log "INFO" "Synced web/.env.local (API http://localhost:$ApiPort)"
 }
 
 function Resolve-ApiPort {
@@ -242,7 +231,6 @@ Ensure-Pnpm
 $pnpmVer = pnpm --version 2>&1
 Write-Log "INFO" "pnpm: $pnpmVer"
 
-Ensure-WorkspaceFile
 Ensure-EnvFiles
 Remove-JsonBom (Join-Path $WebDir "package.json")
 
@@ -287,28 +275,21 @@ Pop-Location
 Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
 Write-Log "INFO" "Backend verification OK"
 
-Write-Log "INFO" "Installing frontend dependencies (pnpm workspace)..."
-Push-Location $Root
-$modulesStamp = Join-Path $Root "node_modules\.modules.yaml"
-$lockFile = Join-Path $Root "pnpm-lock.yaml"
-$needsPnpmInstall = $forceSetup -or (-not (Test-Path $modulesStamp)) -or ((Get-Item $lockFile).LastWriteTimeUtc -gt (Get-Item $modulesStamp).LastWriteTimeUtc)
+Write-Log "INFO" "Installing frontend dependencies (web/)..."
+$modulesStamp = Join-Path $WebDir "node_modules\.modules.yaml"
+$needsPnpmInstall = $forceSetup -or (-not (Test-Path $modulesStamp))
 if ($needsPnpmInstall) {
-    $pnpmArgs = @('install')
-    if (-not $forceSetup) {
-        $pnpmArgs += '--frozen-lockfile'
-    } else {
-        Write-Log "WARN" "Setup mode: pnpm install without --frozen-lockfile (lockfile may update)"
-    }
-    & pnpm @pnpmArgs 2>&1 | Tee-Object -FilePath (Join-Path $LogDir "pnpm-install.log") | Out-Null
+    Push-Location $WebDir
+    & pnpm install 2>&1 | Tee-Object -FilePath (Join-Path $LogDir "pnpm-install.log") | Out-Null
     if ($LASTEXITCODE -ne 0) { Pop-Location; throw "pnpm install failed - see .tenderiq\pnpm-install.log" }
+    Pop-Location
 } else {
     Write-Log "INFO" "Node dependencies already present, skipping pnpm install"
 }
-Pop-Location
 
 Write-Log "INFO" "Verifying Next.js..."
-Push-Location $Root
-pnpm --filter @tendoriq/web exec next --version 2>&1 | Out-Null
+Push-Location $WebDir
+pnpm exec next --version 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
     throw "Next.js not available after pnpm install"
@@ -375,7 +356,7 @@ $loginEnv
 
 Write-Log "INFO" "Starting frontend on http://localhost:3000 ..."
 $webLog = Join-Path $LogDir "web.log"
-$webCmd = "Set-Location '$Root'; pnpm --filter @tendoriq/web run dev *>> '$webLog'"
+$webCmd = "Set-Location '$WebDir'; pnpm run dev *>> '$webLog'"
 $webProc = Start-Process powershell -ArgumentList @("-NoProfile", "-WindowStyle", "Hidden", "-Command", $webCmd) -PassThru
 
 @{
@@ -441,3 +422,4 @@ if (-not $webOk) {
 }
 
 if (-not $apiOk) { exit 1 }
+

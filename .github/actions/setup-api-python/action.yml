@@ -1,5 +1,5 @@
-name: Setup API Python
-description: Create apps/api/venv and install requirements-dev.txt (same graph as run.bat)
+﻿name: Setup API Python
+description: Create api/venv and install requirements-dev.txt (same graph as run.bat)
 
 runs:
   using: composite
@@ -11,10 +11,11 @@ runs:
     - name: Install API dependencies into venv
       shell: bash
       run: |
-        python -m venv apps/api/venv
-        apps/api/venv/bin/pip install --upgrade pip
-        apps/api/venv/bin/pip install -r apps/api/requirements-dev.txt
+        python -m venv api/venv
+        api/venv/bin/pip install --upgrade pip
+        api/venv/bin/pip install -r api/requirements-dev.txt
 
     - name: Expose venv Python on PATH
       shell: bash
-      run: echo "${{ github.workspace }}/apps/api/venv/bin" >> "$GITHUB_PATH"
+      run: echo "${{ github.workspace }}/api/venv/bin" >> "$GITHUB_PATH"
+

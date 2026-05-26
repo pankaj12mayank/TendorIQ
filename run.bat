@@ -18,6 +18,7 @@ if /I "%~1"=="gates" goto :do_gates
 if /I "%~1"=="setup" goto :do_setup
 if /I "%~1"=="full" goto :do_setup
 if /I "%~1"=="dev" goto :do_turbo_dev
+if /I "%~1"=="deploy-check" goto :do_deploy_check
 
 where powershell >nul 2>&1
 if errorlevel 1 (
@@ -99,6 +100,13 @@ echo.
 echo [OK] L0 checks passed. Run run.bat to start servers.
 pause
 exit /b 0
+
+:do_deploy_check
+echo.
+echo  TenderIQ - Deploy readiness (env + migrations + full tests)
+echo  ==================================================
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\tenderiq-deploy-check.ps1"
+exit /b %ERRORLEVEL%
 
 :do_turbo_dev
 echo.

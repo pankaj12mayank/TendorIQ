@@ -1,4 +1,4 @@
-# Run Playwright E2E (public + authenticated when API is up)
+﻿# Run Playwright E2E (public + authenticated when API is up)
 $ErrorActionPreference = "Stop"
 
 $Root = if ($PSScriptRoot -match 'scripts$') { Split-Path $PSScriptRoot -Parent } else { $PSScriptRoot }
@@ -29,8 +29,9 @@ if (-not $env:E2E_ADMIN_PASSWORD -and $env:SUPER_ADMIN_PASSWORD) { $env:E2E_ADMI
 
 Write-Host "[e2e] API=$($env:E2E_API_URL) WEB=$($env:BASE_URL)" -ForegroundColor Cyan
 
-Push-Location (Join-Path $Root "apps\web")
+Push-Location (Join-Path $Root "web")
 pnpm exec playwright test
 $code = $LASTEXITCODE
 Pop-Location
 exit $code
+

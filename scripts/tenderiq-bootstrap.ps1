@@ -1,4 +1,4 @@
-# Shared bootstrap helpers for tenderiq-start.ps1 and tenderiq-check.ps1
+﻿# Shared bootstrap helpers for tenderiq-start.ps1 and tenderiq-check.ps1
 
 . (Join-Path $PSScriptRoot 'install-python-deps.ps1')
 . (Join-Path $PSScriptRoot 'install-mysql-windows.ps1')
@@ -99,7 +99,7 @@ function Initialize-TenderIqMySql {
             throw @'
 SQLite database setup failed.
   Run: run.bat setup
-  Or: cd apps/api; venv/Scripts/pip install -r requirements-dev.txt
+  Or: cd api; venv/Scripts/pip install -r requirements-dev.txt
   Common cause: missing aiosqlite (see error above).
 '@
         }
@@ -168,3 +168,4 @@ function Initialize-TenderIqDatabase {
         & $LogFn 'INFO' 'SQLite dev mode - schema created via ensure_database (no alembic required)'
     }
 }
+

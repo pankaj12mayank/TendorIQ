@@ -1,0 +1,191 @@
+"""Phase 4 — AI catalog, test connection, document analysis."""
+
+from __future__ import annotations
+
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...core.ai.lite_ai import (
+    build_provider_catalog,
+    catalog_to_dict,
+    chat_completion,
+    resolve_default_model,
+    resolve_default_provider,
+)
+from ...core.database import get_db
+from ...core.lite_scope import user_owns_row
+from ...core.processing.document_analyzer import run_document_analysis
+from ...core.processing.tasks import schedule_document_analysis
+from ..dependencies.access import LiteUser, TenantUser
+from ..schemas.base import create_response
+from ..services.document_service import document_service
+from ..services.file_service import file_service
+
+router = APIRouter(tags=['AI & Processing'])
+
+
+class AnalyzeDocumentBody(BaseModel):
+    provider: Optional[str] = Field(None, description='openai | anthropic | gemini | ollama')
+    model: Optional[str] = None
+    async_mode: bool = Field(True, description='Return immediately and process in background')
+
+
+class TestAIBody(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    prompt: str = 'Reply with JSON: {"ok": true, "message": "connected"}'
+
+
+@router.get('/ai/catalog')
+async def get_ai_catalog(_user: LiteUser):
+    """List configured AI providers and available models."""
+    providers = await build_provider_catalog()
+    return create_response(catalog_to_dict(providers))
+
+
+@router.post('/ai/test')
+async def test_ai_connection(body: TestAIBody, _user: LiteUser):
+    """Verify provider key and model respond."""
+    try:
+        result = await chat_completion(
+            [{'role': 'user', 'content': body.prompt}],
+            provider=body.provider,
+            model=body.model,
+            max_tokens=256,
+            json_mode=True,
+        )
+        return create_response(
+            {
+                'ok': True,
+                'provider': result['provider'],
+                'model': result['model'],
+                'preview': (result.get('content') or '')[:500],
+            }
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get('/processing/documents/{document_id}')
+async def get_processing_status(
+    document_id: str,
+    current_user: TenantUser,
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Workspace context required')
+
+    doc = await file_service.get_document(db, UUID(document_id))
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found')
+    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(
+        doc, current_user.user_id
+    ):
+        raise HTTPException(status_code=403, detail='Access denied')
+
+    meta = doc.metadata_json or {}
+    analysis_meta = meta.get('analysis') or {}
+    return create_response(
+        {
+            'document_id': document_id,
+            'processing_status': doc.processing_status,
+            'processing_error': doc.processing_error,
+            'tender_id': str(doc.tender_id) if doc.tender_id else None,
+            'analysis': analysis_meta,
+            'default_provider': resolve_default_provider(),
+            'default_model': resolve_default_model(resolve_default_provider()),
+        }
+    )
+
+
+@router.post('/processing/documents/{document_id}/analyze')
+async def analyze_document(
+    document_id: str,
+    body: AnalyzeDocumentBody,
+    current_user: TenantUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Run (or re-run) AI analysis on an uploaded document."""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Workspace context required')
+
+    doc = await file_service.get_document(db, UUID(document_id))
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found')
+    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(
+        doc, current_user.user_id
+    ):
+        raise HTTPException(status_code=403, detail='Access denied')
+
+    if body.async_mode:
+        await schedule_document_analysis(
+            document_id=document_id,
+            tenant_id=current_user.tenant_id,
+            owner_id=current_user.user_id,
+            provider=body.provider,
+            model=body.model,
+        )
+        return create_response(
+            {
+                'success': True,
+                'document_id': document_id,
+                'processing_status': 'processing',
+                'message': 'Analysis started',
+            }
+        )
+
+    try:
+        result = await run_document_analysis(
+            db,
+            document_id=UUID(document_id),
+            tenant_id=UUID(current_user.tenant_id),
+            owner_id=UUID(current_user.user_id),
+            provider=body.provider,
+            model=body.model,
+        )
+        return create_response(result)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post('/processing/documents/{document_id}/retry')
+async def retry_document_analysis(
+    document_id: str,
+    current_user: TenantUser,
+    db: AsyncSession = Depends(get_db),
+    provider: Optional[str] = Query(None),
+    model: Optional[str] = Query(None),
+):
+    """Retry failed analysis (increments retry_count)."""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail='Workspace context required')
+
+    doc = await document_service.retry_document(
+        db, UUID(document_id), UUID(current_user.tenant_id)
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail='Document not found or max retries exceeded')
+
+    await schedule_document_analysis(
+        document_id=document_id,
+        tenant_id=current_user.tenant_id,
+        owner_id=current_user.user_id,
+        provider=provider,
+        model=model,
+    )
+    return create_response(
+        {
+            'success': True,
+            'document_id': document_id,
+            'retry_count': doc.retry_count,
+            'processing_status': doc.processing_status,
+        }
+    )

@@ -1,4 +1,4 @@
-# TenderIQ Local Development Setup
+﻿# TenderIQ Local Development Setup
 # Run this script to set up your local development environment
 
 Write-Host "Setting up TenderIQ Development Environment..." -ForegroundColor Cyan
@@ -48,7 +48,7 @@ Write-Host "`n[2/6] Installing Node.js dependencies..." -ForegroundColor Yellow
 pnpm install
 
 Write-Host "`n[3/6] Setting up Python environment..." -ForegroundColor Yellow
-$apiDir = Join-Path $PSScriptRoot "..\apps\api" | Resolve-Path
+$apiDir = Join-Path $PSScriptRoot "..\api" | Resolve-Path
 $venvPy = Join-Path $apiDir "venv\Scripts\python.exe"
 if (-not (Test-Path $venvPy)) {
     Push-Location $apiDir

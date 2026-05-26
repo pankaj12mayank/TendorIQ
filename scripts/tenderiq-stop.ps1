@@ -1,4 +1,4 @@
-# TenderIQ - stop local services. Called by run.bat stop
+﻿# TenderIQ - stop local services. Called by run.bat stop
 $Root = if ($PSScriptRoot -match 'scripts$') { Split-Path $PSScriptRoot -Parent } else { $PSScriptRoot }
 $PidFile = Join-Path $Root ".tenderiq\pids.json"
 
@@ -24,3 +24,4 @@ Stop-Port 3000
 Stop-Port 8765
 
 Write-Host "[TenderIQ] Stopped." -ForegroundColor Green
+

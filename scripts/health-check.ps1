@@ -1,4 +1,4 @@
-# TenderIQ Health Check Script
+﻿# TenderIQ Health Check Script
 
 $ErrorActionPreference = "Stop"
 
@@ -65,3 +65,4 @@ if ($allHealthy) {
 } else {
     Write-Host "Some services need attention." -ForegroundColor Yellow
 }
+

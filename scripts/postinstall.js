@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+﻿const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -7,7 +7,7 @@ const apiDir = path.join(rootDir, 'apps', 'api');
 const reqDev = path.join(apiDir, 'requirements-dev.txt');
 
 if (!fs.existsSync(reqDev)) {
-  console.log('[postinstall] apps/api/requirements-dev.txt not found — skip Python setup');
+  console.log('[postinstall] api/requirements-dev.txt not found â€” skip Python setup');
   process.exit(0);
 }
 
@@ -40,4 +40,5 @@ if (tryExec('uv pip install -r requirements-dev.txt', { cwd: apiDir })) {
   process.exit(0);
 }
 
-console.log('[postinstall] No venv/uv yet — Python deps installed on first run.bat');
+console.log('[postinstall] No venv/uv yet â€” Python deps installed on first run.bat');
+

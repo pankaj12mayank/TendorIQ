@@ -1,4 +1,4 @@
-# Install apps/api Python deps (requirements-dev.txt) into apps/api/venv.
+﻿# Install api Python deps (requirements-dev.txt) into api/venv.
 # Dot-sourced from tenderiq-bootstrap.ps1
 
 function Install-TenderIqPythonDeps {
@@ -15,7 +15,7 @@ function Install-TenderIqPythonDeps {
     $reqFile = Join-Path $ApiDir 'requirements.txt'
     $reqDevFile = Join-Path $ApiDir 'requirements-dev.txt'
     if (-not (Test-Path $reqDevFile)) {
-        throw "Missing $reqDevFile - run git pull or restore apps/api/requirements-dev.txt"
+        throw "Missing $reqDevFile - run git pull or restore api/requirements-dev.txt"
     }
 
     $stamp = Join-Path $ApiDir 'venv\.deps.sha256'
@@ -49,3 +49,4 @@ function Test-TenderIqPythonRuntimeDeps {
     & $VenvPython -c "import aiosqlite, aiomysql, fastapi" 2>$null
     return $LASTEXITCODE -eq 0
 }
+

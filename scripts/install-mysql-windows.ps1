@@ -1,4 +1,4 @@
-# Local MySQL helper for run.bat (Windows). No Docker.
+﻿# Local MySQL helper for run.bat (Windows). No Docker.
 # - Starts MySQL80 / MariaDB service if already installed
 # - Optionally installs via winget (may prompt for Admin once)
 # - Sets dev DATABASE_URL when .env still has placeholder password
@@ -147,3 +147,4 @@ function Initialize-TenderIqLocalMySql {
     }
     return $true
 }
+
