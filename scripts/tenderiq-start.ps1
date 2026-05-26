@@ -235,11 +235,12 @@ Ensure-EnvFiles
 Remove-JsonBom (Join-Path $WebDir "package.json")
 
 Write-Log "INFO" "Setting up Python virtual environment..."
-if (-not (Test-Path $VenvPython)) {
-    Push-Location $ApiDir
-    python -m venv venv
-    if ($LASTEXITCODE -ne 0) { throw "Failed to create venv" }
-    Pop-Location
+if (-not (Test-TenderIqVenvHealthy -ApiDir $ApiDir -VenvPython $VenvPython)) {
+    Write-Log "WARN" "Removing broken venv (stale apps/api path). Recreating api/venv..."
+    Repair-TenderIqVenv -ApiDir $ApiDir
+    if (-not (Test-Path $VenvPython)) {
+        throw "Failed to create api/venv after repair"
+    }
 }
 
 Write-Log "INFO" "Installing Python dependencies (requirements-dev.txt = runtime + pytest/ruff/mypy)..."
@@ -277,20 +278,32 @@ Write-Log "INFO" "Backend verification OK"
 
 Write-Log "INFO" "Installing frontend dependencies (web/)..."
 $modulesStamp = Join-Path $WebDir "node_modules\.modules.yaml"
-$needsPnpmInstall = $forceSetup -or (-not (Test-Path $modulesStamp))
+$nextBin = Join-Path $WebDir "node_modules\next\dist\bin\next"
+$needsPnpmInstall = $forceSetup -or (-not (Test-Path $modulesStamp)) -or (-not (Test-Path $nextBin))
 if ($needsPnpmInstall) {
+    if ((Test-Path $modulesStamp) -and -not (Test-Path $nextBin)) {
+        Write-Log "WARN" "node_modules present but Next.js missing — running pnpm install in web/"
+    }
     Push-Location $WebDir
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     & pnpm install 2>&1 | Tee-Object -FilePath (Join-Path $LogDir "pnpm-install.log") | Out-Null
-    if ($LASTEXITCODE -ne 0) { Pop-Location; throw "pnpm install failed - see .tenderiq\pnpm-install.log" }
+    $pnpmCode = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
     Pop-Location
+    if ($pnpmCode -ne 0) { throw "pnpm install failed - see .tenderiq\pnpm-install.log" }
 } else {
     Write-Log "INFO" "Node dependencies already present, skipping pnpm install"
 }
 
 Write-Log "INFO" "Verifying Next.js..."
 Push-Location $WebDir
-pnpm exec next --version 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& pnpm exec next --version 2>&1 | Out-Null
+$nextOk = $LASTEXITCODE -eq 0
+$ErrorActionPreference = $prevEap
+if (-not $nextOk) {
     Pop-Location
     throw "Next.js not available after pnpm install"
 }

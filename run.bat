@@ -79,7 +79,7 @@ exit /b %ERRORLEVEL%
 
 :do_e2e
 echo.
-echo  TenderIQ - Playwright E2E (requires API :8000 and web :3000 — run run.bat first)
+echo  TenderIQ - Playwright E2E (requires API on port 8000 and web on 3000 - run run.bat first)
 echo  ==================================================
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\tenderiq-e2e.ps1"
 exit /b %ERRORLEVEL%

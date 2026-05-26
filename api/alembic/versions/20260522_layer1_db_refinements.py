@@ -29,6 +29,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def _replace_check(table: str, name: str, sql: str) -> None:
+    # SQLite cannot ALTER CHECK constraints; app-level validation covers Lite dev.
+    if op.get_bind().dialect.name == 'sqlite':
+        return
     try:
         op.drop_constraint(name, table, type_='check')
     except Exception:

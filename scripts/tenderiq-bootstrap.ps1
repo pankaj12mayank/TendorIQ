@@ -99,7 +99,7 @@ function Initialize-TenderIqMySql {
             throw @'
 SQLite database setup failed.
   Run: run.bat setup
-  Or: cd api; venv/Scripts/pip install -r requirements-dev.txt
+  Or: cd api; venv\Scripts\python.exe -m pip install -r requirements-dev.txt
   Common cause: missing aiosqlite (see error above).
 '@
         }

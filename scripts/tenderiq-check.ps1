@@ -4,10 +4,14 @@ $ErrorActionPreference = 'Stop'
 $Root = if ($PSScriptRoot -match 'scripts$') { Split-Path $PSScriptRoot -Parent } else { $PSScriptRoot }
 $ApiDir = Join-Path $Root 'api'
 $VenvPython = Join-Path $ApiDir 'venv\Scripts\python.exe'
-$VenvPip = Join-Path $ApiDir 'venv\Scripts\pip.exe'
 $rootEnv = Join-Path $Root '.env'
 
 . (Join-Path $PSScriptRoot 'tenderiq-bootstrap.ps1')
+
+if (-not (Test-TenderIqVenvHealthy -ApiDir $ApiDir -VenvPython $VenvPython)) {
+    Write-Host '[WARN] Broken venv detected — run: run.bat setup' -ForegroundColor Yellow
+    Repair-TenderIqVenv -ApiDir $ApiDir
+}
 
 if (-not (Test-Path $rootEnv)) {
     Write-Host '[FAIL] Missing .env â€” copy from .env.example' -ForegroundColor Red
@@ -20,7 +24,7 @@ if (-not (Test-Path $VenvPython)) {
 
 Write-Host '[1/5] Python import check...' -ForegroundColor Cyan
 Push-Location $ApiDir
-& $VenvPython -c 'from src.main import app; print(len(app.routes), "routes")'
+& $VenvPython -c 'from src.main import app; print(len(app.routes))'
 if ($LASTEXITCODE -ne 0) { Pop-Location; exit 1 }
 Pop-Location
 
@@ -32,8 +36,12 @@ Pop-Location
 
 Write-Host '[3/5] Web typecheck...' -ForegroundColor Cyan
 Push-Location (Join-Path $Root 'web')
-pnpm exec tsc --noEmit 2>$null
-if ($LASTEXITCODE -ne 0) {
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+& pnpm exec tsc --noEmit 2>$null | Out-Null
+$tc = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($tc -ne 0) {
     Write-Host '[WARN] Web typecheck reported issues (non-blocking for Lite dev)' -ForegroundColor Yellow
 }
 Pop-Location

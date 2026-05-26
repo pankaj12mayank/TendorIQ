@@ -1,16 +1,46 @@
 # TenderIQ Lite
 
-```
-tendoriq/
-├── api/          # FastAPI backend
-├── web/          # Next.js frontend
-├── scripts/      # run.bat helpers (keep)
-├── run.bat       # start / stop / check
-├── .env.example
-└── README.md
-```
+AI-assisted tender workflow for teams: upload RFP documents, run structured analysis, draft proposals, and export results. This repository is the **Lite MVP** — a focused stack you can run locally without cloud auth or paid services.
 
-## Quick start (no cloud keys)
+| Layer | Technology |
+|-------|------------|
+| API | Python 3.11+, FastAPI, SQLAlchemy, Alembic |
+| Web | Node 20+, Next.js 15, React 19, Tailwind CSS |
+| Database (dev) | SQLite (file under `.tenderiq/data/`) |
+| Database (prod) | MySQL or PostgreSQL |
+| Auth (dev default) | Local email/password (`AUTH_PROVIDER=local`) |
+
+---
+
+## Features (MVP)
+
+- **Landing & marketing** — CMS-driven public site (admin-configurable)
+- **Authentication** — local dev login; optional Supabase or Clerk for production
+- **Dashboard** — tender list and workspace overview
+- **Upload & analysis** — PDF/DOCX ingestion, AI summary, compliance and clause extraction
+- **Proposal builder** — sectioned drafts with export (PDF)
+- **Settings** — profile, AI provider keys, billing placeholders
+- **Admin** — platform settings, pricing, and site content
+
+---
+
+## Prerequisites
+
+Install before first run:
+
+| Tool | Version |
+|------|---------|
+| [Python](https://www.python.org/downloads/) | 3.11 or newer |
+| [Node.js](https://nodejs.org/) | 20 or newer |
+| [pnpm](https://pnpm.io/) | 9+ (`npm install -g pnpm`) |
+
+Windows users: run commands from **cmd** or PowerShell. `run.bat` wraps the setup scripts in `scripts/`.
+
+---
+
+## Quick start
+
+From the repository root:
 
 ```bat
 copy .env.example .env
@@ -18,47 +48,175 @@ copy web\.env.local.example web\.env.local
 run.bat
 ```
 
-Sign in: **demo@tendoriq.com** / **Demo@123** (or admin — see [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md))
+On first start, `run.bat` will:
 
-- Web: http://localhost:3000  
-- API: http://localhost:8000  
-- Stop: `run.bat stop`  
-- Check: `run.bat check`
+1. Create or repair `api/venv` and install Python dependencies
+2. Install web dependencies when needed (`web/node_modules`)
+3. Initialize the SQLite database
+4. Start the API on **http://localhost:8000** and the web app on **http://localhost:3000**
 
-## First-time web deps
+Open **http://localhost:3000/sign-in**.
+
+### Default local accounts
+
+Set passwords in `.env` (or use the dev values below). `run.bat` can fill common dev keys on first run when values are still placeholders — see `scripts/tenderiq-start.ps1`.
+
+| Role | Email | Suggested dev password |
+|------|--------|-------------------------|
+| Demo user | `demo@tendoriq.com` | `Demo@123` |
+| Super admin | `admin@tendoriq.com` | `SuperAdmin@123` |
+
+No Supabase, Clerk, or OpenAI keys are required to sign in. Add `OPENAI_API_KEY` (or another provider) in `.env` only when you want live AI analysis.
+
+---
+
+## Project structure
+
+```
+tendoriq/
+├── api/                 # FastAPI application, Alembic migrations, unit tests
+├── web/                 # Next.js frontend
+├── scripts/             # PowerShell helpers (startup, check, deploy)
+├── docs/                # Setup, deploy, and implementation notes
+├── .tenderiq/           # Local runtime data (SQLite DB, logs) — gitignored
+├── run.bat              # One-click dev: start, stop, check, setup
+├── .env.example         # Environment template (API + shared config)
+└── docker-compose.yml   # Optional containerized stack
+```
+
+The legacy `apps/` directory is **not** used. If it still exists on disk from an older checkout, stop servers (`run.bat stop`) and delete it to avoid confusion.
+
+---
+
+## Commands (`run.bat`)
+
+| Command | Description |
+|---------|-------------|
+| `run.bat` | Start API + web (development) |
+| `run.bat stop` | Stop background API and web processes |
+| `run.bat check` | Verify imports, unit tests, migrations (no servers) |
+| `run.bat setup` | Force dependency reinstall and full startup |
+| `run.bat deploy-check` | Production readiness (env, migrations, tests) |
+| `run.bat e2e` | Playwright E2E (requires stack running) |
+| `run.bat gates` | Client-ready gate script (G0–G5) |
+
+Logs: `.tenderiq/startup.log`, `api.log`, `web.log`.
+
+---
+
+## Configuration
+
+All shared settings live in the **repository root** `.env`. The web app reads public variables via `web/.env.local` (synced automatically on startup).
+
+| Variable | Purpose |
+|----------|---------|
+| `AUTH_PROVIDER` | `local` (default), `supabase`, or `clerk` |
+| `DATABASE_DRIVER` | `sqlite` (default dev) or `mysql` |
+| `JWT_SECRET` | API session signing (32+ characters) |
+| `OPENAI_API_KEY` | Optional — enables AI analysis |
+
+Keep `.env` and `.env.example` in sync when adding keys. Details: **[docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)**.
+
+---
+
+## Development
+
+### API
+
+```bat
+cd api
+venv\Scripts\python.exe -m pytest tests\unit -q
+venv\Scripts\python.exe -m uvicorn src.main:app --reload --port 8000
+```
+
+Dependencies: `api/requirements.txt` (runtime) and `api/requirements-dev.txt` (pytest, ruff, mypy).
+
+### Web
 
 ```bat
 cd web
 pnpm install
+pnpm dev
 ```
 
-## MVP pages
+### Health endpoints
 
-Landing, Sign-in, Sign-up, Dashboard, Upload, Analysis, Proposal, Settings, Admin.
+| URL | Description |
+|-----|-------------|
+| http://localhost:8000/docs | OpenAPI (Swagger) |
+| http://localhost:8000/health | Liveness |
+| http://localhost:8000/health/ready | Readiness (DB + storage) |
 
-## Deploy (production)
+---
 
-See **[docs/DEPLOY.md](docs/DEPLOY.md)** for Railway/Vercel, R2, and MySQL.
+## Deployment
+
+Production setup (Docker, MySQL/Postgres, R2 storage, Supabase auth): **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ```bat
 run.bat deploy-check
 docker compose up --build
 ```
 
-- API health: `GET /health/ready` (database + local storage)
-- Migrations run automatically in the API Docker image
+Migrations run automatically in the API container on startup.
 
-## Commands
+**Lite database note:** The `tenants` table is the per-user workspace (retained in Lite). Phase 10 migrations remove unused enterprise-only tables on MySQL/PostgreSQL; SQLite skips destructive drops where the dialect does not support them.
 
-| Command | Purpose |
-|---------|---------|
-| `run.bat` | Start API + web (dev) |
-| `run.bat stop` | Stop servers |
-| `run.bat check` | Import + migrations + unit tests |
-| `run.bat deploy-check` | Production readiness gate |
+---
 
-## Note
+## Troubleshooting
 
-If an old `apps/` folder remains, stop servers (`run.bat stop`) and delete `apps/` manually — it is a leftover from the previous monorepo layout.
+### `pip install` fails with `apps\api\venv`
 
-**Lite DB note:** The `tenants` table is your per-user workspace (not removed in Phase 10). Enterprise-only tables are dropped via Alembic on MySQL/Postgres.
+The virtualenv was created before the move from `apps/api` to `api/`. Fix:
+
+```bat
+run.bat stop
+rmdir /s /q api\venv
+run.bat setup
+```
+
+Or simply run `run.bat` — startup detects a broken venv and recreates `api/venv` automatically.
+
+### `Next.js not available after pnpm install`
+
+Broken or partial `web/node_modules` (often after moving folders). Fix:
+
+```bat
+cd web
+pnpm install
+cd ..
+run.bat
+```
+
+### `run.bat check` fails on migrations
+
+Ensure `.env` uses `DATABASE_DRIVER=sqlite` for local dev. Delete a corrupted dev DB only if you accept losing local data:
+
+```bat
+del .tenderiq\data\tenderiq.db
+run.bat check
+```
+
+### Port already in use
+
+```bat
+run.bat stop
+```
+
+---
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) | Env files, local auth, optional Supabase/Clerk |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Production deploy and Docker |
+| [docs/TENDERIQ_REMAINING_WORK.md](docs/TENDERIQ_REMAINING_WORK.md) | Implementation status and phases |
+| [docs/CLIENT_READY_STATUS.md](docs/CLIENT_READY_STATUS.md) | Demo checklist and client handoff |
+
+---
+
+## Support
+
+For implementation history and PRD alignment, see `docs/`. Report issues with steps to reproduce, `.tenderiq/startup.log` excerpts, and the output of `run.bat check`.

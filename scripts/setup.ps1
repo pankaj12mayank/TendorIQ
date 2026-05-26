@@ -50,14 +50,12 @@ pnpm install
 Write-Host "`n[3/6] Setting up Python environment..." -ForegroundColor Yellow
 $apiDir = Join-Path $PSScriptRoot "..\api" | Resolve-Path
 $venvPy = Join-Path $apiDir "venv\Scripts\python.exe"
-if (-not (Test-Path $venvPy)) {
-    Push-Location $apiDir
-    python -m venv venv
-    Pop-Location
-}
 . (Join-Path $PSScriptRoot "install-python-deps.ps1")
-$venvPip = Join-Path $apiDir "venv\Scripts\pip.exe"
-Install-TenderIqPythonDeps -ApiDir $apiDir -VenvPython $venvPy -VenvPip $venvPip -Force
+if (-not (Test-TenderIqVenvHealthy -ApiDir $apiDir -VenvPython $venvPy)) {
+    Write-Host "  Recreating broken api/venv..." -ForegroundColor Yellow
+    Repair-TenderIqVenv -ApiDir $apiDir
+}
+Install-TenderIqPythonDeps -ApiDir $apiDir -VenvPython $venvPy -Force
 
 Write-Host "`n[4/6] Creating environment file..." -ForegroundColor Yellow
 if (-not (Test-Path ".env")) {
