@@ -8,7 +8,7 @@ AI-assisted tender workflow for teams: upload RFP documents, run structured anal
 | Web | Node 20+, Next.js 15, React 19, Tailwind CSS |
 | Database (dev) | SQLite (file under `.tenderiq/data/`) |
 | Database (prod) | MySQL or PostgreSQL |
-| Auth (dev default) | Local email/password (`AUTH_PROVIDER=local`) |
+| Auth (dev default) | Database email/password (`AUTH_PROVIDER=local`) |
 
 ---
 
@@ -57,16 +57,14 @@ On first start, `run.bat` will:
 
 Open **http://localhost:3000/sign-in**.
 
-### Default local accounts
+### Sign-in (database only)
 
-Set passwords in `.env` (or use the dev values below). `run.bat` can fill common dev keys on first run when values are still placeholders — see `scripts/tenderiq-start.ps1`.
+Login passwords are **not** stored in `.env`. Use one of:
 
-| Role | Email | Suggested dev password |
-|------|--------|-------------------------|
-| Demo user | `demo@tendoriq.com` | `Demo@123` |
-| Super admin | `admin@tendoriq.com` | `SuperAdmin@123` |
+1. **First run** — after `run.bat`, open `.tenderiq/bootstrap-credentials.json` for one-time bootstrap accounts (gitignored).
+2. **Register** — http://localhost:3000/sign-up (password min. 8 characters).
 
-No Supabase, Clerk, or OpenAI keys are required to sign in. Add `OPENAI_API_KEY` (or another provider) in `.env` only when you want live AI analysis.
+Supabase, Clerk, and OpenAI keys are optional (auth provider and AI analysis only).
 
 ---
 
@@ -165,6 +163,29 @@ Migrations run automatically in the API container on startup.
 ---
 
 ## Troubleshooting
+
+### Login returns 503 or “schema is out of date”
+
+SQLite was missing columns because migrations were skipped. Fix:
+
+```bat
+run.bat stop
+cd api
+venv\Scripts\python.exe -m alembic upgrade head
+cd ..
+run.bat
+```
+
+### `ChunkLoadError` on `app/layout.js`
+
+Usually caused by clearing `.next` while the dev server is running. Fix:
+
+```bat
+run.bat stop
+run.bat
+```
+
+Hard refresh the browser (Ctrl+Shift+R). Full cache clear only when needed: `run.bat setup`.
 
 ### `pip install` fails with `apps\api\venv`
 

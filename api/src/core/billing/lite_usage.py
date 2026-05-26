@@ -144,9 +144,15 @@ async def check_quota_allowed(
     *,
     tokens_to_add: int = 0,
 ) -> tuple[bool, str]:
+    from .subscription_access import evaluate_tenant_access
+
     tenant = await db.get(Tenant, tenant_id)
     if not tenant:
         return False, 'Workspace not found'
+
+    access = evaluate_tenant_access(tenant)
+    if not access['can_use_system']:
+        return False, access['reason']
 
     plan = tenant.plan or 'free'
     limits = await resolve_plan_limits(db, plan)
@@ -160,7 +166,7 @@ async def check_quota_allowed(
             if current >= max_val:
                 return (
                     False,
-                    f'Demo quota reached for {limit_key.replace("_", " ")} ({current}/{max_val}). '
+                    f'Plan limit reached for {limit_key.replace("_", " ")} ({current}/{max_val}). '
                     f'Upgrade your plan on Billing.',
                 )
 
@@ -180,11 +186,36 @@ async def enforce_quota(
     *,
     tokens_to_add: int = 0,
 ) -> None:
+    from .subscription_access import evaluate_tenant_access
+
     allowed, message = await check_quota_allowed(
         db, tenant_id, operation, tokens_to_add=tokens_to_add
     )
-    if not allowed:
-        raise HTTPException(status_code=402, detail=message)
+    if allowed:
+        return
+
+    tenant = await db.get(Tenant, tenant_id)
+    access = evaluate_tenant_access(tenant)
+    if not access['can_use_system']:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                'code': 'SUBSCRIPTION_EXPIRED',
+                'message': access['reason'] or message,
+                'plan': access['plan'],
+                'status': access['status'],
+                'upgrade_required': True,
+            },
+        )
+    raise HTTPException(
+        status_code=402,
+        detail={
+            'code': 'QUOTA_EXCEEDED',
+            'message': message,
+            'plan': access['plan'],
+            'upgrade_required': True,
+        },
+    )
 
 
 async def build_demo_status(db: AsyncSession, tenant_id: UUID) -> dict[str, Any]:
@@ -208,6 +239,9 @@ async def build_demo_status(db: AsyncSession, tenant_id: UUID) -> dict[str, Any]
         )
     tokens_used = await count_ai_tokens_month(db, tenant_id)
     token_max = limits.get('ai_tokens_per_month', -1)
+    from .subscription_access import evaluate_tenant_access
+
+    access = evaluate_tenant_access(tenant)
     return {
         'plan': plan,
         'is_demo': plan == 'free',
@@ -217,4 +251,5 @@ async def build_demo_status(db: AsyncSession, tenant_id: UUID) -> dict[str, Any]
             'used': tokens_used,
             'limit': None if token_max == -1 else token_max,
         },
+        'access': access,
     }

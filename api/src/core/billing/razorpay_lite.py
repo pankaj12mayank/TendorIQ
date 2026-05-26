@@ -131,6 +131,11 @@ async def activate_plan_after_payment(
     order_id: str,
 ) -> None:
     from ..models import Tenant
+    from .subscription_access import (
+        apply_plan_period,
+        apply_tenant_plan_entitlements,
+        sync_subscription_row,
+    )
 
     tenant = await db.get(Tenant, tenant_id)
     if not tenant:
@@ -141,6 +146,8 @@ async def activate_plan_after_payment(
     tenant.billing_cycle = cycle
     tenant.subscription_status = 'active'
     tenant.subscription_id = payment_id
+    apply_tenant_plan_entitlements(tenant, tenant.plan)
+    period_start, period_end = apply_plan_period(tenant, billing_cycle=cycle)
 
     settings_json = dict(tenant.settings or {})
     payments = list(settings_json.get('payments') or [])
@@ -155,6 +162,16 @@ async def activate_plan_after_payment(
     )
     settings_json['payments'] = payments[-20:]
     tenant.settings = settings_json
+
+    await sync_subscription_row(
+        db,
+        tenant,
+        plan=tenant.plan,
+        status='active',
+        billing_cycle=cycle,
+        period_start=period_start,
+        period_end=period_end,
+    )
     await db.commit()
     await db.refresh(tenant)
 

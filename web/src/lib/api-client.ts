@@ -86,11 +86,16 @@ class ApiClient {
 
         const message = parseApiErrorMessage(errorData);
         const nested = errorData.error;
+        const detailObj =
+          errorData.detail && typeof errorData.detail === 'object' && !Array.isArray(errorData.detail)
+            ? (errorData.detail as Record<string, unknown>)
+            : undefined;
         const details =
           (nested &&
             typeof nested === 'object' &&
             (nested as { details?: Record<string, unknown> }).details) ||
-          (errorData.details as Record<string, unknown> | undefined);
+          (errorData.details as Record<string, unknown> | undefined) ||
+          detailObj;
 
         throw new ApiError(
           response.status,

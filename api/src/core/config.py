@@ -168,13 +168,15 @@ class Settings(BaseSettings):
     EMAIL_FROM_NAME: str = 'TenderIQ'
     RESEND_WEBHOOK_SECRET: str = ''
     FRONTEND_URL: str = 'http://localhost:3000'
-    SUPER_ADMIN_EMAIL: str = ''  # Must be set in .env
-    SUPER_ADMIN_PASSWORD: str = ''  # Must be set in .env for production
 
-    # Optional demo tenant login (development) — role-based JWT, no API keys
-    DEMO_USER_EMAIL: str = ''
-    DEMO_USER_PASSWORD: str = ''
-    DEMO_USER_ROLE: str = 'admin'
+    # Default system owner (seed only — login always checks database password_hash)
+    SYSTEM_OWNER_EMAIL: str = 'admin@tendoriq.com'
+    SYSTEM_OWNER_DEFAULT_PASSWORD: str = 'Owner@ChangeMe123'
+    SYSTEM_OWNER_NAME: str = 'System Owner'
+
+    # Demo tenant (testing only — not system owner)
+    DEMO_USER_EMAIL: str = 'demo@tendoriq.com'
+    DEMO_USER_DEFAULT_PASSWORD: str = 'Demo@ChangeMe123'
     DEMO_USER_NAME: str = 'Demo User'
     DEMO_TENANT_SLUG: str = 'demo'
     DEMO_TENANT_NAME: str = 'Demo Organization'

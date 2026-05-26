@@ -194,7 +194,16 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { detail?: string }).detail || 'Login failed');
+        const body = err as {
+          detail?: string | { msg?: string };
+          error?: { message?: string };
+        };
+        const detail = body.detail;
+        const message =
+          (typeof detail === 'string' ? detail : detail?.msg) ||
+          body.error?.message ||
+          'Login failed';
+        throw new Error(message);
       }
       const data = await res.json();
       const tokens = tokensFromLoginResponse(data);

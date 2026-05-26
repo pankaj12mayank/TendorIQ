@@ -17,6 +17,7 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == 'sqlite':
+        # Applied in 20260526_sqlite_lite_schema_columns (idempotent).
         return
     op.add_column('users', sa.Column('supabase_id', sa.String(255), nullable=True))
     op.create_index('idx_users_supabase_id', 'users', ['supabase_id'], unique=True)

@@ -69,4 +69,19 @@ describe('api-envelope', () => {
     });
     expect(msg).toContain('page');
   });
+
+  it('parses FastAPI detail object with code', () => {
+    const msg = parseApiErrorMessage({
+      detail: {
+        code: 'SUBSCRIPTION_EXPIRED',
+        message: 'Your plan period has ended.',
+      },
+    });
+    expect(msg).toBe('Your plan period has ended.');
+    expect(
+      parseApiErrorCode({
+        detail: { code: 'SUBSCRIPTION_EXPIRED', message: 'x' },
+      })
+    ).toBe('SUBSCRIPTION_EXPIRED');
+  });
 });

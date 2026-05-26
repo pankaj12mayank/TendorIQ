@@ -162,10 +162,7 @@ function Initialize-TenderIqDatabase {
     )
     $rootEnv = Join-Path $Root '.env'
     Initialize-TenderIqMySql -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn $LogFn
-    if ((Get-TenderIqDatabaseDriverFromEnv -EnvPath $rootEnv) -eq 'mysql') {
-        Invoke-TenderIqAlembicUpgrade -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn $LogFn
-    } else {
-        & $LogFn 'INFO' 'SQLite dev mode - schema created via ensure_database (no alembic required)'
-    }
+    # SQLite and MySQL both need Alembic — ensure_database only creates base tables.
+    Invoke-TenderIqAlembicUpgrade -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir -LogFn $LogFn
 }
 

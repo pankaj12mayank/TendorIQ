@@ -73,35 +73,6 @@ function Ensure-Pnpm {
     }
 }
 
-function Ensure-EnvFileKeys {
-    param([string]$EnvPath)
-    $example = Join-Path $Root ".env.example"
-    if (-not (Test-Path $EnvPath)) { return }
-    $required = @(
-        'SUPER_ADMIN_EMAIL=admin@tenderiq.com',
-        'SUPER_ADMIN_PASSWORD=SuperAdmin@123',
-        'DEMO_USER_EMAIL=demo@tenderiq.com',
-        'DEMO_USER_PASSWORD=Demo@123',
-        'DEMO_USER_ROLE=admin',
-        'DEMO_USER_NAME=Demo User'
-    )
-    $content = Get-Content $EnvPath -Raw -ErrorAction SilentlyContinue
-    if (-not $content) { $content = "" }
-    $added = $false
-    foreach ($line in $required) {
-        $key = ($line -split '=', 2)[0]
-        if ($content -notmatch "(?m)^\s*$([regex]::Escape($key))\s*=") {
-            if ($content.Length -gt 0 -and -not $content.EndsWith("`n")) { $content += "`n" }
-            $content += "$line`n"
-            $added = $true
-        }
-    }
-    if ($added) {
-        Set-Content -Path $EnvPath -Value $content.TrimEnd() -Encoding utf8
-        Write-Log "INFO" "Added missing login credentials to .env (SUPER_ADMIN_*, DEMO_USER_*)"
-    }
-}
-
 function Ensure-EnvFiles {
     $rootEnv = Join-Path $Root ".env"
     if (-not (Test-Path $rootEnv)) {
@@ -129,7 +100,6 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_placeholder
         Write-Log "WARN" "DATABASE_URL uses a placeholder password - update .env (see docs/MYSQL_SETUP.md)"
     }
 
-    Ensure-EnvFileKeys $rootEnv
     Sync-WebEnvLocal -ApiPort 8000
 }
 
@@ -137,21 +107,37 @@ function Sync-WebEnvLocal {
     param([int]$ApiPort = 8000)
     $rootEnv = Join-Path $Root ".env"
     $webEnv = Join-Path $WebDir ".env.local"
-    $pk = "pk_test_placeholder"
-    $sk = "sk_test_placeholder"
+    $authProvider = 'local'
+    $appUrl = 'http://localhost:3000'
     foreach ($line in Get-Content $rootEnv -ErrorAction SilentlyContinue) {
-        if ($line -match '^CLERK_SECRET_KEY=(.+)$') { $sk = $Matches[1].Trim() }
-        if ($line -match '^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=(.+)$') { $pk = $Matches[1].Trim() }
-        if ($line -match '^CLERK_PUBLISHABLE_KEY=(.+)$') { $pk = $Matches[1].Trim() }
+        if ($line -match '^AUTH_PROVIDER=(.+)$') { $authProvider = $Matches[1].Trim() }
+        if ($line -match '^NEXT_PUBLIC_AUTH_PROVIDER=(.+)$') { $authProvider = $Matches[1].Trim() }
+        if ($line -match '^NEXT_PUBLIC_APP_URL=(.+)$') { $appUrl = $Matches[1].Trim() }
+        if ($line -match '^APP_URL=(.+)$' -and -not $appUrl) { $appUrl = $Matches[1].Trim() }
     }
-    $content = @(
+    $lines = @(
         "NEXT_PUBLIC_API_URL=http://localhost:$ApiPort"
-        "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$pk"
-        "CLERK_SECRET_KEY=$sk"
-    ) -join "`n"
+        "NEXT_PUBLIC_APP_URL=$appUrl"
+        "NEXT_PUBLIC_AUTH_PROVIDER=$authProvider"
+        'NEXT_PUBLIC_FEATURE_AI_ANALYSIS=true'
+        'NEXT_PUBLIC_FEATURE_DOCUMENT_OCR=false'
+        'NEXT_PUBLIC_FEATURE_ADVANCED_ANALYTICS=false'
+        'NEXT_PUBLIC_FEATURE_SSO=false'
+    )
+    if ($authProvider -eq 'clerk') {
+        $pk = 'pk_test_placeholder'
+        $sk = 'sk_test_placeholder'
+        foreach ($line in Get-Content $rootEnv -ErrorAction SilentlyContinue) {
+            if ($line -match '^CLERK_SECRET_KEY=(.+)$') { $sk = $Matches[1].Trim() }
+            if ($line -match '^NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=(.+)$') { $pk = $Matches[1].Trim() }
+            if ($line -match '^CLERK_PUBLISHABLE_KEY=(.+)$') { $pk = $Matches[1].Trim() }
+        }
+        $lines += "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$pk"
+        $lines += "CLERK_SECRET_KEY=$sk"
+    }
     $utf8 = New-Object System.Text.UTF8Encoding $false
-    [System.IO.File]::WriteAllText($webEnv, $content + "`n", $utf8)
-    Write-Log "INFO" "Synced web/.env.local (API http://localhost:$ApiPort)"
+    [System.IO.File]::WriteAllText($webEnv, ($lines -join "`n") + "`n", $utf8)
+    Write-Log "INFO" "Synced web/.env.local (API http://localhost:$ApiPort, auth=$authProvider)"
 }
 
 function Resolve-ApiPort {
@@ -197,13 +183,12 @@ if (Test-Path $stopScript) {
     Start-Sleep -Seconds 2
 }
 
+$forceSetup = Is-Truthy $env:TENDERIQ_FORCE_SETUP
 $nextDir = Join-Path $WebDir ".next"
-if (Test-Path $nextDir) {
-    Write-Log "INFO" "Clearing Next.js cache (.next)..."
+if ($forceSetup -and (Test-Path $nextDir)) {
+    Write-Log "INFO" "Clearing Next.js cache (.next) for full setup..."
     Remove-Item -Recurse -Force $nextDir -ErrorAction SilentlyContinue
 }
-
-$forceSetup = Is-Truthy $env:TENDERIQ_FORCE_SETUP
 if ($forceSetup) {
     Write-Log "INFO" "Running in full setup mode (forced dependency install)"
 }
@@ -266,6 +251,10 @@ Initialize-TenderIqDatabase -Root $Root -VenvPython $VenvPython -ApiDir $ApiDir 
     param($level, $msg)
     Write-Log $level $msg
 }
+$ownerFile = Join-Path $Root ".tenderiq\owner-account.txt"
+if (Test-Path $ownerFile) {
+    Write-Log "INFO" "System owner credentials: $ownerFile"
+}
 
 Write-Log "INFO" "Verifying backend imports..."
 Push-Location $ApiDir
@@ -318,11 +307,7 @@ Sync-WebEnvLocal -ApiPort $apiPort
 
 function Get-LoginEnvBootstrap {
     param([string]$EnvPath)
-    $keys = @(
-        'SUPER_ADMIN_EMAIL', 'SUPER_ADMIN_PASSWORD',
-        'DEMO_USER_EMAIL', 'DEMO_USER_PASSWORD', 'DEMO_USER_ROLE', 'DEMO_USER_NAME',
-        'JWT_SECRET'
-    )
+    $keys = @('JWT_SECRET')
     $bootstrap = "`$env:DOTENV_PATH='$EnvPath'"
     if (-not (Test-Path $EnvPath)) { return $bootstrap }
     $map = @{}
@@ -430,7 +415,7 @@ if (-not $webOk) {
         }
     }
     if ($pk -match 'placeholder') {
-        Write-Log "INFO" "Clerk not configured - sign in at /sign-in (SUPER_ADMIN_* or DEMO_USER_* in .env)"
+        Write-Log "INFO" "Sign in at /sign-in or register at /sign-up (accounts stored in database)"
     }
 }
 

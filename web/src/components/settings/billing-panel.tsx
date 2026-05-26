@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBillingApi } from '@/hooks/use-billing';
 import { useDemoStatus } from '@/hooks/use-demo-quota';
+import { useSubscriptionAccess } from '@/hooks/use-subscription-access';
 import { useCurrentUser } from '@/hooks/use-auth';
 import {
   createRazorpayOrder,
@@ -35,6 +36,7 @@ export function BillingPanel() {
   const { plans, currentSubscription, initialize, isLoading, fetchSubscription, fetchQuotaStatus } =
     useBillingApi();
   const { data: demoStatus, refetch: refetchDemo } = useDemoStatus();
+  const { data: access, refetch: refetchAccess } = useSubscriptionAccess();
   const [interval, setInterval] = useState<BillingInterval>('monthly');
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
   const [razorpayReady, setRazorpayReady] = useState<boolean | null>(null);
@@ -72,6 +74,7 @@ export function BillingPanel() {
             await fetchSubscription();
             await fetchQuotaStatus();
             await refetchDemo();
+            await refetchAccess();
           },
         });
       } catch (err) {
@@ -80,13 +83,24 @@ export function BillingPanel() {
         setPayingPlanId(null);
       }
     },
-    [interval, user, fetchSubscription, fetchQuotaStatus, refetchDemo]
+    [interval, user, fetchSubscription, fetchQuotaStatus, refetchDemo, refetchAccess]
   );
 
   const planList = (plans as unknown as PlanCard[]) ?? [];
 
   return (
     <div className="space-y-6 max-w-5xl">
+      {access?.is_expired && (
+        <Card className="border-destructive bg-destructive/5">
+          <CardHeader>
+            <CardTitle className="text-destructive">Plan expired</CardTitle>
+            <CardDescription>
+              {access.reason || 'Renew or upgrade below to restore uploads, AI, and exports.'}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
       {demoStatus && (
         <Card>
           <CardHeader>

@@ -10,7 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
-import { exchangeSupabaseSession } from '@/lib/auth-api';
+import {
+  exchangeSupabaseSession,
+  tokensFromLoginResponse,
+  userFromLoginResponse,
+} from '@/lib/auth-api';
+import { apiUrl } from '@/lib/api-config';
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { setStoredSession } from '@/lib/auth-session';
 import { isClerkConfigured } from '@/lib/clerk-config';
@@ -20,6 +25,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 export default function SignUpPage() {
   const router = useRouter();
   const provider = getAuthProvider();
+  const isLocalAuth = provider === 'local';
   const supabaseEnabled = provider === 'supabase' && isSupabaseConfigured();
   const clerkEnabled = provider === 'clerk' && isClerkConfigured();
   const [ClerkView, setClerkView] = useState<ComponentType | null>(null);
@@ -33,6 +39,46 @@ export default function SignUpPage() {
     if (!clerkEnabled) return;
     void import('./sign-up-clerk').then((m) => setClerkView(() => m.default));
   }, [clerkEnabled]);
+
+  async function handleLocalSignUp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch(apiUrl('/auth/register'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name: name || undefined }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = (body as { detail?: string; error?: { message?: string } }).detail;
+        const msg =
+          (typeof detail === 'string' ? detail : undefined) ||
+          (body as { error?: { message?: string } }).error?.message ||
+          'Registration failed';
+        throw new Error(msg);
+      }
+      const tokens = tokensFromLoginResponse(body);
+      const authUser = userFromLoginResponse(body);
+      setStoredSession(tokens.access_token, authUser, {
+        refreshToken: tokens.refresh_token,
+        expiresInSec: tokens.expires_in,
+      });
+      toast.success('Account created');
+      router.push(
+        getPostLoginPath(
+          authUser.role === 'super_admin'
+            ? authUser.role
+            : authUser.membershipRole ?? authUser.role
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleSupabaseSignUp(e: React.FormEvent) {
     e.preventDefault();
@@ -76,14 +122,75 @@ export default function SignUpPage() {
     }
   }
 
+  if (isLocalAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background to-muted/30 p-6">
+        <div className="w-full max-w-md space-y-6 rounded-2xl border bg-card p-8 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+              <Sparkles className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold">Create your account</h1>
+              <p className="text-sm text-muted-foreground">
+                Register with email and password. Your account is stored securely in the database.
+              </p>
+            </div>
+          </div>
+          <form onSubmit={handleLocalSignUp} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoComplete="name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <PasswordInput
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+                minLength={8}
+              />
+              <p className="text-xs text-muted-foreground">At least 8 characters</p>
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? 'Creating account...' : 'Create account'}
+            </Button>
+          </form>
+          <p className="text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <Link href="/sign-in" className="text-primary hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (supabaseEnabled) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background to-muted/30 p-6">
         <div className="w-full max-w-md space-y-6 rounded-2xl border bg-card p-8 shadow-lg">
-          <div>
-            <h1 className="text-xl font-semibold">Create your TenderIQ account</h1>
-            <p className="text-sm text-muted-foreground">Sign up with email and password (Supabase Auth).</p>
-          </div>
+          <h1 className="text-xl font-semibold">Create your account</h1>
           <form onSubmit={handleSupabaseSignUp} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
@@ -94,7 +201,6 @@ export default function SignUpPage() {
               <Input
                 id="email"
                 type="email"
-                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -104,11 +210,9 @@ export default function SignUpPage() {
               <Label htmlFor="password">Password</Label>
               <PasswordInput
                 id="password"
-                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={8}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -133,24 +237,10 @@ export default function SignUpPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6 text-center">
-      <div className="mx-auto max-w-lg space-y-4">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-          <Sparkles className="h-7 w-7 text-primary" />
-        </div>
-        <h1 className="text-2xl font-semibold">Get started with TenderIQ</h1>
-        <p className="text-muted-foreground">
-          Configure Supabase (`NEXT_PUBLIC_SUPABASE_URL` + anon key) or use demo credentials on the
-          sign-in page for local development.
-        </p>
-      </div>
-      <div className="flex flex-wrap justify-center gap-3">
-        <Button asChild>
-          <Link href="/sign-in">Sign in</Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href="/">Home</Link>
-        </Button>
-      </div>
+      <p className="text-muted-foreground">Authentication is not configured.</p>
+      <Button asChild variant="outline">
+        <Link href="/">Home</Link>
+      </Button>
     </div>
   );
 }

@@ -15,11 +15,22 @@ export interface DemoUsageRow {
   isExceeded: boolean;
 }
 
+export interface DemoAccess {
+  can_use_system: boolean;
+  is_expired: boolean;
+  plan: string;
+  status: string;
+  reason: string;
+  upgrade_required: boolean;
+  period_end?: string | null;
+}
+
 export interface DemoStatus {
   plan: string;
   is_demo: boolean;
   usage: DemoUsageRow[];
   ai_tokens: { used: number; limit: number | null };
+  access?: DemoAccess;
 }
 
 export function useDemoStatus() {

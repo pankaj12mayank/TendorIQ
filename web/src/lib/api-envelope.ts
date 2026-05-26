@@ -62,6 +62,9 @@ export function parseApiErrorMessage(errorData: Record<string, unknown>): string
   }
   const detail = errorData.detail;
   if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && 'message' in detail) {
+    return String((detail as { message: unknown }).message);
+  }
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {
@@ -86,6 +89,10 @@ export function parseApiErrorCode(errorData: Record<string, unknown>): string | 
     return String((nested as { code: unknown }).code);
   }
   if (typeof errorData.code === 'string') return errorData.code;
+  const detail = errorData.detail;
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && 'code' in detail) {
+    return String((detail as { code: unknown }).code);
+  }
   return undefined;
 }
 

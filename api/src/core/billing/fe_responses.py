@@ -141,12 +141,42 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
     if not tenant:
         raise ValueError('Tenant not found')
 
+    from .subscription_access import evaluate_tenant_access, period_end_from_tenant
+
     sub = await BillingService.get_subscription(db, tenant_id)
-    plan_key = sub.get('plan') or 'starter'
-    meta = PLAN_DISPLAY.get(plan_key, PLAN_DISPLAY['starter'])
+    plan_key = (tenant.plan or sub.get('plan') or 'free').strip().lower()
+    meta = PLAN_DISPLAY.get(plan_key, PLAN_DISPLAY.get('starter', PLAN_DISPLAY['starter']))
     now = datetime.now(timezone.utc)
     cycle = getattr(tenant, 'billing_cycle', None) or sub.get('billing_cycle') or 'monthly'
-    status = tenant.subscription_status or sub.get('status') or 'active'
+    raw_status = (tenant.subscription_status or sub.get('status') or 'active').strip().lower()
+    access = evaluate_tenant_access(tenant)
+
+    settings = tenant.settings if isinstance(tenant.settings, dict) else {}
+    period_start_raw = settings.get('plan_period_start')
+    period_end_dt = period_end_from_tenant(tenant)
+    if sub.get('current_period_start'):
+        period_start = sub['current_period_start']
+        if hasattr(period_start, 'isoformat'):
+            period_start = period_start.isoformat()
+    elif period_start_raw:
+        period_start = period_start_raw
+    else:
+        period_start = (now - timedelta(days=15)).isoformat()
+
+    if period_end_dt:
+        period_end = period_end_dt.isoformat()
+    elif sub.get('current_period_end'):
+        period_end = sub['current_period_end']
+        if hasattr(period_end, 'isoformat'):
+            period_end = period_end.isoformat()
+    else:
+        period_end = (now + timedelta(days=15)).isoformat()
+
+    fe_status = raw_status
+    if access['is_expired']:
+        fe_status = 'expired'
+    elif raw_status in ('canceled', 'cancelled'):
+        fe_status = 'canceled'
 
     return {
         'id': tenant.subscription_id or f'sub-{tenant_id}',
@@ -157,17 +187,20 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
             'description': f'{meta["displayName"]} plan',
             'currency': 'USD',
             'trialDays': 14,
-            'isActive': True,
+            'isActive': not access['is_expired'],
             'features': [],
         },
-        'status': 'canceled' if status == 'canceled' else 'active',
+        'status': fe_status,
         'billingInterval': fe_billing_interval(cycle),
-        'currentPeriodStart': (now - timedelta(days=15)).isoformat(),
-        'currentPeriodEnd': (now + timedelta(days=15)).isoformat(),
-        'cancelAtPeriodEnd': status == 'canceled',
+        'currentPeriodStart': period_start,
+        'currentPeriodEnd': period_end,
+        'cancelAtPeriodEnd': raw_status in ('canceled', 'cancelled'),
         'createdAt': (tenant.created_at or now).isoformat() if tenant.created_at else now.isoformat(),
         'updatedAt': (tenant.updated_at or now).isoformat() if tenant.updated_at else now.isoformat(),
         'limits': sub.get('limits'),
+        'canUseSystem': access['can_use_system'],
+        'isExpired': access['is_expired'],
+        'upgradeRequired': access['upgrade_required'],
     }
 
 

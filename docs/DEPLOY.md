@@ -56,7 +56,7 @@ R2_SECRET_ACCESS_KEY=...
 STORAGE_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
 
 # Super admin
-SUPER_ADMIN_EMAIL=you@yourdomain.com
+# Create a platform admin user in the database (preferences.platform_super_admin=true)
 
 EXPOSE_ERROR_DETAILS=false
 RELOAD=false
@@ -84,7 +84,7 @@ Head includes Phase 10 cleanup (`20260525_phase10_cleanup`) on MySQL/Postgres on
 
 ```bash
 cp .env.example .env
-# edit .env — JWT_SECRET, SUPER_ADMIN_EMAIL, etc.
+# edit .env — JWT_SECRET, DATABASE_URL, etc.
 docker compose up --build -d
 ```
 
@@ -130,7 +130,7 @@ run.bat deploy-check
 | API ready | `curl https://api.../health/ready` |
 | CORS | Upload from web origin |
 | Razorpay | Test keys + Billing tab upgrade |
-| Super admin | `SUPER_ADMIN_EMAIL` → `/dashboard/admin` |
+| Platform admin | DB user with `platform_super_admin` → `/dashboard/admin` |
 
 ---
 

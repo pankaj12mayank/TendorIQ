@@ -104,6 +104,10 @@ async def initiate_document_upload(
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Tenant context required')
 
+    from ...core.billing.lite_usage import enforce_quota
+
+    await enforce_quota(db, UUID(current_user.tenant_id), 'upload_document')
+
     quota = await document_service.check_quota(
         db, UUID(current_user.tenant_id), data.file_size
     )

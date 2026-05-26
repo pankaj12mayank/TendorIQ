@@ -111,6 +111,18 @@ async def get_demo_status(
     return create_response(await build_demo_status(db, tenant_id))
 
 
+@router.get('/access-status')
+async def get_access_status(
+    current_user: TenantUser,
+    db: AsyncSession = Depends(get_db),
+):
+    """Whether the tenant can use product features (login may still work when expired)."""
+    from ...core.billing.subscription_access import get_tenant_access
+
+    tenant_id = _require_tenant_uuid(current_user)
+    return create_response(await get_tenant_access(db, tenant_id))
+
+
 @router.get('/quota')
 async def get_quota(
     current_user: TenantUser,
@@ -153,12 +165,46 @@ async def upgrade_plan(
     plan = normalize_plan_id(plan_raw)
     cycle = normalize_billing_cycle(request.billing_interval or request.billing_cycle)
 
-    if plan not in PlanLimits.PLANS:
+    if plan not in PlanLimits.PLANS and plan != 'free':
         raise HTTPException(status_code=400, detail='Invalid plan')
+
+    from ...core.billing.razorpay_lite import razorpay_configured
+    from ...core.billing.subscription_access import (
+        apply_plan_period,
+        apply_tenant_plan_entitlements,
+        sync_subscription_row,
+    )
+
+    if plan != 'free' and razorpay_configured():
+        raise HTTPException(
+            status_code=402,
+            detail={
+                'code': 'PAYMENT_REQUIRED',
+                'message': 'Complete payment on Billing to activate this plan.',
+                'upgrade_required': True,
+            },
+        )
 
     tenant.plan = plan
     tenant.billing_cycle = cycle
     tenant.subscription_status = 'active'
+    apply_tenant_plan_entitlements(tenant, plan)
+    if plan == 'free':
+        settings = dict(tenant.settings or {})
+        settings.pop('plan_period_start', None)
+        settings.pop('plan_period_end', None)
+        tenant.settings = settings
+    else:
+        period_start, period_end = apply_plan_period(tenant, billing_cycle=cycle)
+        await sync_subscription_row(
+            db,
+            tenant,
+            plan=plan,
+            status='active',
+            billing_cycle=cycle,
+            period_start=period_start,
+            period_end=period_end,
+        )
     await db.commit()
 
     logger.info('Tenant %s upgraded to %s (%s)', tenant_id, plan, cycle)

@@ -65,7 +65,31 @@ def _ensure_sqlite(api_dir: Path) -> int:
     finally:
         engine.dispose()
 
+    code = _seed_password_users_if_empty()
+    if code != 0:
+        return code
+
     print(f'OK SQLite database at {path}')
+    return 0
+
+
+def _seed_password_users_if_empty() -> int:
+    import asyncio
+
+    from src.core.database import async_session_maker
+    from src.core.local_user_auth import seed_initial_accounts_if_empty
+
+    async def _run() -> bool:
+        async with async_session_maker() as session:
+            return await seed_initial_accounts_if_empty(session)
+
+    try:
+        created = asyncio.run(_run())
+    except Exception as exc:
+        print(f'ERROR: user seed failed - {exc}', file=sys.stderr)
+        return 1
+    if created:
+        print('INFO: system owner login -> .tenderiq/owner-account.txt')
     return 0
 
 

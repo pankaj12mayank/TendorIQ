@@ -66,7 +66,7 @@ run.bat stop
 run.bat
 ```
 
-1. http://localhost:3000/sign-in → **Fill demo** → Sign in  
+1. http://localhost:3000/sign-in → credentials from `.tenderiq/bootstrap-credentials.json` or `/sign-up`  
 2. **Upload** → PDF → wait for analysis  
 3. **Analysis** → check **Clauses** tab  
 4. **Proposal** → Generate  

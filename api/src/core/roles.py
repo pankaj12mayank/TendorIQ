@@ -1,7 +1,7 @@
 """Canonical role definitions — platform vs tenant membership.
 
-Platform roles (JWT `role`, never stored on ``users.role``):
-  - super_admin: env-backed platform operator
+Platform roles (JWT `role`, flagged via ``users.preferences['platform_super_admin']``):
+  - super_admin: platform operator (database account)
 
 Tenant roles (JWT ``membership_role`` + ``memberships.role``):
   - owner, admin, manager, analyst, member, viewer

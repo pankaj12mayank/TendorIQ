@@ -35,7 +35,6 @@ $jwt = Get-EnvValue 'JWT_SECRET'
 $cors = Get-EnvValue 'CORS_ORIGINS'
 $apiUrl = Get-EnvValue 'NEXT_PUBLIC_API_URL'
 $appUrl = Get-EnvValue 'NEXT_PUBLIC_APP_URL'
-$superAdmin = Get-EnvValue 'SUPER_ADMIN_EMAIL'
 $expose = Get-EnvValue 'EXPOSE_ERROR_DETAILS'
 
 if ($jwt.Length -lt 32) {
@@ -63,11 +62,7 @@ if ($nodeEnv -eq 'production') {
     }
 }
 
-if (-not $superAdmin) {
-    Write-Host '[WARN] SUPER_ADMIN_EMAIL not set — admin panel locked' -ForegroundColor Yellow
-} else {
-    Write-Host "[OK] Super admin: $superAdmin" -ForegroundColor Green
-}
+Write-Host '[INFO] Platform admin is a database user (preferences.platform_super_admin), not .env' -ForegroundColor DarkGray
 
 if (-not (Test-Path $VenvPython)) {
     Write-Host '[FAIL] API venv missing — run: run.bat setup' -ForegroundColor Red

@@ -14,8 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import get_settings, settings
 from ...core.auth import AuthService, AuthContext, ClerkAuthService
-from ...core.account_bootstrap import ensure_demo_account, resolve_db_user_session
-from ...core.passwords import verify_password
+from ...core.local_user_auth import (
+    PLATFORM_ADMIN_PREF,
+    authenticate_email_password,
+    change_user_password,
+    owner_account_file_path,
+    register_email_password,
+    seed_initial_accounts_if_empty,
+)
 from ...core.clerk_bootstrap import ensure_clerk_user, resolve_clerk_tenant_session
 from ...core.supabase_auth import verify_supabase_access_token
 from ...core.supabase_bootstrap import ensure_supabase_user, resolve_supabase_session
@@ -45,12 +51,20 @@ router = APIRouter(prefix='/auth', tags=['Authentication'])
 
 
 def _database_unavailable(exc: Exception) -> HTTPException:
+    msg = str(exc).lower()
+    if 'no such column' in msg or 'no such table' in msg:
+        detail = (
+            'Database schema is out of date. Stop servers, then run: run.bat setup '
+            '(or: cd api && venv\\Scripts\\python.exe -m alembic upgrade head).'
+        )
+    else:
+        detail = (
+            'Database is unavailable. Check DATABASE_URL in .env and run: run.bat '
+            '(applies migrations automatically).'
+        )
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=(
-            'Database is unavailable. Ensure MySQL is running, DATABASE_URL in .env is correct, '
-            'and run: run.bat (applies migrations automatically).'
-        ),
+        detail=detail,
     )
 
 
@@ -59,6 +73,17 @@ def _database_unavailable(exc: Exception) -> HTTPException:
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class LoginResponse(BaseModel):
@@ -99,37 +124,6 @@ class WebhookPayload(BaseModel):
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
-def verify_super_admin_credentials(email: str, password: str) -> bool:
-    s = get_settings()
-    admin_email = (s.SUPER_ADMIN_EMAIL or '').strip()
-    admin_password = (s.SUPER_ADMIN_PASSWORD or '').strip()
-    if not admin_email or not admin_password:
-        logger.warning("Super Admin credentials not configured in .env")
-        return False
-    return (
-        email.strip().lower() == admin_email.lower()
-        and password.strip() == admin_password
-    )
-
-
-def verify_demo_user_credentials(email: str, password: str) -> Optional[dict]:
-    s = get_settings()
-    demo_email = (s.DEMO_USER_EMAIL or '').strip()
-    demo_password = (s.DEMO_USER_PASSWORD or '').strip()
-    if not demo_email or not demo_password:
-        return None
-    if (
-        email.strip().lower() == demo_email.lower()
-        and password.strip() == demo_password
-    ):
-        return {
-            'email': demo_email,
-            'role': (s.DEMO_USER_ROLE or 'admin').strip(),
-            'name': (s.DEMO_USER_NAME or 'Demo User').strip(),
-        }
-    return None
-
-
 def _login_response(message: str, user: dict, tokens: dict[str, Any]) -> LoginResponse:
     """Login/clerk-session response with access + refresh tokens."""
     return LoginResponse(
@@ -150,12 +144,12 @@ async def _resolve_display_name(
     email: Optional[str],
     is_super_admin: bool,
 ) -> Optional[str]:
-    if is_super_admin:
-        return 'Super Admin'
     try:
         row = await db.get(User, UUID(user_id))
         if row and row.name:
             return row.name
+        if row and is_super_admin:
+            return row.name or 'Platform Admin'
     except (ValueError, TypeError):
         pass
     if email and '@' in email:
@@ -168,159 +162,87 @@ async def _resolve_display_name(
 @router.post('/login', response_model=LoginResponse)
 async def login(
     request: LoginRequest,
-    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """Unified email/password login — Super Admin, Demo User (tenant bootstrap), or DB user."""
-
-    if verify_super_admin_credentials(request.email, request.password):
-        logger.info("Login successful: super_admin %s", request.email)
-        email = request.email.strip().lower()
-        tokens = issue_session_tokens(
-            user_id='super_admin',
-            email=email,
-            role=PLATFORM_ROLE_SUPER_ADMIN,
-            tenant_id=None,
-            membership_role=None,
-        )
-        return _login_response(
-            'Login successful',
-            _login_user_payload(
-                user_id='super_admin',
-                email=email,
-                name='Super Admin',
-                role=PLATFORM_ROLE_SUPER_ADMIN,
-                membership_role=None,
-                tenant_id=None,
-                is_super_admin=True,
-            ),
-            tokens,
-        )
-
-    demo = verify_demo_user_credentials(request.email, request.password)
-    if demo:
-        try:
-            user_id, tenant_id, membership_role = await ensure_demo_account(
-                db,
-                email=demo['email'],
-                name=demo['name'],
-                membership_role=demo['role'],
-            )
-        except OperationalError as exc:
-            logger.exception('Demo account bootstrap failed (database): %s', exc)
-            raise _database_unavailable(exc) from exc
-        except Exception as exc:
-            logger.exception('Demo account bootstrap failed: %s', exc)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    'Demo tenant setup failed. For local dev use DATABASE_DRIVER=sqlite and run run.bat setup.'
-                ),
-            ) from exc
-
-        logger.info(
-            "Login successful: demo %s role=%s tenant=%s",
-            demo['email'],
-            membership_role,
-            tenant_id,
-        )
-        tokens = issue_session_tokens(
-            user_id=user_id,
-            email=demo['email'],
-            role=membership_role,
-            tenant_id=tenant_id,
-            membership_role=membership_role,
-        )
-        response = _login_response(
-            'Login successful',
-            _login_user_payload(
-                user_id=user_id,
-                email=demo['email'],
-                name=demo['name'],
-                role=membership_role,
-                membership_role=membership_role,
-                tenant_id=tenant_id,
-                is_super_admin=False,
-            ),
-            tokens,
-        )
-        return response
-
+    """Email/password login — credentials must exist in the database."""
     try:
-        session = await resolve_db_user_session(db, request.email)
+        result = await authenticate_email_password(db, request.email, request.password)
     except OperationalError as exc:
         logger.exception('Database unavailable during login: %s', exc)
         raise _database_unavailable(exc) from exc
 
-    if session:
-        user_id, email, tenant_id, membership_role = session
-        user_row = await db.get(User, UUID(user_id))
-        if user_row:
-            stored_hash = (user_row.preferences or {}).get('password_hash')
-            if stored_hash and not verify_password(request.password, stored_hash):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail='Invalid email or password',
-                )
-        tokens = issue_session_tokens(
-            user_id=user_id,
-            email=email,
-            role=membership_role,
-            tenant_id=tenant_id,
-            membership_role=membership_role,
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Invalid email or password',
         )
-        display_name = await _resolve_display_name(db, user_id, email, False)
-        response = _login_response(
-            'Login successful',
-            _login_user_payload(
-                user_id=user_id,
-                email=email,
-                name=display_name,
-                role=membership_role,
-                membership_role=membership_role,
-                tenant_id=tenant_id,
-                is_super_admin=False,
-            ),
-            tokens,
-        )
-        return response
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid email or password",
-    )
+    user_payload, tokens = result
+    logger.info('Login successful: %s', user_payload.get('email'))
+    return _login_response('Login successful', user_payload, tokens)
+
+
+@router.post('/register', response_model=LoginResponse)
+async def register(
+    request: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a database user and sign in (local auth)."""
+    try:
+        user_payload, tokens = await register_email_password(
+            db,
+            email=request.email,
+            password=request.password,
+            name=request.name,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except OperationalError as exc:
+        logger.exception('Database unavailable during register: %s', exc)
+        raise _database_unavailable(exc) from exc
+
+    return _login_response('Account created', user_payload, tokens)
+
+
+@router.post('/bootstrap-seed', include_in_schema=False)
+async def bootstrap_seed(db: AsyncSession = Depends(get_db)):
+    """Dev/first-run: seed accounts when no password users exist (idempotent)."""
+    if settings.NODE_ENV == 'production':
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    try:
+        created = await seed_initial_accounts_if_empty(db)
+    except OperationalError as exc:
+        raise _database_unavailable(exc) from exc
+    return {
+        'created': created,
+        'message': (
+            'Bootstrap accounts created. See .tenderiq/bootstrap-credentials.json'
+            if created
+            else 'Users already exist; seed skipped'
+        ),
+    }
 
 
 @router.get('/status')
-async def auth_status():
-    """Check authentication configuration (no sensitive email in response)."""
-    s = get_settings()
-    super_admin_configured = bool(
-        (s.SUPER_ADMIN_EMAIL or '').strip() and (s.SUPER_ADMIN_PASSWORD or '').strip()
-    )
-    demo_configured = bool((s.DEMO_USER_EMAIL or '').strip() and (s.DEMO_USER_PASSWORD or '').strip())
-    clerk_webhook_secret = bool((s.CLERK_WEBHOOK_SECRET or '').strip())
+async def auth_status(db: AsyncSession = Depends(get_db)):
+    """Check authentication configuration (no secrets in response)."""
+    from ...core.local_user_auth import count_password_users
+
+    try:
+        password_users = await count_password_users(db)
+    except OperationalError:
+        password_users = 0
+    clerk_webhook_secret = bool((settings.CLERK_WEBHOOK_SECRET or '').strip())
     return {
-        "super_admin_configured": super_admin_configured,
-        "demo_user_configured": demo_configured,
-        "demo_tenant_slug": (s.DEMO_TENANT_SLUG or 'demo').strip() if demo_configured else None,
-        "auth_mode": "local_jwt",
-        "super_admin_note": (
-            "Platform super_admin uses SUPER_ADMIN_EMAIL/PASSWORD from .env — not a row in users table."
-            if super_admin_configured
-            else None
-        ),
-        "clerk_webhook_configured": clerk_webhook_secret,
-        "svix_package_available": SVIX_AVAILABLE,
-        "tenant_context": {
-            "demo_login_includes_tenant_id": demo_configured,
-            "super_admin_has_tenant_id": False,
-        },
-        "message": (
-            "Sign in at /sign-in with SUPER_ADMIN_* or DEMO_USER_* from .env"
-            if super_admin_configured or demo_configured
-            else "Configure SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in .env"
-        ),
+        'auth_mode': (settings.AUTH_PROVIDER or 'local').strip().lower(),
+        'password_users': password_users,
+        'registration_available': settings.AUTH_PROVIDER == 'local',
+        'clerk_webhook_configured': clerk_webhook_secret,
+        'svix_package_available': SVIX_AVAILABLE,
+        'message': 'Sign in with your account email and password',
     }
 
 
@@ -465,11 +387,14 @@ async def get_current_user_info(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get current user information (stable contract for web session restore)."""
-    s = get_settings()
-    is_super_admin = current_user.is_super_admin() or (
-        current_user.email
-        and current_user.email.lower() == (s.SUPER_ADMIN_EMAIL or '').strip().lower()
-    )
+    is_super_admin = current_user.is_super_admin()
+    if not is_super_admin and current_user.user_id:
+        try:
+            row = await db.get(User, UUID(current_user.user_id))
+            if row and isinstance(row.preferences, dict):
+                is_super_admin = bool(row.preferences.get(PLATFORM_ADMIN_PREF))
+        except (ValueError, TypeError):
+            pass
     tenant_id = get_current_tenant_id(request) or current_user.tenant_id
     name = await _resolve_display_name(
         db,
@@ -581,6 +506,47 @@ async def update_ai_preferences(
         'style': updated.get('style') or 'professional',
         'tone': updated.get('tone') or 'formal',
         **updated,
+    }
+
+
+@router.post('/change-password')
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: LiteUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Change the signed-in user's database password (local auth)."""
+    if (settings.AUTH_PROVIDER or 'local').strip().lower() != 'local':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Password change is only available for local database auth',
+        )
+    try:
+        await change_user_password(
+            db,
+            user_id=current_user.user_id,
+            current_password=request.current_password,
+            new_password=request.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except OperationalError as exc:
+        raise _database_unavailable(exc) from exc
+
+    return {'message': 'Password updated successfully'}
+
+
+@router.get('/owner-account-file', include_in_schema=False)
+async def owner_account_file_hint() -> dict:
+    """Where to read default system owner login (dev)."""
+    path = owner_account_file_path()
+    return {
+        'path': str(path),
+        'exists': path.is_file(),
+        'hint': 'Open this file after run.bat for default system owner email and password',
     }
 
 

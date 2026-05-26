@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { Shield } from 'lucide-react';
 
@@ -12,20 +11,16 @@ import { Label } from '@/components/ui/label';
 import { useAuthContext } from '@/hooks/use-auth';
 import { isClerkConfigured } from '@/lib/clerk-config';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
-import { getAuthProvider } from '@/lib/supabase-config';
 
 export default function SignInPage() {
-  const searchParams = useSearchParams();
-  const orgSlug = (searchParams.get('org') ?? '').trim().toLowerCase();
   const { loginWithCredentials, isAuthenticated, isLoading, user } = useAuthContext();
   const clerkEnabled = isClerkConfigured();
   const ClerkView = useLazyClientModule(
     clerkEnabled,
     () => import('./sign-in-clerk')
   );
-  const isLocalAuth = getAuthProvider() === 'local';
-  const [email, setEmail] = useState(isLocalAuth ? 'demo@tendoriq.com' : '');
-  const [password, setPassword] = useState(isLocalAuth ? 'Demo@123' : '');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,7 +31,8 @@ export default function SignInPage() {
     try {
       await loginWithCredentials(email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const message = err instanceof Error ? err.message : 'Login failed';
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -60,46 +56,10 @@ export default function SignInPage() {
           <div>
             <h1 className="text-xl font-semibold">Sign in to TenderIQ</h1>
             <p className="text-sm text-muted-foreground">
-              One login for all roles — access is based on your account role.
+              Sign in with your account email and password.
             </p>
           </div>
         </div>
-
-        {isLocalAuth && (
-          <div className="rounded-lg border border-dashed bg-muted/40 p-3 text-sm">
-            <p className="font-medium text-foreground">Local dev — no cloud keys</p>
-            <p className="mt-1 text-muted-foreground">
-              Demo: <code className="text-xs">demo@tendoriq.com</code> / <code className="text-xs">Demo@123</code>
-              <br />
-              Admin: <code className="text-xs">admin@tenderiq.com</code> /{' '}
-              <code className="text-xs">SuperAdmin@123</code>
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEmail('demo@tendoriq.com');
-                  setPassword('Demo@123');
-                }}
-              >
-                Fill demo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEmail('admin@tendoriq.com');
-                  setPassword('SuperAdmin@123');
-                }}
-              >
-                Fill admin
-              </Button>
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -152,6 +112,11 @@ export default function SignInPage() {
         )}
 
         <p className="text-center text-sm text-muted-foreground">
+          No account?{' '}
+          <Link href="/sign-up" className="text-primary hover:underline">
+            Register
+          </Link>
+          {' · '}
           <Link href="/" className="text-primary hover:underline">
             Home
           </Link>
