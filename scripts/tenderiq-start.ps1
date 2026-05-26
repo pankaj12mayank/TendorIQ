@@ -116,7 +116,8 @@ function Sync-WebEnvLocal {
         if ($line -match '^APP_URL=(.+)$' -and -not $appUrl) { $appUrl = $Matches[1].Trim() }
     }
     $lines = @(
-        "NEXT_PUBLIC_API_URL=http://localhost:$ApiPort"
+        "NEXT_PUBLIC_API_URL=http://127.0.0.1:$ApiPort"
+        "NEXT_PUBLIC_USE_API_PROXY=1"
         "NEXT_PUBLIC_APP_URL=$appUrl"
         "NEXT_PUBLIC_AUTH_PROVIDER=$authProvider"
         'NEXT_PUBLIC_FEATURE_AI_ANALYSIS=true'
@@ -352,6 +353,14 @@ $loginEnv
     }
 }
 
+$sidebarPath = Join-Path $WebDir "src\components\design-system\app-sidebar.tsx"
+if (Test-Path $sidebarPath) {
+    $sidebarSrc = Get-Content $sidebarPath -Raw
+    if ($sidebarSrc -notmatch 'getNavGroupsForUser') {
+        throw "Frontend bug: app-sidebar.tsx is outdated. Pull latest changes or re-run from repo root."
+    }
+}
+
 Write-Log "INFO" "Starting frontend on http://localhost:3000 ..."
 $webLog = Join-Path $LogDir "web.log"
 $webCmd = "Set-Location '$WebDir'; pnpm run dev *>> '$webLog'"
@@ -420,4 +429,17 @@ if (-not $webOk) {
 }
 
 if (-not $apiOk) { exit 1 }
+
+Write-Log "INFO" "Verifying login accounts (owner + demo)..."
+Push-Location $ApiDir
+$env:DOTENV_PATH = $rootEnv
+& $VenvPython (Join-Path $ApiDir 'scripts\verify_auth.py')
+$authVerifyCode = $LASTEXITCODE
+Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+Pop-Location
+if ($authVerifyCode -ne 0) {
+    Write-Log "ERROR" "Auth verification failed — see .tenderiq\owner-account.txt and run: run.bat setup"
+    exit 1
+}
+Write-Log "INFO" "Auth verification OK"
 

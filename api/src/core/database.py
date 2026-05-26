@@ -80,6 +80,18 @@ def _allow_start_without_db() -> bool:
     return os.getenv('ALLOW_START_WITHOUT_DB', '').lower() in ('1', 'true', 'yes')
 
 
+async def _ensure_dev_accounts_on_startup() -> None:
+    """Guarantee system owner + demo passwords whenever API starts in dev."""
+    try:
+        from .local_user_auth import ensure_dev_accounts
+
+        async with async_session_maker() as session:
+            if await ensure_dev_accounts(session):
+                logger.info('Dev login accounts ensured (.tenderiq/owner-account.txt)')
+    except Exception as exc:
+        logger.warning('Dev account bootstrap skipped: %s', exc)
+
+
 async def init_db() -> None:
     logger.info('Verifying database connection (%s)', settings.DATABASE_DRIVER)
     try:
@@ -92,6 +104,8 @@ async def init_db() -> None:
                 logger.info(
                     'Database connection verified (schema via alembic upgrade head)'
                 )
+        if settings.is_development:
+            await _ensure_dev_accounts_on_startup()
     except Exception as exc:
         if _allow_start_without_db():
             logger.warning('Database unavailable (ALLOW_START_WITHOUT_DB=1): %s', exc)

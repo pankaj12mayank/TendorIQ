@@ -152,21 +152,6 @@ export const envSchema = z.object({
   NEXT_PUBLIC_FEATURE_CUSTOM_DOMAINS: z.coerce.boolean().optional(),
   NEXT_PUBLIC_FEATURE_SSO: z.coerce.boolean().optional(),
 
-  // Client-visible mirrors (Next.js bundles NEXT_PUBLIC_* only)
-  NEXT_PUBLIC_FEATURE_AI_ANALYSIS: z.coerce.boolean().optional(),
-  NEXT_PUBLIC_FEATURE_DOCUMENT_OCR: z.coerce.boolean().optional(),
-  NEXT_PUBLIC_FEATURE_ADVANCED_ANALYTICS: z.coerce.boolean().optional(),
-  NEXT_PUBLIC_FEATURE_WEBHOOKS: z.coerce.boolean().optional(),
-  NEXT_PUBLIC_FEATURE_API_ACCESS: z.coerce.boolean().optional(),
-  NEXT_PUBLIC_FEATURE_CUSTOM_DOMAINS: z.coerce.boolean().optional(),
-  NEXT_PUBLIC_FEATURE_SSO: z.coerce.boolean().optional(),
-
-  // Root `.env.example` aliases (optional)
-  FRONTEND_URL: z.string().url().optional(),
-  API_URL: z.string().url().optional(),
-  STORAGE_TYPE: z.enum(['local', 's3', 'r2']).optional(),
-  STORAGE_LOCAL_PATH: z.string().optional(),
-
   // ===========================================
   // RAILWAY-SPECIFIC
   // ===========================================

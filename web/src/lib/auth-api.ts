@@ -14,6 +14,7 @@ export function mapUserFromApi(data: Record<string, unknown>): AuthUser {
   const membershipRole =
     (data.membership_role as string | undefined) ?? (data.role as string | undefined);
   const role = (data.role as string | undefined) ?? membershipRole;
+  const companyProfile = data.company_profile as AuthUser['companyProfile'] | undefined;
   return {
     id: (data.user_id as string | undefined) ?? (data.id as string),
     email: data.email as string,
@@ -21,6 +22,7 @@ export function mapUserFromApi(data: Record<string, unknown>): AuthUser {
     role,
     membershipRole,
     tenantId: (data.tenant_id as string | undefined) ?? undefined,
+    companyProfile,
     permissions:
       perms.length > 0
         ? perms
@@ -30,42 +32,59 @@ export function mapUserFromApi(data: Record<string, unknown>): AuthUser {
   };
 }
 
+export type FetchMeResult = {
+  user: AuthUser | null;
+  unauthorized: boolean;
+  /** True when API is down, CORS blocked, or browser could not connect */
+  networkError?: boolean;
+};
+
 export async function fetchMeFromApi(
   token: string,
   existingUser?: AuthUser | null
-): Promise<{ user: AuthUser | null; unauthorized: boolean }> {
-  const res = await fetch(apiUrl('/api/v1/auth/me'), {
-    headers: {
-      'Content-Type': 'application/json',
-      ...buildApiAuthHeaders(token, existingUser ?? undefined),
-    },
-  });
-  if (res.status === 401) {
-    return { user: null, unauthorized: true };
+): Promise<FetchMeResult> {
+  try {
+    const res = await fetch(apiUrl('/auth/me'), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildApiAuthHeaders(token, existingUser ?? undefined),
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.status === 401) {
+      return { user: null, unauthorized: true };
+    }
+    if (!res.ok) {
+      return { user: null, unauthorized: false };
+    }
+    const data = await res.json();
+    return { user: mapUserFromApi(data as Record<string, unknown>), unauthorized: false };
+  } catch {
+    return { user: null, unauthorized: false, networkError: true };
   }
-  if (!res.ok) {
-    return { user: null, unauthorized: false };
-  }
-  const data = await res.json();
-  return { user: mapUserFromApi(data as Record<string, unknown>), unauthorized: false };
 }
 
 export async function refreshAccessToken(
   refreshToken: string
 ): Promise<ApiSessionPayload | null> {
-  const res = await fetch(apiUrl('/api/v1/auth/refresh'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data.access_token) return null;
-  return {
-    access_token: data.access_token as string,
-    refresh_token: (data.refresh_token as string | undefined) ?? refreshToken,
-    expires_in: data.expires_in as number | undefined,
-  };
+  try {
+    const res = await fetch(apiUrl('/auth/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.access_token) return null;
+    return {
+      access_token: data.access_token as string,
+      refresh_token: (data.refresh_token as string | undefined) ?? refreshToken,
+      expires_in: data.expires_in as number | undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function tokensFromLoginResponse(data: {

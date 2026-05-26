@@ -54,7 +54,29 @@ try {
     exit 1
 }
 
-Write-Host '[5/5] API health (if running)...' -ForegroundColor Cyan
+Write-Host '[5/7] Auth login verification (DB)...' -ForegroundColor Cyan
+Push-Location $ApiDir
+$env:DOTENV_PATH = $rootEnv
+& $VenvPython (Join-Path $ApiDir 'scripts\verify_auth.py')
+$authCode = $LASTEXITCODE
+Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+Pop-Location
+if ($authCode -ne 0) {
+    Write-Host '[FAIL] Auth verification failed — run: run.bat setup' -ForegroundColor Red
+    exit 1
+}
+
+Write-Host '[6/7] Auth HTTP flow (if API running)...' -ForegroundColor Cyan
+Push-Location $ApiDir
+$env:DOTENV_PATH = $rootEnv
+& $VenvPython (Join-Path $ApiDir 'scripts\auth_flow_check.py') 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '      Auth HTTP check skipped (start run.bat to test live API)' -ForegroundColor DarkGray
+}
+Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+Pop-Location
+
+Write-Host '[7/7] API health (if running)...' -ForegroundColor Cyan
 try {
     if (Test-TenderIqApiReady -Port 8000) {
         Write-Host '      API ready on :8000' -ForegroundColor Green

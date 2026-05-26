@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Upload, ExternalLink } from 'lucide-react';
+import { PageHeader } from '@/components/design-system/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileUploader } from '@/components/upload/file-uploader';
 import { AiModelPicker } from '@/components/upload/ai-model-picker';
@@ -90,15 +91,15 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Upload Documents</h1>
-        <p className="text-muted-foreground">Upload and process your tender documents.</p>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Upload documents"
+        description="Upload tender PDFs or Word files. AI analysis starts automatically with your selected model."
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card>
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="border-border/80 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Upload className="w-5 h-5" />
@@ -122,9 +123,9 @@ export default function UploadPage() {
         </div>
 
         <div className="space-y-4">
-          <Card>
+          <Card className="border-border/80 shadow-sm">
             <CardHeader>
-              <CardTitle>Upload Guidelines</CardTitle>
+              <CardTitle className="font-display text-lg">Guidelines</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div>

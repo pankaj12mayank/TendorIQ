@@ -7,6 +7,7 @@ from src.core.ai.lite_ai import (
     extract_json_object,
     resolve_default_model,
     ProviderInfo,
+    _resolve_catalog_defaults,
 )
 
 
@@ -29,6 +30,23 @@ def test_catalog_to_dict_picks_configured_default():
     assert data['any_configured'] is True
     assert data['default_provider'] == 'openai'
     assert data['providers'][0]['id'] == 'openai'
+
+
+def test_resolve_catalog_defaults_prefers_ollama_when_live():
+    providers = [
+        ProviderInfo(id='openai', label='OpenAI', configured=True, online=True, models=['gpt-4o-mini']),
+        ProviderInfo(
+            id='ollama',
+            label='Ollama',
+            configured=True,
+            online=True,
+            models=['llama3.2:latest'],
+            default_model='llama3.2:latest',
+        ),
+    ]
+    prov, model = _resolve_catalog_defaults(providers)
+    assert prov == 'ollama'
+    assert model == 'llama3.2:latest'
 
 
 def test_resolve_default_model_fallback(monkeypatch):

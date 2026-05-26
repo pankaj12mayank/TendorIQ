@@ -145,7 +145,7 @@ export function PricingSection({ plans: adminPlans }: { plans?: AdminPlan[] }) {
   };
 
   return (
-    <section id="pricing" className="scroll-mt-24 bg-gradient-to-b from-background via-muted/10 to-background py-32">
+    <section id="pricing" className="relative scroll-mt-24 border-t border-white/5 py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 30 }}

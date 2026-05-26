@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { PageHeader } from '@/components/design-system/page-header';
 import { AiPanel } from '@/components/settings/ai-panel';
 import { BillingPanel } from '@/components/settings/billing-panel';
 import { ProfilePanel } from '@/components/settings/profile-panel';
@@ -35,25 +36,25 @@ export default function SettingsPage() {
   }, [searchParams, router]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">Profile, company, AI defaults, and billing in one place.</p>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Settings"
+        description="Profile, company details, AI defaults, and billing — all in one place."
+      />
 
-      <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))}>
-        <TabsList>
+      <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))} className="space-y-6">
+        <TabsList className="max-w-xl">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>
-        <TabsContent value="profile" className="mt-6">
+        <TabsContent value="profile" className="mt-0 focus-visible:outline-none">
           <ProfilePanel />
         </TabsContent>
-        <TabsContent value="ai" className="mt-6">
+        <TabsContent value="ai" className="mt-0 focus-visible:outline-none">
           <AiPanel />
         </TabsContent>
-        <TabsContent value="billing" className="mt-6">
+        <TabsContent value="billing" className="mt-0 focus-visible:outline-none">
           <BillingPanel />
         </TabsContent>
       </Tabs>

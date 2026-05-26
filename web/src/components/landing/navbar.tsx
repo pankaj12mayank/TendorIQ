@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Menu, X } from 'lucide-react';
+import { LayoutDashboard, Menu, X } from 'lucide-react';
 import { ROUTES } from '@/lib/routes';
+import { cn } from '@/lib/utils';
 
 const navLinks = [
   { name: 'Features', href: '#features' },
@@ -20,13 +21,8 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const router = useRouter();
 
-  const scrollToHome = () => {
-    document.querySelector('#home')?.scrollIntoView({ behavior: 'smooth' });
-    setIsMobileOpen(false);
-  };
-
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
+    const handleScroll = () => setIsScrolled(window.scrollY > 24);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -39,90 +35,82 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
 
   return (
     <>
-      <motion.nav
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          isScrolled
-            ? 'bg-background/80 dark:bg-background-dark/80 backdrop-blur-xl border-b border-border/10 shadow-lg'
-            : 'bg-transparent'
-        }`}
+      <motion.header
+        initial={{ y: -80, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        className={cn(
+          'fixed top-0 left-0 right-0 z-50 transition-all duration-500',
+          isScrolled ? 'nav-glass py-2' : 'bg-transparent py-4'
+        )}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 lg:h-20">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.05 }}
-              className="flex-shrink-0 cursor-pointer bg-transparent border-0 p-0"
-              onClick={scrollToHome}
-            >
-              <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                TenderIQ
-              </span>
-            </motion.button>
-
-            <div className="hidden lg:flex items-center space-x-1">
-              {navLinks.map((link) => (
-                <motion.a
-                  key={link.name}
-                  href={link.href}
-                  onClick={(e) => handleNavClick(e, link.href)}
-                  whileHover={{ y: -2 }}
-                  className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors relative group"
-                >
-                  {link.name}
-                  <span className="absolute bottom-0 left-1/2 h-0.5 w-0 -translate-x-1/2 bg-primary transition-all group-hover:w-3/5" />
-                </motion.a>
-              ))}
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="group flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/30 transition group-hover:ring-primary/50">
+              <LayoutDashboard className="h-4 w-4 text-primary" />
             </div>
+            <span className="font-display text-lg font-semibold tracking-tight text-gradient-cinematic-accent">
+              TenderIQ
+            </span>
+          </Link>
 
-            <div className="hidden lg:flex items-center gap-3">
-              {isSignedIn ? (
-                <Button onClick={() => router.push(ROUTES.dashboard)} className="bg-primary hover:bg-primary/90">
-                  Dashboard
+          <nav className="hidden items-center gap-1 lg:flex">
+            {navLinks.map((link) => (
+              <a
+                key={link.name}
+                href={link.href}
+                onClick={(e) => handleNavClick(e, link.href)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
+              >
+                {link.name}
+              </a>
+            ))}
+          </nav>
+
+          <div className="hidden items-center gap-2 lg:flex">
+            {isSignedIn ? (
+              <Button className="btn-cinematic" onClick={() => router.push(ROUTES.dashboard)}>
+                Open dashboard
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" asChild className="text-muted-foreground hover:text-foreground">
+                  <Link href={ROUTES.signIn}>Log in</Link>
                 </Button>
-              ) : (
-                <>
-                  <Button variant="ghost" asChild>
-                    <Link href={ROUTES.signIn}>Log in</Link>
-                  </Button>
-                  <Button asChild className="bg-primary hover:bg-primary/90">
-                    <Link href={ROUTES.signUp}>Sign up free</Link>
-                  </Button>
-                </>
-              )}
-            </div>
-
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.9 }}
-              className="lg:hidden p-2"
-              onClick={() => setIsMobileOpen(!isMobileOpen)}
-              aria-label="Toggle menu"
-            >
-              {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </motion.button>
+                <Button asChild className="btn-cinematic">
+                  <Link href={ROUTES.signUp}>Start free</Link>
+                </Button>
+              </>
+            )}
           </div>
+
+          <button
+            type="button"
+            className="rounded-lg p-2 text-foreground lg:hidden"
+            onClick={() => setIsMobileOpen(!isMobileOpen)}
+            aria-label="Menu"
+          >
+            {isMobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
         </div>
-      </motion.nav>
+      </motion.header>
 
       <AnimatePresence>
         {isMobileOpen && (
           <motion.div
-            initial={{ opacity: 0, x: '100%' }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: '100%' }}
-            transition={{ type: 'spring', damping: 25 }}
-            className="fixed inset-0 z-40 lg:hidden bg-background dark:bg-background-dark"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-background/95 backdrop-blur-xl lg:hidden"
           >
-            <div className="flex flex-col h-full pt-20 px-6 pb-6">
-              <div className="space-y-2">
+            <div className="flex h-full flex-col px-6 pb-8 pt-24">
+              <div className="space-y-1">
                 {navLinks.map((link) => (
                   <a
                     key={link.name}
                     href={link.href}
                     onClick={(e) => handleNavClick(e, link.href)}
-                    className="block px-4 py-3 text-lg font-medium text-foreground hover:bg-muted rounded-lg"
+                    className="block rounded-xl px-4 py-3 text-lg font-medium hover:bg-white/5"
                   >
                     {link.name}
                   </a>
@@ -130,16 +118,16 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
               </div>
               <div className="mt-auto space-y-3">
                 {isSignedIn ? (
-                  <Button onClick={() => router.push(ROUTES.dashboard)} className="w-full bg-primary">
+                  <Button className="btn-cinematic w-full" onClick={() => router.push(ROUTES.dashboard)}>
                     Dashboard
                   </Button>
                 ) : (
                   <>
-                    <Button asChild variant="outline" className="w-full">
+                    <Button asChild variant="outline" className="btn-cinematic-outline w-full">
                       <Link href={ROUTES.signIn}>Log in</Link>
                     </Button>
-                    <Button asChild className="w-full bg-primary">
-                      <Link href={ROUTES.signUp}>Sign up free</Link>
+                    <Button asChild className="btn-cinematic w-full">
+                      <Link href={ROUTES.signUp}>Start free</Link>
                     </Button>
                   </>
                 )}

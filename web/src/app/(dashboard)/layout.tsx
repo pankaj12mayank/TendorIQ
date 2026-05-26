@@ -1,16 +1,18 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useAuth, useCurrentUser } from '@/hooks/use-auth';
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { isSuperAdmin } from '@/lib/permissions';
+import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { MobileNav } from '@/components/layout/mobile-nav';
+import { PageContent } from '@/components/layout/page-content';
 import { DashboardBootLoading, SidebarSkeleton } from '@/components/layout/dashboard-loading';
 import { Toaster } from '@/components/ui/sonner';
 import { ROUTES } from '@/lib/routes';
 import { SubscriptionExpiredBanner } from '@/components/billing/subscription-gate';
+import { CinematicBackground } from '@/components/cinematic/cinematic-background';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 function ExpiredPlanBanner() {
   const pathname = usePathname();
@@ -27,9 +29,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { isLoaded, userId } = useAuth();
-  const user = useCurrentUser();
   const router = useRouter();
-  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -42,13 +42,6 @@ export default function DashboardLayout({
     }
   }, [isLoaded, userId, router]);
 
-  useEffect(() => {
-    if (!isLoaded || !userId || !user) return;
-    if (isSuperAdmin(user.role) && pathname === ROUTES.dashboard) {
-      router.replace(ROUTES.admin);
-    }
-  }, [isLoaded, userId, user, pathname, router]);
-
   if (!mounted || !isLoaded) {
     return <DashboardBootLoading message="Loading workspace..." />;
   }
@@ -58,21 +51,24 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="dashboard-shell flex min-h-screen">
+      <CinematicBackground intensity="subtle" interactive={false} className="fixed inset-0 z-0" />
       <Suspense fallback={<SidebarSkeleton />}>
         <Sidebar />
       </Suspense>
       <MobileNav />
-      <div className="flex flex-1 flex-col lg:pl-64">
+      <div className="relative z-10 flex min-h-screen flex-1 flex-col lg:pl-[var(--sidebar-width)]">
         <Header />
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
-          <Suspense fallback={null}>
-            <ExpiredPlanBanner />
-          </Suspense>
-          {children}
+        <main className="flex-1">
+          <PageContent>
+            <Suspense fallback={null}>
+              <ExpiredPlanBanner />
+            </Suspense>
+            {children}
+          </PageContent>
         </main>
       </div>
-      <Toaster />
+      <Toaster richColors closeButton position="top-right" />
     </div>
   );
 }

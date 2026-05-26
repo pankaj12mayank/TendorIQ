@@ -20,6 +20,7 @@ from ...core.local_user_auth import (
     change_user_password,
     owner_account_file_path,
     register_email_password,
+    ensure_dev_accounts,
     seed_initial_accounts_if_empty,
 )
 from ...core.clerk_bootstrap import ensure_clerk_user, resolve_clerk_tenant_session
@@ -27,7 +28,7 @@ from ...core.supabase_auth import verify_supabase_access_token
 from ...core.supabase_bootstrap import ensure_supabase_user, resolve_supabase_session
 from ...core.database import get_db
 from ...core.logging import get_logger
-from ...core.models import User
+from ...core.models import User, pk_str
 from ...core.middleware import get_current_tenant_id
 from ...core.local_auth import (
     build_me_response,
@@ -145,7 +146,7 @@ async def _resolve_display_name(
     is_super_admin: bool,
 ) -> Optional[str]:
     try:
-        row = await db.get(User, UUID(user_id))
+        row = await db.get(User, pk_str(user_id))
         if row and row.name:
             return row.name
         if row and is_super_admin:
@@ -209,19 +210,19 @@ async def register(
 
 @router.post('/bootstrap-seed', include_in_schema=False)
 async def bootstrap_seed(db: AsyncSession = Depends(get_db)):
-    """Dev/first-run: seed accounts when no password users exist (idempotent)."""
+    """Dev/first-run: ensure system owner + demo accounts exist (idempotent)."""
     if settings.NODE_ENV == 'production':
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     try:
-        created = await seed_initial_accounts_if_empty(db)
+        created = await ensure_dev_accounts(db)
     except OperationalError as exc:
         raise _database_unavailable(exc) from exc
     return {
         'created': created,
         'message': (
-            'Bootstrap accounts created. See .tenderiq/bootstrap-credentials.json'
+            'Dev accounts ensured. See .tenderiq/owner-account.txt'
             if created
-            else 'Users already exist; seed skipped'
+            else 'Accounts already configured'
         ),
     }
 
@@ -390,9 +391,13 @@ async def get_current_user_info(
     is_super_admin = current_user.is_super_admin()
     if not is_super_admin and current_user.user_id:
         try:
-            row = await db.get(User, UUID(current_user.user_id))
-            if row and isinstance(row.preferences, dict):
-                is_super_admin = bool(row.preferences.get(PLATFORM_ADMIN_PREF))
+            row = await db.get(User, pk_str(current_user.user_id))
+            if row:
+                from ...core.user_preferences import normalize_preferences
+
+                is_super_admin = bool(
+                    normalize_preferences(row.preferences).get(PLATFORM_ADMIN_PREF)
+                )
         except (ValueError, TypeError):
             pass
     tenant_id = get_current_tenant_id(request) or current_user.tenant_id
@@ -453,7 +458,7 @@ async def update_company_profile(
     from sqlalchemy import select
 
     result = await db.execute(
-        select(CompanyProfile).where(CompanyProfile.user_id == UUID(current_user.user_id))
+        select(CompanyProfile).where(CompanyProfile.user_id == pk_str(current_user.user_id))
     )
     row = result.scalar_one_or_none()
     if not row:

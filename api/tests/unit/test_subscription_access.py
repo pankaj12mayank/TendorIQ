@@ -31,7 +31,11 @@ def test_free_plan_always_usable():
     assert access['is_expired'] is False
 
 
-def test_paid_plan_expired_by_period_end():
+def test_paid_plan_expired_by_period_end(monkeypatch):
+    monkeypatch.setattr(
+        'src.core.billing.subscription_access.subscription_expiry_enforced',
+        lambda: True,
+    )
     past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     tenant = _tenant(
         plan='starter',
@@ -41,6 +45,22 @@ def test_paid_plan_expired_by_period_end():
     access = evaluate_tenant_access(tenant)
     assert access['can_use_system'] is False
     assert access['is_expired'] is True
+
+
+def test_dev_mode_skips_expiry_block(monkeypatch):
+    monkeypatch.setattr(
+        'src.core.billing.subscription_access.subscription_expiry_enforced',
+        lambda: False,
+    )
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    tenant = _tenant(
+        plan='starter',
+        subscription_status='expired',
+        settings={'plan_period_end': past},
+    )
+    access = evaluate_tenant_access(tenant)
+    assert access['can_use_system'] is True
+    assert access['enforcement'] == 'quotas_only'
 
 
 def test_paid_plan_active_with_future_period():
@@ -54,7 +74,11 @@ def test_paid_plan_active_with_future_period():
     assert access['can_use_system'] is True
 
 
-def test_canceled_status_blocks_usage():
+def test_canceled_status_blocks_usage(monkeypatch):
+    monkeypatch.setattr(
+        'src.core.billing.subscription_access.subscription_expiry_enforced',
+        lambda: True,
+    )
     access = evaluate_tenant_access(
         _tenant(plan='starter', subscription_status='canceled')
     )

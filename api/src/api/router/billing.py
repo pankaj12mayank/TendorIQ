@@ -175,7 +175,14 @@ async def upgrade_plan(
         sync_subscription_row,
     )
 
-    if plan != 'free' and razorpay_configured():
+    from ...core.config import settings
+
+    if (
+        plan != 'free'
+        and settings.is_production
+        and settings.billing_enforce_subscription_expiry
+        and razorpay_configured()
+    ):
         raise HTTPException(
             status_code=402,
             detail={

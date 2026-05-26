@@ -14,4 +14,8 @@ export interface SessionUser {
   membershipRole?: MembershipRole | string;
   tenantId?: string;
   permissions?: string[];
+  companyProfile?: {
+    company_name?: string;
+    [key: string]: unknown;
+  };
 }

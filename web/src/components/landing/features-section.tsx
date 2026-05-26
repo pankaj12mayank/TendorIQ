@@ -88,34 +88,21 @@ export function FeaturesSection({ items }: { items?: FeatureItem[] }) {
   }, []);
 
   return (
-    <section id="features" className="scroll-mt-24 py-32 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-muted/20 to-background" />
-      
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
+    <section id="features" className="relative scroll-mt-24 border-t border-white/5 py-24 md:py-32">
+      <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center max-w-3xl mx-auto mb-20"
+          className="mx-auto mb-16 max-w-3xl text-center md:mb-20"
         >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6"
-          >
-            <Zap className="w-4 h-4" />
-            Powerful Features
-          </motion.div>
-          
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Everything You Need to Win Tenders
-          </h2>
-          
-          <p className="text-xl text-muted-foreground">
-            A comprehensive suite of AI-powered tools designed to streamline your entire tender process.
+          <p className="cinematic-eyebrow mb-6 inline-flex">
+            <Zap className="h-3.5 w-3.5" />
+            Powerful features
+          </p>
+          <h2 className="cinematic-heading">Everything you need to win tenders</h2>
+          <p className="mt-4 text-lg text-muted-foreground">
+            AI-powered tools for extraction, risk, proposals, and team workflow — in one cinematic workspace.
           </p>
         </motion.div>
 
@@ -129,7 +116,7 @@ export function FeaturesSection({ items }: { items?: FeatureItem[] }) {
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
               whileHover={{ y: -5 }}
-              className="group relative p-8 bg-card dark:bg-card-dark rounded-2xl border border-border hover:border-primary/50 transition-all duration-300"
+              className="glass-panel group relative p-8 transition-all duration-300 hover:border-primary/40"
             >
               {/* Hover Glow */}
               <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-10 rounded-2xl transition-opacity duration-300`} />

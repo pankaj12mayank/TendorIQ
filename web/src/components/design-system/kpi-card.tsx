@@ -1,10 +1,8 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { fadeIn } from '@/design-system/motion';
 
 export function KpiCard({
   title,
@@ -14,7 +12,6 @@ export function KpiCard({
   icon: Icon,
   description,
   className,
-  delay = 0,
 }: {
   title: string;
   value: string;
@@ -23,20 +20,15 @@ export function KpiCard({
   icon: LucideIcon;
   description?: string;
   className?: string;
-  delay?: number;
 }) {
   return (
-    <motion.div
-      {...fadeIn}
-      transition={{ delay, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+    <div
       className={cn(
-        'group relative overflow-hidden rounded-xl border border-border/80 bg-card p-5 shadow-sm transition-all duration-300 hover:border-primary/25 hover:shadow-md',
+        'glass-panel group relative overflow-hidden p-5 transition-all duration-300 hover:border-primary/30',
         className
       )}
     >
-      <motion.div
-        className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/5 blur-2xl transition-opacity group-hover:opacity-100 opacity-0"
-      />
+      <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/5 blur-2xl opacity-0 transition-opacity group-hover:opacity-100" />
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
@@ -55,6 +47,6 @@ export function KpiCard({
           <Icon className="h-5 w-5" />
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { FileDown, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AnalysisContent } from '@/components/analysis';
+import { PageHeader } from '@/components/design-system/page-header';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/lib/routes';
 import { useAnalysisApi } from '@/hooks/use-analysis';
@@ -19,47 +20,49 @@ export default function AnalysisPage() {
   const [exporting, setExporting] = useState(false);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Analysis</h1>
-          <p className="text-muted-foreground">
-            AI-powered tender analysis{tenderId ? ` for tender ${tenderId}` : ''}.
-          </p>
-        </div>
-        {tenderId && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={exporting || isLoading}
-              onClick={async () => {
-                setExporting(true);
-                try {
-                  await exportAnalysis();
-                  toast.success('Analysis PDF downloaded');
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : 'Export failed');
-                } finally {
-                  setExporting(false);
-                }
-              }}
-            >
-              {exporting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FileDown className="mr-2 h-4 w-4" />
-              )}
-              Export PDF
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={`${ROUTES.proposal}?tenderId=${tenderId}`}>
-                <FileText className="mr-2 h-4 w-4" />
-                Create proposal
-              </Link>
-            </Button>
-          </div>
-        )}
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Analysis"
+        description={
+          tenderId
+            ? `AI-powered tender analysis for this document.`
+            : 'AI-powered tender analysis — open from Upload or pick a tender below.'
+        }
+        actions={
+          tenderId ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={exporting || isLoading}
+                onClick={async () => {
+                  setExporting(true);
+                  try {
+                    await exportAnalysis();
+                    toast.success('Analysis PDF downloaded');
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Export failed');
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+              >
+                {exporting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileDown className="mr-2 h-4 w-4" />
+                )}
+                Export PDF
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href={`${ROUTES.proposal}?tenderId=${tenderId}`}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Create proposal
+                </Link>
+              </Button>
+            </div>
+          ) : undefined
+        }
+      />
       {isLoading && <LoadingState message="Loading analysis..." />}
       {error && (
         <PremiumErrorState

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .logging import get_logger
-from .models import CompanyProfile, Membership, Tenant, User, generate_uuid
+from .models import CompanyProfile, Membership, Tenant, User, generate_uuid, pk_str
 
 logger = get_logger('personal_workspace')
 
@@ -32,7 +32,7 @@ async def ensure_personal_workspace(
     Returns:
         (tenant_id, membership_role)
     """
-    uid = UUID(str(user_id))
+    uid = pk_str(user_id)
     user = await db.get(User, uid)
     if not user:
         raise ValueError(f'User not found: {user_id}')
@@ -85,7 +85,7 @@ async def ensure_personal_workspace(
 
 async def _ensure_company_profile(
     db: AsyncSession,
-    user_id: UUID,
+    user_id: str,
     company_name: Optional[str],
     email: Optional[str],
 ) -> CompanyProfile:
@@ -109,7 +109,7 @@ async def _ensure_company_profile(
 
 async def get_company_profile_dict(db: AsyncSession, user_id: str) -> Optional[dict]:
     result = await db.execute(
-        select(CompanyProfile).where(CompanyProfile.user_id == UUID(str(user_id)))
+        select(CompanyProfile).where(CompanyProfile.user_id == pk_str(user_id))
     )
     row = result.scalar_one_or_none()
     if not row:
@@ -145,7 +145,7 @@ async def update_ai_preferences_dict(
     from uuid import UUID
 
     result = await db.execute(
-        select(CompanyProfile).where(CompanyProfile.user_id == UUID(str(user_id)))
+        select(CompanyProfile).where(CompanyProfile.user_id == pk_str(user_id))
     )
     row = result.scalar_one_or_none()
     if not row:

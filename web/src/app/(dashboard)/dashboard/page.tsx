@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { useTenders } from '@/hooks/use-api';
 import { TableRowSkeleton } from '@/components/design-system/skeleton';
 import { PremiumErrorState } from '@/components/design-system/empty-state';
-import { staggerContainer } from '@/design-system/motion';
+import { staggerContainer, staggerItem } from '@/design-system/motion';
 import { ROUTES } from '@/lib/routes';
 
 const pipelineSteps = [
@@ -69,14 +69,22 @@ export default function DashboardPage() {
 
       <motion.div
         variants={staggerContainer}
-        initial="initial"
-        animate="animate"
+        initial="hidden"
+        animate="show"
         className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
       >
-        <KpiCard title="Active tenders" value={String(activeTenders)} trend={isLoading ? '...' : `${activeTenders > 0 ? '+' : ''}${activeTenders}`} trendUp icon={FileText} delay={0} />
-        <KpiCard title="Organizations" value={String(organizationCount || '—')} trend="0%" icon={Users} delay={0.05} />
-        <KpiCard title="Pipeline value" value={pipelineValue > 0 ? `$${(pipelineValue / 1000).toFixed(0)}K` : '—'} trend={isLoading ? '...' : '+'} trendUp icon={DollarSign} delay={0.1} />
-        <KpiCard title="Total tenders" value={String(tenders.length)} trend={isLoading ? '...' : ''} icon={TrendingUp} delay={0.15} />
+        <motion.div variants={staggerItem}>
+          <KpiCard title="Active tenders" value={String(activeTenders)} trend={isLoading ? '...' : `${activeTenders > 0 ? '+' : ''}${activeTenders}`} trendUp icon={FileText} />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <KpiCard title="Organizations" value={String(organizationCount || '—')} trend="0%" icon={Users} />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <KpiCard title="Pipeline value" value={pipelineValue > 0 ? `$${(pipelineValue / 1000).toFixed(0)}K` : '—'} trend={isLoading ? '...' : '+'} trendUp icon={DollarSign} />
+        </motion.div>
+        <motion.div variants={staggerItem}>
+          <KpiCard title="Total tenders" value={String(tenders.length)} trend={isLoading ? '...' : ''} icon={TrendingUp} />
+        </motion.div>
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-5">

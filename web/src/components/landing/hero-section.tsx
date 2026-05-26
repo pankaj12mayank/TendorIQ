@@ -3,18 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { AuthSignUpButton } from '@/components/auth/auth-buttons';
+import { ArrowRight, FileText, Play, Sparkles, Brain, Shield, Zap } from 'lucide-react';
+
 import { useCurrentUser } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
-import { 
-  ArrowRight, 
-  Play, 
-  FileText, 
-  Shield, 
-  Zap,
-  Brain,
-  Sparkles
-} from 'lucide-react';
 
 type HeroContent = {
   headline?: string;
@@ -23,25 +15,26 @@ type HeroContent = {
   cta_secondary?: string;
 };
 
+const stats = [
+  { value: '70%', label: 'Time saved' },
+  { value: '3×', label: 'More bids' },
+  { value: '99%', label: 'Accuracy' },
+  { value: '500+', label: 'Teams' },
+];
+
 export function HeroSection({ content }: { content?: HeroContent }) {
   const router = useRouter();
   const user = useCurrentUser();
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setIsLoaded(true);
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({
-        x: (e.clientX / window.innerWidth) * 100,
-        y: (e.clientY / window.innerHeight) * 100,
-      });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    setReady(true);
   }, []);
 
-  const handleGetStarted = () => {
+  const line1 = content?.headline?.split('\n')[0] ?? 'Win more tenders';
+  const line2 = content?.headline?.split('\n')[1] ?? 'with cinematic AI';
+
+  const go = () => {
     if (user) {
       router.push(user.role === 'super_admin' ? '/dashboard/admin' : '/dashboard');
       return;
@@ -50,249 +43,139 @@ export function HeroSection({ content }: { content?: HeroContent }) {
   };
 
   return (
-    <section
-      id="home"
-      className="relative scroll-mt-24 min-h-screen flex items-center justify-center overflow-hidden pt-20"
-    >
-      {/* Animated Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-background-dark">
-        {/* Grid Pattern */}
-        <div 
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `radial-gradient(circle at ${mousePosition.x}% ${mousePosition.y}%, hsl(var(--primary)) 0%, transparent 50%),
-              linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`,
-            backgroundSize: '100% 100%, 50px 50px, 50px 50px',
-          }}
-        />
-        
-        {/* Glowing Orbs */}
-        <motion.div
-          animate={{
-            x: mousePosition.x * 3,
-            y: mousePosition.y * 2,
-          }}
-          transition={{ type: 'spring', damping: 20 }}
-          className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px]"
-        />
-        <motion.div
-          animate={{
-            x: -mousePosition.x * 2,
-            y: -mousePosition.y * 3,
-          }}
-          transition={{ type: 'spring', damping: 20 }}
-          className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/15 rounded-full blur-[100px]"
-        />
-      </div>
-
-      {/* Content */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <div className="text-center">
-          {/* Badge */}
+    <section id="home" className="relative scroll-mt-24 pt-28 pb-16 md:pt-36 md:pb-24">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-4xl text-center">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.2 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-8"
+            initial={{ opacity: 0, y: 16 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.1 }}
+            className="mb-8 flex justify-center"
           >
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-primary">AI-Powered Tender Management</span>
+            <span className="cinematic-eyebrow">
+              <Sparkles className="h-3.5 w-3.5" />
+              AI procurement platform
+            </span>
           </motion.div>
 
-          {/* Main Headline */}
           <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.3, duration: 0.8 }}
-            className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-6"
+            initial={{ opacity: 0, y: 24 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.2, duration: 0.7 }}
+            className="cinematic-headline-hero"
           >
-            <span className="bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent">
-              {content?.headline?.split('\n')[0] ?? 'Win More Tenders'}
-            </span>
+            <span className="text-gradient-cinematic">{line1}</span>
             <br />
-            <span className="bg-gradient-to-r from-primary via-purple-500 to-primary bg-clip-text text-transparent">
-              {content?.headline?.split('\n')[1] ?? 'With AI Intelligence'}
-            </span>
+            <span className="text-gradient-cinematic-accent">{line2}</span>
           </motion.h1>
 
-          {/* Subtitle */}
           <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.5 }}
-            className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-10"
+            initial={{ opacity: 0, y: 16 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.35 }}
+            className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl"
           >
             {content?.subheadline ??
-              'Transform your tender process with intelligent automation, risk analysis, and proposal generation.'}
+              'Upload RFPs, analyze with OpenAI, Anthropic, Gemini, or local Ollama — then export proposal-ready PDFs.'}
           </motion.p>
 
-          {/* CTA Buttons */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.7 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
+            initial={{ opacity: 0, y: 16 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.45 }}
+            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
-                size="lg" 
-                className="bg-primary hover:bg-primary/90 text-lg px-8 py-6"
-                onClick={handleGetStarted}
-              >
-                Get Started
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="text-lg px-8 py-6"
-              >
-                <Play className="mr-2 w-5 h-5" />
-                Watch Demo
-              </Button>
-            </motion.div>
+            <Button size="lg" className="btn-cinematic h-12 px-8 text-base" onClick={go}>
+              {content?.cta_primary ?? 'Get started'}
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="btn-cinematic-outline h-12 px-8 text-base"
+              onClick={() => document.querySelector('#features')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              {content?.cta_secondary ?? 'See features'}
+            </Button>
           </motion.div>
 
-          {/* Stats */}
           <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 0.9 }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 0.55 }}
+            className="mt-14 grid grid-cols-2 gap-6 md:grid-cols-4"
           >
-            {[
-              { value: '70%', label: 'Time Saved' },
-              { value: '3x', label: 'More Tenders' },
-              { value: '99%', label: 'Accuracy' },
-              { value: '500+', label: 'Companies' },
-            ].map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-                transition={{ delay: 1 + index * 0.1 }}
-                className="text-center"
-              >
-                <div className="text-3xl md:text-4xl font-bold text-foreground mb-1">
-                  {stat.value}
-                </div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </motion.div>
+            {stats.map((s, i) => (
+              <div key={s.label} className="glass-panel px-4 py-5">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={ready ? { opacity: 1, scale: 1 } : {}}
+                  transition={{ delay: 0.6 + i * 0.05 }}
+                >
+                  <p className="font-display text-2xl font-bold tabular-nums md:text-3xl">{s.value}</p>
+                  <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                </motion.div>
+              </div>
             ))}
           </motion.div>
         </div>
 
-        {/* Dashboard Preview */}
         <motion.div
-          initial={{ opacity: 0, y: 60, rotateX: 20 }}
-          animate={isLoaded ? { opacity: 1, y: 0, rotateX: 0 } : {}}
-          transition={{ delay: 1.2, duration: 1 }}
-          className="relative mt-20 mx-auto max-w-5xl"
-          style={{ perspective: '1000px' }}
+          initial={{ opacity: 0, y: 48 }}
+          animate={ready ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 0.65, duration: 0.9 }}
+          className="relative mx-auto mt-16 max-w-5xl md:mt-20"
+          style={{ perspective: '1200px' }}
         >
-          {/* Glow */}
-          <div className="absolute -inset-4 bg-gradient-to-r from-primary via-purple-500 to-primary opacity-30 blur-3xl rounded-3xl" />
-          
-          {/* Dashboard Mockup */}
+          <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-primary/40 via-[hsl(var(--cinematic-accent))]/30 to-info/40 opacity-60 blur-2xl" />
           <motion.div
-            animate={{ y: [0, -10, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            className="relative bg-card dark:bg-card-dark border border-border rounded-2xl overflow-hidden shadow-2xl"
+            animate={{ y: [0, -8, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+            className="glass-panel-strong relative overflow-hidden"
           >
-            {/* Browser Header */}
-            <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b border-border">
-              <div className="flex gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                <div className="w-3 h-3 rounded-full bg-green-500" />
+            <div className="flex items-center gap-2 border-b border-white/10 bg-black/20 px-4 py-3">
+              <div className="flex gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
               </div>
-              <div className="flex-1 mx-4 bg-background dark:bg-background-dark rounded-md px-4 py-1 text-sm text-muted-foreground">
-                tenderiq.com/dashboard
-              </div>
+              <span className="flex-1 text-center text-xs text-muted-foreground">app.tenderiq.com/dashboard</span>
             </div>
-
-            {/* Dashboard Content Preview */}
-            <div className="p-6 bg-gradient-to-br from-background to-background-dark min-h-[400px]">
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                {[
-                  { icon: FileText, label: 'Active Tenders', value: '24' },
-                  { icon: Brain, label: 'AI Analysis', value: '156' },
-                  { icon: Shield, label: 'Risk Alerts', value: '3' },
-                  { icon: Zap, label: 'Completed', value: '89' },
-                ].map((item, i) => (
-                  <motion.div
-                    key={item.label}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={isLoaded ? { opacity: 1, scale: 1 } : {}}
-                    transition={{ delay: 1.4 + i * 0.1 }}
-                    className="bg-card dark:bg-card-dark p-4 rounded-xl border border-border"
-                  >
-                    <item.icon className="w-6 h-6 text-primary mb-2" />
-                    <div className="text-2xl font-bold">{item.value}</div>
-                    <div className="text-sm text-muted-foreground">{item.label}</div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Recent Tenders */}
-              <div className="space-y-3">
-                {[
-                  { name: 'IT Infrastructure Services', status: 'Active', progress: 75 },
-                  { name: 'Office Supplies 2024', status: 'Review', progress: 100 },
-                  { name: 'Construction Materials', status: 'Pending', progress: 45 },
-                ].map((tender, i) => (
-                  <motion.div
-                    key={tender.name}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={isLoaded ? { opacity: 1, x: 0 } : {}}
-                    transition={{ delay: 1.8 + i * 0.1 }}
-                    className="flex items-center gap-4 p-3 bg-card/50 dark:bg-card-dark/50 rounded-lg"
-                  >
-                    <FileText className="w-5 h-5 text-muted-foreground" />
-                    <div className="flex-1">
-                      <div className="font-medium">{tender.name}</div>
-                      <div className="w-full h-1 mt-1 bg-muted rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${tender.progress}%` }}
-                          transition={{ delay: 2.2 + i * 0.1, duration: 0.8 }}
-                          className="h-full bg-primary rounded-full"
-                        />
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      tender.status === 'Active' ? 'bg-green-500/20 text-green-500' :
-                      tender.status === 'Review' ? 'bg-blue-500/20 text-blue-500' :
-                      'bg-yellow-500/20 text-yellow-500'
-                    }`}>
-                      {tender.status}
-                    </span>
-                  </motion.div>
-                ))}
-              </div>
+            <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { icon: FileText, label: 'Active tenders', value: '24' },
+                { icon: Brain, label: 'AI analyses', value: '156' },
+                { icon: Shield, label: 'Risk flags', value: '3' },
+                { icon: Zap, label: 'Completed', value: '89' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-white/5 bg-white/[0.03] p-4"
+                >
+                  <item.icon className="mb-2 h-5 w-5 text-primary" />
+                  <p className="text-xl font-semibold tabular-nums">{item.value}</p>
+                  <p className="text-xs text-muted-foreground">{item.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 border-t border-white/5 p-5">
+              {['IT Infrastructure RFP', 'Office supplies 2026', 'Construction materials'].map((name, i) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5"
+                >
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate text-sm">{name}</span>
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {i === 0 ? 'Active' : i === 1 ? 'Done' : 'Review'}
+                  </span>
+                </div>
+              ))}
             </div>
           </motion.div>
         </motion.div>
       </div>
-
-      {/* Scroll Indicator */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={isLoaded ? { opacity: 1 } : {}}
-        transition={{ delay: 2 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
-      >
-        <motion.div
-          animate={{ y: [0, 10, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-          className="w-6 h-10 rounded-full border-2 border-muted-foreground/30 flex justify-center pt-2"
-        >
-          <motion.div className="w-1 h-2 bg-muted-foreground/50 rounded-full" />
-        </motion.div>
-      </motion.div>
     </section>
   );
 }

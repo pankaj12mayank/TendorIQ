@@ -150,9 +150,12 @@ async def check_quota_allowed(
     if not tenant:
         return False, 'Workspace not found'
 
-    access = evaluate_tenant_access(tenant)
-    if not access['can_use_system']:
-        return False, access['reason']
+    from .subscription_access import subscription_expiry_enforced
+
+    if subscription_expiry_enforced():
+        access = evaluate_tenant_access(tenant)
+        if not access['can_use_system']:
+            return False, access['reason']
 
     plan = tenant.plan or 'free'
     limits = await resolve_plan_limits(db, plan)

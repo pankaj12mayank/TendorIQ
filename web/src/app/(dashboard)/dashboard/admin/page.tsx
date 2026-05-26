@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AdminRouteGuard } from '@/components/auth/admin-route-guard';
+import { PageHeader } from '@/components/design-system/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -105,20 +106,23 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminRouteGuard>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Platform admin</h1>
-          <p className="text-muted-foreground">
-            Users, pricing, AI defaults, landing content, and uploads. Requires super admin.
-          </p>
-        </div>
+      <div className="space-y-8">
+        <PageHeader
+          title="Platform admin"
+          description="Users, pricing, AI defaults, landing CMS, and uploads. Super admin only."
+        />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="tabs-pill-list max-w-4xl">
           {tabs.map((t) => (
             <Button
               key={t.id}
-              variant={tab === t.id ? 'default' : 'outline'}
+              variant="ghost"
               size="sm"
+              className={
+                tab === t.id
+                  ? 'rounded-lg bg-background text-foreground shadow-sm hover:bg-background'
+                  : 'rounded-lg text-muted-foreground'
+              }
               onClick={() => setTab(t.id)}
             >
               {t.label}

@@ -47,12 +47,15 @@ export function AiPanel() {
   };
 
   return (
-    <Card className="max-w-2xl">
+    <Card className="glass-panel max-w-3xl border-white/10 bg-transparent shadow-none">
       <CardHeader>
         <CardTitle>AI defaults</CardTitle>
-        <CardDescription>Provider and model for upload, analysis, and proposals.</CardDescription>
+        <CardDescription>
+          Provider and model are detected automatically from your API keys and local Ollama. Pull
+          new Ollama models anytime — click Refresh on the picker.
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (

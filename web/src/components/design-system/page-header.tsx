@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -26,8 +27,12 @@ export function PageHeader({
     >
       <div className="space-y-1">
         {breadcrumbs}
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
-        {description && <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>}
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {title}
+        </h1>
+        {description && (
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+        )}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </motion.header>
@@ -45,9 +50,9 @@ export function Breadcrumbs({
         <span key={item.label} className="flex items-center gap-1.5">
           {i > 0 && <span className="text-border">/</span>}
           {item.href ? (
-            <a href={item.href} className="hover:text-foreground transition-colors">
+            <Link href={item.href} className="hover:text-foreground transition-colors">
               {item.label}
-            </a>
+            </Link>
           ) : (
             <span className="text-foreground font-medium">{item.label}</span>
           )}

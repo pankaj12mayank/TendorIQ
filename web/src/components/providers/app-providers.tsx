@@ -15,7 +15,7 @@ import { QueryProvider } from '@/lib/query-client';
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <AppClerkProvider>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <AuthProvider>
           <TooltipProvider>
             <QueryProvider>{children}</QueryProvider>

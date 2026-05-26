@@ -31,8 +31,15 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
 
 
 def _tenant_settings(tenant: Tenant) -> dict[str, Any]:
-    raw = tenant.settings
-    return dict(raw) if isinstance(raw, dict) else {}
+    from ..user_preferences import normalize_preferences
+
+    return normalize_preferences(tenant.settings)
+
+
+def subscription_expiry_enforced() -> bool:
+    from ..config import get_settings
+
+    return get_settings().billing_enforce_subscription_expiry
 
 
 def period_end_from_tenant(tenant: Tenant) -> Optional[datetime]:
@@ -116,9 +123,21 @@ def evaluate_tenant_access(tenant: Optional[Tenant]) -> dict[str, Any]:
         }
 
     plan = (tenant.plan or FREE_PLAN).strip().lower()
-    status = (tenant.subscription_status or 'active').strip().lower()
+    status = (tenant.subscription_status or 'active').strip().lower() or 'active'
     period_end = period_end_from_tenant(tenant)
     now = datetime.now(timezone.utc)
+
+    if not subscription_expiry_enforced():
+        return {
+            'can_use_system': True,
+            'is_expired': False,
+            'plan': plan,
+            'status': status,
+            'reason': '',
+            'upgrade_required': False,
+            'period_end': period_end.isoformat() if period_end else None,
+            'enforcement': 'quotas_only',
+        }
 
     if plan == FREE_PLAN:
         return {

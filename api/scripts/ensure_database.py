@@ -69,7 +69,52 @@ def _ensure_sqlite(api_dir: Path) -> int:
     if code != 0:
         return code
 
+    code = _verify_auth_accounts()
+    if code != 0:
+        return code
+
+    code = _repair_billing_state()
+    if code != 0:
+        return code
+
     print(f'OK SQLite database at {path}')
+    return 0
+
+
+def _repair_billing_state() -> int:
+    import asyncio
+
+    from src.core.billing.billing_repair import repair_tenant_billing_state
+    from src.core.database import async_session_maker
+
+    async def _run() -> bool:
+        async with async_session_maker() as session:
+            return await repair_tenant_billing_state(session)
+
+    try:
+        if asyncio.run(_run()):
+            print('INFO: repaired tenant billing state (dev plans/subscription)')
+    except Exception as exc:
+        print(f'ERROR: billing repair failed - {exc}', file=sys.stderr)
+        return 1
+    return 0
+
+
+def _verify_auth_accounts() -> int:
+    import subprocess
+
+    script = Path(__file__).resolve().parent / 'verify_auth.py'
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip():
+        print(result.stdout.strip())
+    if result.returncode != 0:
+        if result.stderr.strip():
+            print(result.stderr.strip(), file=sys.stderr)
+        return 1
     return 0
 
 
@@ -77,11 +122,11 @@ def _seed_password_users_if_empty() -> int:
     import asyncio
 
     from src.core.database import async_session_maker
-    from src.core.local_user_auth import seed_initial_accounts_if_empty
+    from src.core.local_user_auth import ensure_dev_accounts
 
     async def _run() -> bool:
         async with async_session_maker() as session:
-            return await seed_initial_accounts_if_empty(session)
+            return await ensure_dev_accounts(session)
 
     try:
         created = asyncio.run(_run())

@@ -1,9 +1,10 @@
 'use client';
 
-import { Loader2, Sparkles, Wifi } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, Loader2, RefreshCw, Sparkles, Wifi, WifiOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -14,24 +15,41 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAiCatalog, type AiSelection } from '@/hooks/use-ai-catalog';
+import { cn } from '@/lib/utils';
 
 interface AiModelPickerProps {
   value?: AiSelection;
   onChange?: (selection: AiSelection) => void;
   showTest?: boolean;
+  className?: string;
 }
 
-export function AiModelPicker({ value, onChange, showTest = true }: AiModelPickerProps) {
-  const { catalog, loading, error, selection, updateSelection, testConnection } = useAiCatalog();
+export function AiModelPicker({ value, onChange, showTest = true, className }: AiModelPickerProps) {
+  const { catalog, loading, error, selection, updateSelection, refetch, testConnection } =
+    useAiCatalog();
   const [testing, setTesting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const lastNotified = useRef<string>('');
 
   const active = value ?? selection;
   const providerEntry = catalog?.providers.find((p) => p.id === active.provider);
   const models = providerEntry?.models ?? [];
+  const configured = catalog?.providers.filter((p) => p.configured) ?? [];
+  const ollamaEntry = catalog?.providers.find((p) => p.id === 'ollama');
+
+  useEffect(() => {
+    const key = `${selection.provider}:${selection.model}`;
+    if (key === lastNotified.current) return;
+    lastNotified.current = key;
+    onChange?.(selection);
+  }, [selection, onChange]);
 
   const handleProvider = (provider: string) => {
     const entry = catalog?.providers.find((p) => p.id === provider);
-    const model = entry?.default_model ?? entry?.models[0] ?? active.model;
+    const model =
+      entry?.default_model && entry.models.includes(entry.default_model)
+        ? entry.default_model
+        : entry?.models[0] ?? active.model;
     const next = { provider, model };
     updateSelection(next);
     onChange?.(next);
@@ -43,40 +61,112 @@ export function AiModelPicker({ value, onChange, showTest = true }: AiModelPicke
     onChange?.(next);
   };
 
-  if (loading) {
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const result = await refetch({ silent: true });
+      if (result?.changed) {
+        toast.success('Model list updated from API');
+        onChange?.(result.next);
+      } else {
+        toast.message('Model list is up to date');
+      }
+    } catch {
+      toast.error('Could not refresh providers');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  if (loading && !catalog) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading AI providers…
+      <div className={cn('flex items-center gap-2 rounded-xl border bg-card p-4 text-sm', className)}>
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <span className="text-muted-foreground">Detecting AI providers…</span>
       </div>
     );
   }
 
-  if (error) {
-    return <p className="text-sm text-destructive">{error}</p>;
+  if (error && !catalog) {
+    return (
+      <div className={cn('rounded-xl border border-destructive/30 bg-destructive/5 p-4', className)}>
+        <p className="text-sm text-destructive">{error}</p>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
-  const configured = catalog?.providers.filter((p) => p.configured) ?? [];
-
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <span className="text-sm font-medium">AI analysis</span>
+    <div className={cn('glass-panel space-y-4 p-4', className)}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <Sparkles className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold">AI model</p>
+            <p className="text-xs text-muted-foreground">
+              Auto-filled from active API keys and Ollama
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={refreshing}
+          onClick={() => void handleRefresh()}
+        >
+          {refreshing ? (
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1 h-3 w-3" />
+          )}
+          Refresh
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {catalog?.providers.map((p) => (
+          <Badge
+            key={p.id}
+            variant={p.configured ? 'default' : 'outline'}
+            className={cn(
+              'text-xs font-normal',
+              !p.configured && 'text-muted-foreground'
+            )}
+          >
+            {p.configured ? (
+              <CheckCircle2 className="mr-1 h-3 w-3" />
+            ) : p.id === 'ollama' && p.online === false ? (
+              <WifiOff className="mr-1 h-3 w-3" />
+            ) : null}
+            {p.label}
+            {p.configured && p.models.length > 0 ? ` · ${p.models.length}` : ''}
+          </Badge>
+        ))}
       </div>
 
       {configured.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Add <code className="text-xs">OPENAI_API_KEY</code>, <code className="text-xs">ANTHROPIC_API_KEY</code>,{' '}
-          <code className="text-xs">GEMINI_API_KEY</code>, or run Ollama — then restart the API.
-        </p>
+        <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
+          <p>No AI provider is active yet.</p>
+          <p>
+            Add <code className="rounded bg-muted px-1">OPENAI_API_KEY</code> in{' '}
+            <code className="rounded bg-muted px-1">.env</code>, or run{' '}
+            <code className="rounded bg-muted px-1">ollama serve</code> and pull a model, then
+            click Refresh.
+          </p>
+          {ollamaEntry?.hint && <p className="text-amber-600 dark:text-amber-400">{ollamaEntry.hint}</p>}
+        </div>
       ) : (
         <>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Provider</Label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Provider</Label>
               <Select value={active.provider} onValueChange={handleProvider}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Provider" />
                 </SelectTrigger>
                 <SelectContent>
@@ -88,10 +178,13 @@ export function AiModelPicker({ value, onChange, showTest = true }: AiModelPicke
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Model</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Model
+                <span className="ml-1 font-normal text-primary">(auto)</span>
+              </Label>
               <Select value={active.model} onValueChange={handleModel}>
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -105,17 +198,21 @@ export function AiModelPicker({ value, onChange, showTest = true }: AiModelPicke
             </div>
           </div>
 
+          {providerEntry?.hint && (
+            <p className="text-xs text-muted-foreground">{providerEntry.hint}</p>
+          )}
+
           {showTest && (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
-              disabled={testing}
+              disabled={testing || !active.model}
               onClick={async () => {
                 setTesting(true);
                 try {
                   await testConnection();
-                  toast.success('AI connection OK');
+                  toast.success(`Connected: ${active.provider} / ${active.model}`);
                 } catch (err) {
                   toast.error(err instanceof Error ? err.message : 'Test failed');
                 } finally {

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Column,
@@ -30,6 +30,11 @@ class Base(DeclarativeBase):
 
 def generate_uuid() -> str:
     return str(uuid4())
+
+
+def pk_str(value: str | UUID) -> str:
+    """Normalize primary keys for String(36) UUID columns (SQLite-safe)."""
+    return str(value)
 
 
 def utc_now() -> datetime:

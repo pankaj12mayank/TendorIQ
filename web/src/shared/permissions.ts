@@ -11,7 +11,10 @@ export type PermissionString =
   | 'export:run'
   | 'billing:read';
 
-export const PERMISSION_ALIASES: Record<string, PermissionString> = {};
+export const PERMISSION_ALIASES: Record<string, PermissionString> = {
+  'document:create': 'document:write',
+  'settings:read': 'billing:read',
+};
 
 export const ROLE_PERMISSIONS_MATRIX: Record<string, PermissionString[]> = {
   super_admin: ['all'],
@@ -34,11 +37,22 @@ export function getRolePermissions(role: string): PermissionString[] {
   return ROLE_PERMISSIONS_MATRIX[role] ?? ROLE_PERMISSIONS_MATRIX.viewer;
 }
 
-export function hasPermission(role: string | undefined, permission: PermissionString | string): boolean {
+export function hasPermission(
+  role: string | undefined,
+  permission: PermissionString | string,
+  extraPermissions?: string[]
+): boolean {
   if (!role) return false;
+  const normalized =
+    PERMISSION_ALIASES[permission] ?? (normalizePermission(permission) ?? permission);
+  if (extraPermissions?.length) {
+    if (extraPermissions.includes('all') || extraPermissions.includes(normalized)) {
+      return true;
+    }
+  }
   const perms = getRolePermissions(role);
   if (perms.includes('all')) return true;
-  return perms.includes(permission as PermissionString);
+  return perms.includes(normalized as PermissionString);
 }
 
 export function isSuperAdmin(role?: string): boolean {

@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { FileDown, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { PageHeader } from '@/components/design-system/page-header';
 import { AiModelPicker } from '@/components/upload/ai-model-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,24 +125,16 @@ export default function ProposalPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Proposal</h1>
-          <p className="text-muted-foreground">
-            AI draft from tender analysis and your company profile.
-          </p>
-          {!tenderId && (
-            <p className="text-sm text-amber-600 mt-2">
-              Add <code className="text-xs">?tenderId=...</code> from{' '}
-              <Link href={ROUTES.analysis} className="underline">
-                Analysis
-              </Link>{' '}
-              or after upload.
-            </p>
-          )}
-        </div>
-        <div className="flex gap-2">
+    <div className="space-y-8">
+      <PageHeader
+        title="Proposal"
+        description={
+          tenderId
+            ? 'AI draft from tender analysis and your company profile.'
+            : 'Add ?tenderId from Analysis or after upload to generate a proposal.'
+        }
+        actions={
+          <div className="flex gap-2">
           {proposal?.id && (
             <Button variant="outline" onClick={handlePdf} disabled={exporting}>
               {exporting ? (
@@ -161,9 +154,10 @@ export default function ProposalPage() {
             {proposal ? 'Regenerate' : 'Generate'} proposal
           </Button>
         </div>
-      </div>
+        }
+      />
 
-      <Card>
+      <Card className="border-border/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">AI model</CardTitle>
           <CardDescription>

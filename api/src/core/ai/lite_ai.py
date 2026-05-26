@@ -43,6 +43,7 @@ class ProviderInfo:
     models: list[str]
     default_model: Optional[str] = None
     hint: Optional[str] = None
+    online: bool = False
 
 
 def _key(name: str) -> str:
@@ -112,18 +113,21 @@ async def _fetch_openai_models(api_key: str) -> list[str]:
         return OPENAI_MODELS
 
 
-async def _fetch_ollama_models(base_url: str) -> list[str]:
+async def _probe_ollama(base_url: str) -> tuple[list[str], bool]:
+    """Return (model names from Ollama, server reachable). No fake list when offline."""
     try:
-        async with httpx.AsyncClient(base_url=base_url.rstrip('/'), timeout=10) as client:
+        async with httpx.AsyncClient(base_url=base_url.rstrip('/'), timeout=5) as client:
             r = await client.get('/api/tags')
             if r.status_code != 200:
-                return OLLAMA_DEFAULT_MODELS
+                return [], False
             data = r.json()
-            names = [m.get('name', '').split(':')[0] for m in data.get('models', []) if m.get('name')]
-            return names or OLLAMA_DEFAULT_MODELS
+            names = sorted(
+                {m.get('name', '').strip() for m in data.get('models', []) if m.get('name', '').strip()}
+            )
+            return names, True
     except Exception as exc:
         logger.debug('Ollama model list failed: %s', exc)
-        return OLLAMA_DEFAULT_MODELS
+        return [], False
 
 
 async def build_provider_catalog() -> list[ProviderInfo]:
@@ -141,8 +145,9 @@ async def build_provider_catalog() -> list[ProviderInfo]:
                 id='openai',
                 label='OpenAI',
                 configured=True,
+                online=True,
                 models=models,
-                default_model=resolve_default_model('openai'),
+                default_model=_pick_default_model(models, 'openai'),
             )
         )
 
@@ -152,8 +157,9 @@ async def build_provider_catalog() -> list[ProviderInfo]:
                 id='anthropic',
                 label='Anthropic',
                 configured=True,
+                online=True,
                 models=ANTHROPIC_MODELS,
-                default_model=resolve_default_model('anthropic'),
+                default_model=_pick_default_model(ANTHROPIC_MODELS, 'anthropic'),
             )
         )
 
@@ -163,38 +169,77 @@ async def build_provider_catalog() -> list[ProviderInfo]:
                 id='gemini',
                 label='Google Gemini',
                 configured=True,
+                online=True,
                 models=GEMINI_MODELS,
-                default_model=resolve_default_model('gemini'),
+                default_model=_pick_default_model(GEMINI_MODELS, 'gemini'),
             )
         )
 
+    ollama_models, ollama_online = await _probe_ollama(ollama_url)
     providers.append(
         ProviderInfo(
             id='ollama',
             label='Ollama (local)',
-            configured=bool(ollama_url),
-            models=await _fetch_ollama_models(ollama_url) if ollama_url else OLLAMA_DEFAULT_MODELS,
-            default_model=resolve_default_model('ollama'),
-            hint='Set OLLAMA_BASE_URL and run ollama serve',
+            configured=ollama_online and bool(ollama_models),
+            online=ollama_online,
+            models=ollama_models,
+            default_model=ollama_models[0] if ollama_models else None,
+            hint=None
+            if ollama_online and ollama_models
+            else (
+                'Ollama is running but no models found. Run: ollama pull llama3.2'
+                if ollama_online
+                else f'Start Ollama at {ollama_url} (ollama serve)'
+            ),
         )
     )
 
     return [p for p in providers if p.configured or p.id == 'ollama']
 
 
+def _pick_default_model(models: list[str], provider: str) -> str:
+    preferred = resolve_default_model(provider)
+    if preferred in models:
+        return preferred
+    return models[0] if models else preferred
+
+
+def _resolve_catalog_defaults(providers: list[ProviderInfo]) -> tuple[str, str]:
+    """Pick default provider/model from live configured providers only."""
+    configured = [p for p in providers if p.configured and p.models]
+    if not configured:
+        return resolve_default_provider(), resolve_default_model(resolve_default_provider())
+
+    priority = ['ollama', 'openai', 'anthropic', 'gemini']
+    explicit = resolve_default_provider().lower()
+    chosen: Optional[ProviderInfo] = None
+
+    if any(p.id == explicit for p in configured):
+        chosen = next(p for p in configured if p.id == explicit)
+    else:
+        for pid in priority:
+            match = next((p for p in configured if p.id == pid), None)
+            if match:
+                chosen = match
+                break
+        if not chosen:
+            chosen = configured[0]
+
+    model = chosen.default_model if chosen.default_model in chosen.models else chosen.models[0]
+    return chosen.id, model
+
+
 def catalog_to_dict(providers: list[ProviderInfo]) -> dict[str, Any]:
-    default_provider = resolve_default_provider()
-    configured = [p for p in providers if p.configured]
-    if configured and default_provider not in {p.id for p in configured}:
-        default_provider = configured[0].id
+    default_provider, default_model = _resolve_catalog_defaults(providers)
     return {
         'default_provider': default_provider,
-        'default_model': resolve_default_model(default_provider),
+        'default_model': default_model,
         'providers': [
             {
                 'id': p.id,
                 'label': p.label,
                 'configured': p.configured,
+                'online': p.online,
                 'models': p.models,
                 'default_model': p.default_model,
                 'hint': p.hint,

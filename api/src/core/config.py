@@ -244,6 +244,8 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: str = ''
     RAZORPAY_KEY_SECRET: str = ''
     RAZORPAY_CURRENCY: str = 'INR'
+    # When false (default in development), only monthly quotas apply — not subscription expiry.
+    BILLING_ENFORCE_SUBSCRIPTION_EXPIRY: bool = False
 
     # ===========================================
     # INTERNAL
@@ -284,6 +286,13 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.NODE_ENV == 'production'
+
+    @property
+    def billing_enforce_subscription_expiry(self) -> bool:
+        """Block usage when paid plan expired (production should set env true)."""
+        if self.BILLING_ENFORCE_SUBSCRIPTION_EXPIRY:
+            return True
+        return self.is_production
 
     @property
     def is_railway(self) -> bool:

@@ -19,7 +19,7 @@ import {
   SESSION_MAX_AGE_MS,
   type AuthUser,
 } from '@/lib/auth-session';
-import { apiUrl as resolveApiUrl } from '@/lib/api-config';
+import { apiUrl } from '@/lib/api-config';
 import {
   fetchMeFromApi,
   refreshAccessToken,
@@ -28,6 +28,8 @@ import {
 } from '@/lib/auth-api';
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
+import { syncTenantStoreFromUser } from '@/lib/sync-tenant-store';
+import { parseApiErrorMessage } from '@/lib/api-envelope';
 import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
 import { getAuthProvider } from '@/lib/supabase-config';
@@ -95,7 +97,19 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       let accessToken = session.token;
       let refreshToken = session.refreshToken;
 
-      let { user: me, unauthorized } = await fetchMeFromApi(accessToken, session.user);
+      let { user: me, unauthorized, networkError } = await fetchMeFromApi(
+        accessToken,
+        session.user
+      );
+
+      if (networkError) {
+        if (!cancelled) {
+          setUser(session.user);
+          setIsLoading(false);
+          toast.error('API is not reachable. Run run.bat and keep the API window open.');
+        }
+        return;
+      }
 
       if (unauthorized && refreshToken) {
         const refreshed = await refreshAccessToken(refreshToken);
@@ -105,6 +119,14 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
           const retry = await fetchMeFromApi(accessToken, session.user);
           me = retry.user;
           unauthorized = retry.unauthorized;
+          if (retry.networkError) {
+            if (!cancelled) {
+              setUser(session.user);
+              setIsLoading(false);
+              toast.error('API is not reachable. Run run.bat and keep the API window open.');
+            }
+            return;
+          }
         }
       }
 
@@ -163,11 +185,15 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   useRouteGuard(!!user, isLoading, user?.role);
 
+  useEffect(() => {
+    syncTenantStoreFromUser(user);
+  }, [user]);
+
   const signOut = useCallback(async () => {
     const token = getStoredSession()?.token;
     if (token) {
       try {
-        await fetch(resolveApiUrl('/api/v1/auth/logout'), {
+        await fetch(apiUrl('/auth/logout'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -187,22 +213,29 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithCredentials = useCallback(
     async (email: string, password: string) => {
-      const res = await fetch(resolveApiUrl('/api/v1/auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      let res: Response;
+      try {
+        res = await fetch(apiUrl('/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+          signal: AbortSignal.timeout(30_000),
+        });
+      } catch {
+        throw new Error(
+          'Cannot reach API at http://localhost:8000. Run run.bat from the tendoriq folder and wait until API is ready.'
+        );
+      }
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const body = err as {
-          detail?: string | { msg?: string };
-          error?: { message?: string };
-        };
-        const detail = body.detail;
-        const message =
-          (typeof detail === 'string' ? detail : detail?.msg) ||
-          body.error?.message ||
-          'Login failed';
+        const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        let message = parseApiErrorMessage(err) || 'Login failed';
+        if (res.status === 401) {
+          message +=
+            ' — Dev accounts: see .tenderiq/owner-account.txt (run run.bat once if missing).';
+        }
+        if (res.status === 503 || res.status === 502) {
+          message = 'API is not running. Start with run.bat, then try again.';
+        }
         throw new Error(message);
       }
       const data = await res.json();

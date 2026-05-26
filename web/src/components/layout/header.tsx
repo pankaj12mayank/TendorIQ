@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Moon, Sun } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Moon, Sun, ChevronRight } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useCallback, useMemo } from 'react';
 
 import { useCurrentUser, useSignOut } from '@/hooks/use-auth';
 import { isSuperAdmin } from '@/lib/permissions';
+import { getPageTitle } from '@/lib/page-titles';
 import { SignOutDialog } from '@/components/auth/sign-out-dialog';
 import {
   DropdownMenu,
@@ -20,11 +22,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ROUTES } from '@/lib/routes';
 
 export function Header() {
+  const pathname = usePathname();
   const user = useCurrentUser();
   const signOut = useSignOut();
   const { theme, setTheme } = useTheme();
   const [signOutOpen, setSignOutOpen] = useState(false);
 
+  const pageTitle = getPageTitle(pathname);
   const initials = useMemo(() => {
     if (!user?.name) return 'U';
     return user.name
@@ -42,14 +46,25 @@ export function Header() {
   }, [signOut]);
 
   return (
-    <header className="sticky-header-shadow flex h-16 items-center justify-between px-6">
-      <div className="flex-1" />
+    <header className="nav-glass sticky top-0 z-sticky flex h-[4.25rem] items-center justify-between gap-4 px-4 md:px-8">
+      <div className="flex min-w-0 items-center gap-2 text-sm">
+        <Link
+          href="/dashboard"
+          className="hidden shrink-0 text-muted-foreground transition-colors hover:text-foreground sm:inline"
+        >
+          Home
+        </Link>
+        <ChevronRight className="hidden h-4 w-4 shrink-0 text-muted-foreground/60 sm:block" />
+        <h2 className="truncate font-display text-base font-semibold tracking-tight md:text-lg">
+          {pageTitle}
+        </h2>
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-9 w-9"
+          className="h-9 w-9 rounded-lg"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           aria-label="Toggle theme"
         >
@@ -59,21 +74,22 @@ export function Header() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-              <Avatar className="h-9 w-9 ring-2 ring-border/60">
+            <Button variant="ghost" className="relative h-9 gap-2 rounded-full pl-1 pr-2">
+              <Avatar className="h-8 w-8 ring-2 ring-border/80">
                 <AvatarImage src={user?.imageUrl} alt={user?.name ?? 'User'} />
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                   {initials}
                 </AvatarFallback>
               </Avatar>
+              <span className="hidden max-w-[8rem] truncate text-sm font-medium md:inline">
+                {user?.name?.split(' ')[0]}
+              </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <div className="flex items-center gap-2 p-2">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium">{user?.name}</p>
-                <p className="text-xs text-muted-foreground">{user?.email}</p>
-              </div>
+            <div className="px-3 py-2.5">
+              <p className="text-sm font-medium">{user?.name}</p>
+              <p className="text-xs text-muted-foreground">{user?.email}</p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

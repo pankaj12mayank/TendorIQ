@@ -55,28 +55,29 @@
     --shadow-glow: 0 0 40px hsl(221 83% 53% / 0.15);
 
     /* Sidebar */
-    --sidebar-width: 16rem;
+    --sidebar-width: 17rem;
     --sidebar-collapsed: 4.5rem;
+    --content-max: 80rem;
   }
 
   .dark {
-    --background: 222 47% 5%;
+    --background: 228 32% 6%;
     --foreground: 210 40% 98%;
-    --background-elevated: 222 40% 8%;
-    --background-dark: 222 47% 3%;
-    --card: 222 40% 8%;
+    --background-elevated: 228 28% 9%;
+    --background-dark: 230 35% 4%;
+    --card: 228 26% 10%;
     --card-foreground: 210 40% 98%;
-    --card-dark: 222 38% 10%;
-    --popover: 222 40% 9%;
+    --card-dark: 228 24% 12%;
+    --popover: 228 26% 11%;
     --popover-foreground: 210 40% 98%;
-    --muted: 217 32% 14%;
-    --muted-foreground: 215 20% 62%;
-    --accent: 217 32% 16%;
+    --muted: 228 22% 14%;
+    --muted-foreground: 215 18% 68%;
+    --accent: 228 22% 16%;
     --accent-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 6%;
-    --primary-muted: 221 50% 14%;
+    --primary: 214 100% 62%;
+    --primary-foreground: 228 35% 6%;
+    --primary-muted: 214 60% 14%;
 
     --secondary: 217 32% 16%;
     --secondary-foreground: 210 40% 98%;
@@ -104,7 +105,9 @@
     --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.25);
     --shadow-md: 0 4px 16px hsl(0 0% 0% / 0.35);
     --shadow-lg: 0 12px 40px hsl(0 0% 0% / 0.45);
-    --shadow-glow: 0 0 48px hsl(217 91% 60% / 0.12);
+    --shadow-glow: 0 0 60px hsl(214 100% 62% / 0.22);
+    --cinematic-accent: 265 90% 68%;
+    --cinematic-glow: 214 100% 62%;
   }
 }
 
@@ -191,8 +194,216 @@
   }
 
   .sticky-header-shadow {
-    @apply sticky top-0 z-sticky backdrop-blur-xl bg-background/80 border-b border-border/60;
+    @apply sticky top-0 z-sticky backdrop-blur-xl bg-background/85 border-b border-border/60;
     box-shadow: var(--shadow-xs);
+  }
+
+  .dashboard-shell {
+    @apply relative min-h-screen;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(ellipse 120% 80% at 100% -30%, hsl(var(--primary) / 0.07), transparent 50%),
+      radial-gradient(ellipse 80% 60% at 0% 100%, hsl(var(--info) / 0.05), transparent 45%);
+  }
+
+  .dark .dashboard-shell {
+    background-image:
+      radial-gradient(ellipse 120% 80% at 100% -30%, hsl(var(--primary) / 0.12), transparent 50%),
+      radial-gradient(ellipse 80% 60% at 0% 100%, hsl(var(--info) / 0.06), transparent 45%);
+  }
+
+  .sidebar-panel {
+    @apply border-r border-border/70 bg-card/95 backdrop-blur-xl;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .nav-link {
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-200;
+  }
+
+  .nav-link:hover {
+    @apply bg-accent/80 text-foreground;
+  }
+
+  .nav-link-active {
+    @apply bg-primary text-primary-foreground shadow-sm;
+  }
+
+  .nav-link-active:hover {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .auth-shell {
+    @apply min-h-screen grid lg:grid-cols-2;
+  }
+
+  .auth-brand-panel {
+    @apply relative hidden lg:flex flex-col justify-between overflow-hidden p-10 text-primary-foreground;
+    background: linear-gradient(
+      145deg,
+      hsl(221 83% 42%) 0%,
+      hsl(221 83% 53%) 40%,
+      hsl(199 89% 42%) 100%
+    );
+  }
+
+  .auth-form-panel {
+    @apply flex flex-col justify-center p-6 sm:p-10 lg:p-14;
+  }
+
+  .tabs-pill-list {
+    @apply inline-flex h-11 w-full flex-wrap items-center justify-start gap-1 rounded-xl border border-border/60 bg-muted/40 p-1;
+  }
+
+  .tabs-pill-trigger {
+    @apply rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm;
+  }
+
+  /* —— Cinematic design system —— */
+  .cinematic-landing {
+    @apply relative min-h-screen bg-background text-foreground;
+    color-scheme: dark;
+    --cinematic-accent: 265 90% 68%;
+    --cinematic-glow: 214 100% 62%;
+  }
+
+  .cinematic-base-gradient {
+    background:
+      radial-gradient(ellipse 100% 80% at 50% -30%, hsl(var(--primary) / 0.18), transparent 55%),
+      radial-gradient(ellipse 60% 50% at 100% 50%, hsl(var(--cinematic-accent) / 0.12), transparent 50%),
+      radial-gradient(ellipse 50% 40% at 0% 80%, hsl(199 89% 48% / 0.08), transparent 45%),
+      hsl(var(--background));
+  }
+
+  .cinematic-grid {
+    background-image:
+      linear-gradient(hsl(var(--foreground) / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--foreground) / 0.04) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 20%, transparent 75%);
+  }
+
+  .cinematic-grain {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+  }
+
+  .cinematic-orb {
+    filter: blur(80px);
+    opacity: 0.55;
+  }
+
+  .cinematic-orb-primary {
+    background: hsl(var(--primary) / 0.45);
+  }
+
+  .cinematic-orb-accent {
+    background: hsl(var(--cinematic-accent) / 0.35);
+  }
+
+  .cinematic-eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary;
+  }
+
+  .cinematic-heading {
+    @apply font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl;
+  }
+
+  .cinematic-headline-hero {
+    @apply font-display text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl;
+  }
+
+  .text-gradient-cinematic {
+    @apply bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent;
+  }
+
+  .text-gradient-cinematic-accent {
+    background: linear-gradient(
+      120deg,
+      hsl(var(--primary)) 0%,
+      hsl(var(--cinematic-accent)) 50%,
+      hsl(199 89% 58%) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .glass-panel {
+    @apply rounded-2xl border border-white/10 bg-card/40 shadow-lg backdrop-blur-2xl;
+    box-shadow:
+      var(--shadow-md),
+      inset 0 1px 0 hsl(var(--foreground) / 0.06);
+  }
+
+  .glass-panel-strong {
+    @apply rounded-2xl border border-white/[0.12] bg-card/60 shadow-xl backdrop-blur-3xl;
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.08),
+      var(--shadow-lg),
+      inset 0 1px 0 hsl(var(--foreground) / 0.08);
+  }
+
+  .btn-cinematic {
+    @apply relative overflow-hidden bg-primary text-primary-foreground shadow-glow transition-all duration-300;
+  }
+
+  .btn-cinematic:hover {
+    @apply brightness-110 shadow-lg;
+    box-shadow: 0 0 40px hsl(var(--primary) / 0.45);
+  }
+
+  .btn-cinematic-outline {
+    @apply border border-white/15 bg-white/5 text-foreground backdrop-blur-md transition-all duration-300;
+  }
+
+  .btn-cinematic-outline:hover {
+    @apply border-primary/40 bg-primary/10;
+  }
+
+  .nav-glass {
+    @apply border-b border-white/[0.08] bg-background/60 backdrop-blur-2xl;
+    box-shadow: 0 4px 30px hsl(0 0% 0% / 0.25);
+  }
+
+  .surface-card {
+    @apply rounded-2xl border border-white/[0.08] bg-card/50 text-card-foreground backdrop-blur-xl;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 hsl(var(--foreground) / 0.04);
+  }
+
+  .sidebar-panel {
+    @apply border-r border-white/[0.08] bg-background/80 backdrop-blur-2xl;
+    box-shadow: 4px 0 40px hsl(0 0% 0% / 0.35);
+  }
+
+  .dashboard-shell {
+    @apply relative min-h-screen bg-background;
+    background-image:
+      radial-gradient(ellipse 100% 60% at 80% -20%, hsl(var(--primary) / 0.14), transparent 50%),
+      radial-gradient(ellipse 70% 50% at 0% 100%, hsl(var(--cinematic-accent) / 0.08), transparent 45%);
+  }
+
+  .nav-link-active {
+    @apply bg-primary/90 text-primary-foreground;
+    box-shadow: 0 0 24px hsl(var(--primary) / 0.35);
+  }
+
+  .auth-brand-panel {
+    @apply relative hidden overflow-hidden lg:flex flex-col justify-between p-10 text-white;
+    background: linear-gradient(
+      160deg,
+      hsl(228 35% 8%) 0%,
+      hsl(214 80% 35%) 35%,
+      hsl(265 70% 45%) 70%,
+      hsl(228 35% 10%) 100%
+    );
+  }
+
+  .auth-brand-panel::before {
+    content: '';
+    @apply pointer-events-none absolute inset-0 opacity-40;
+    background: radial-gradient(circle at 30% 20%, hsl(214 100% 70% / 0.35), transparent 50%);
   }
 }
 

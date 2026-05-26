@@ -3,105 +3,93 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Sparkles } from 'lucide-react';
+import { ChevronLeft, LayoutDashboard, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
-import { roleNavGroups } from '@/design-system/icons';
 import { sidebarLayoutTransition } from '@/design-system/motion';
-import type { AppRole } from '@/design-system/tokens';
 import { useReducedMotion } from '@/lib/use-reduced-motion';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/use-auth';
-import { getMembershipRole } from '@/lib/auth-user';
-import { isAppFeatureEnabled } from '@/lib/feature-flags';
-import { hasPermission } from '@/lib/permissions';
+import { getNavGroupsForUser } from '@/lib/nav-role';
 import { useTenantStore } from '@/stores/tenant-store';
 import { Button } from '@/components/ui/button';
-
-/** Nav href → permission required (omit = visible to all authenticated tenant users). */
-const NAV_ITEM_PERMISSIONS: Record<string, string | undefined> = {
-  '/dashboard/upload': 'document:create',
-  '/dashboard/settings': 'settings:read',
-};
-
-function resolveRole(membershipRole?: string, platformRole?: string): AppRole {
-  if (platformRole === 'super_admin') return 'super_admin';
-  const role = membershipRole ?? platformRole;
-  if (role === 'tenant_admin' || role === 'admin' || role === 'owner') return 'tenant_admin';
-  if (role === 'manager') return 'manager';
-  if (role === 'analyst') return 'analyst';
-  if (role === 'member') return 'member';
-  if (role === 'viewer') return 'viewer';
-  return 'user';
-}
-
-function canSeeNavItem(
-  href: string,
-  membershipRole: string,
-  permissions?: string[]
-): boolean {
-  const base = href.split('?')[0] ?? href;
-  const feature = NAV_ITEM_FEATURES[base];
-  if (feature && !isAppFeatureEnabled(feature)) {
-    return false;
-  }
-  const required = NAV_ITEM_PERMISSIONS[base];
-  if (!required) return true;
-  return hasPermission(membershipRole, required, permissions);
-}
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const user = useCurrentUser();
-  const membershipRole = getMembershipRole(user);
-  const role = resolveRole(membershipRole, user?.role);
-  const groups = (roleNavGroups[role] ?? [])
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) =>
-        canSeeNavItem(item.href, membershipRole, user?.permissions)
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
+  const groups = getNavGroupsForUser(user);
   const currentOrganization = useTenantStore((s) => s.currentOrganization);
   const [collapsed, setCollapsed] = useState(false);
   const reducedMotion = useReducedMotion();
   const layoutTransition = sidebarLayoutTransition(reducedMotion);
 
+  const initials =
+    user?.name
+      ?.split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) ?? 'U';
+
   return (
     <aside
       className={cn(
-        'hidden lg:flex flex-col border-r border-border/80 bg-card/50 backdrop-blur-xl transition-all duration-300 ease-premium',
+        'sidebar-panel fixed inset-y-0 left-0 z-sticky hidden flex-col transition-all duration-300 ease-premium lg:flex',
         collapsed ? 'w-[var(--sidebar-collapsed)]' : 'w-[var(--sidebar-width)]'
       )}
     >
-      <div className="flex h-16 items-center justify-between border-b border-border/60 px-4">
-        {!collapsed && (
-          <Link href="/dashboard" className="font-display text-lg font-semibold tracking-tight">
-            <span className="text-gradient-brand">TenderIQ</span>
-          </Link>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      <div className="flex h-[4.25rem] items-center justify-between gap-2 border-b border-border/60 px-4">
+        <Link
+          href="/dashboard"
+          className={cn('flex items-center gap-2.5 min-w-0', collapsed && 'justify-center w-full')}
         >
-          <ChevronLeft className={cn('h-4 w-4 transition-transform', collapsed && 'rotate-180')} />
-        </Button>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+            <LayoutDashboard className="h-4 w-4" />
+          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <span className="font-display block text-base font-semibold tracking-tight text-gradient-cinematic-accent">
+                TenderIQ
+              </span>
+              <span className="block truncate text-[10px] text-muted-foreground">Procurement AI</span>
+            </div>
+          )}
+        </Link>
+        {!collapsed && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground"
+            onClick={() => setCollapsed(true)}
+            aria-label="Collapse sidebar"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
+        {collapsed && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute -right-3 top-20 z-10 h-6 w-6 rounded-full border bg-card shadow-sm"
+            onClick={() => setCollapsed(false)}
+            aria-label="Expand sidebar"
+          >
+            <ChevronLeft className="h-3 w-3 rotate-180" />
+          </Button>
+        )}
       </div>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto scroll-premium p-3">
+      <nav className="flex-1 space-y-7 overflow-y-auto scroll-premium px-3 py-5">
         {groups.map((group) => (
           <div key={group.label}>
             {!collapsed && (
-              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
                 {group.label}
               </p>
             )}
-            <ul className="space-y-0.5">
+            <ul className="space-y-1">
               {group.items.map((item) => {
                 const [baseHref, query] = item.href.split('?');
                 const moduleParam = query
@@ -118,22 +106,25 @@ export function AppSidebar() {
                     <Link
                       href={item.href}
                       className={cn(
-                        'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                        isActive
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-                        collapsed && 'justify-center px-2'
+                        'nav-link',
+                        isActive && 'nav-link-active',
+                        collapsed && 'justify-center px-2.5'
                       )}
                       title={collapsed ? item.name : undefined}
                     >
-                      {isActive && (
+                      {isActive && !collapsed && (
                         <motion.span
                           layoutId={reducedMotion ? undefined : 'sidebar-active'}
                           className="absolute inset-0 rounded-lg bg-primary"
                           transition={layoutTransition}
                         />
                       )}
-                      <Icon className={cn('relative z-10 h-4 w-4 shrink-0', isActive && 'text-primary-foreground')} />
+                      <Icon
+                        className={cn(
+                          'relative z-10 h-4 w-4 shrink-0',
+                          isActive && 'text-primary-foreground'
+                        )}
+                      />
                       {!collapsed && <span className="relative z-10">{item.name}</span>}
                     </Link>
                   </li>
@@ -144,25 +135,53 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      <AnimatePresence>
-        {!collapsed && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="border-t border-border/60 p-3"
-          >
-            <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 to-info/5 p-4">
-              <div className="flex items-center gap-2 text-primary">
-                <Sparkles className="h-4 w-4" />
-                <span className="text-xs font-semibold uppercase tracking-wide">AI Ready</span>
+      <div className="border-t border-border/60 p-3">
+        <AnimatePresence mode="wait">
+          {!collapsed ? (
+            <motion.div
+              key="expanded"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-3">
+                <Avatar className="h-9 w-9 ring-2 ring-primary/20">
+                  <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{user?.name ?? 'User'}</p>
+                  <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+                </div>
               </div>
-              <p className="mt-2 text-sm font-medium">{currentOrganization?.name ?? 'Your workspace'}</p>
-              <p className="text-xs text-muted-foreground">Procurement intelligence active</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <div className="rounded-xl border border-primary/15 bg-gradient-to-br from-primary/8 via-transparent to-info/10 px-3 py-2.5">
+                <div className="flex items-center gap-2 text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">AI ready</span>
+                </div>
+                <p className="mt-1 truncate text-xs font-medium">
+                  {currentOrganization?.name ?? 'Your workspace'}
+                </p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="collapsed"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex justify-center py-1"
+            >
+              <Avatar className="h-9 w-9">
+                <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </aside>
   );
 }

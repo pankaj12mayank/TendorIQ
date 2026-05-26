@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { authenticatedFetch } from '@/lib/api-fetch';
 import { unwrapData } from '@/lib/api-envelope';
@@ -9,6 +9,7 @@ export interface AiProviderOption {
   id: string;
   label: string;
   configured: boolean;
+  online?: boolean;
   models: string[];
   default_model?: string;
   hint?: string;
@@ -22,6 +23,7 @@ export interface AiCatalog {
 }
 
 const STORAGE_KEY = 'tendoriq.ai.selection';
+const CATALOG_POLL_MS = 20_000;
 
 export interface AiSelection {
   provider: string;
@@ -51,43 +53,95 @@ export function saveAiSelection(selection: AiSelection) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
 }
 
-export function useAiCatalog() {
+/** Resolve provider/model from API catalog (live keys + Ollama tags). */
+export function resolveSelectionFromCatalog(
+  catalog: AiCatalog,
+  saved?: AiSelection | null
+): AiSelection {
+  const configured = catalog.providers.filter((p) => p.configured && p.models.length > 0);
+  if (!configured.length) {
+    return {
+      provider: catalog.default_provider,
+      model: catalog.default_model,
+    };
+  }
+
+  const trySaved = saved ?? loadAiSelection(catalog);
+  const savedProvider = configured.find((p) => p.id === trySaved.provider);
+  if (savedProvider) {
+    const model = savedProvider.models.includes(trySaved.model)
+      ? trySaved.model
+      : savedProvider.default_model && savedProvider.models.includes(savedProvider.default_model)
+        ? savedProvider.default_model
+        : savedProvider.models[0];
+    return { provider: savedProvider.id, model };
+  }
+
+  const preferred = configured.find((p) => p.id === catalog.default_provider) ?? configured[0];
+  const model =
+    preferred.default_model && preferred.models.includes(preferred.default_model)
+      ? preferred.default_model
+      : preferred.models[0];
+  return { provider: preferred.id, model };
+}
+
+export function useAiCatalog(options?: { poll?: boolean }) {
+  const poll = options?.poll !== false;
   const [catalog, setCatalog] = useState<AiCatalog | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<AiSelection>(loadAiSelection());
+  const selectionRef = useRef(selection);
 
-  const fetchCatalog = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
+
+  const applyCatalog = useCallback((body: AiCatalog) => {
+    setCatalog(body);
+    const saved = loadAiSelection(body);
+    const next = resolveSelectionFromCatalog(body, saved);
+    const prev = selectionRef.current;
+    const changed = prev.provider !== next.provider || prev.model !== next.model;
+    setSelection(next);
+    saveAiSelection(next);
+    return { next, changed };
+  }, []);
+
+  const fetchCatalog = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const res = await authenticatedFetch('/api/v1/ai/catalog');
       if (!res.ok) throw new Error('Failed to load AI providers');
       const body = unwrapData(await res.json()) as AiCatalog;
-      setCatalog(body);
-      const saved = loadAiSelection(body);
-      const providerOk = body.providers.some((p) => p.id === saved.provider && p.configured);
-      const prov = providerOk
-        ? saved.provider
-        : body.default_provider;
-      const provEntry = body.providers.find((p) => p.id === prov);
-      const model =
-        saved.model && provEntry?.models.includes(saved.model)
-          ? saved.model
-          : provEntry?.default_model ?? body.default_model;
-      const next = { provider: prov, model };
-      setSelection(next);
-      saveAiSelection(next);
+      return applyCatalog(body);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI catalog unavailable');
+      return null;
     } finally {
-      setLoading(false);
+      if (!opts?.silent) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [applyCatalog]);
 
   useEffect(() => {
     void fetchCatalog();
   }, [fetchCatalog]);
+
+  useEffect(() => {
+    if (!poll) return;
+    const onFocus = () => void fetchCatalog({ silent: true });
+    window.addEventListener('focus', onFocus);
+    const timer = window.setInterval(() => void fetchCatalog({ silent: true }), CATALOG_POLL_MS);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(timer);
+    };
+  }, [fetchCatalog, poll]);
 
   const updateSelection = useCallback((next: Partial<AiSelection>) => {
     setSelection((prev) => {
@@ -102,8 +156,8 @@ export function useAiCatalog() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        provider: selection.provider,
-        model: selection.model,
+        provider: selectionRef.current.provider,
+        model: selectionRef.current.model,
       }),
     });
     if (!res.ok) {
@@ -113,7 +167,7 @@ export function useAiCatalog() {
       );
     }
     return unwrapData(await res.json());
-  }, [selection]);
+  }, []);
 
   return {
     catalog,
