@@ -112,18 +112,14 @@ class Settings(BaseSettings):
     # ===========================================
     # AUTH
     # ===========================================
-    AUTH_PROVIDER: Literal['local', 'clerk', 'supabase'] = 'local'
+    AUTH_PROVIDER: Literal['local', 'clerk'] = 'local'
     CLERK_SECRET_KEY: str = ''
     CLERK_WEBHOOK_SECRET: str = ''
-    SUPABASE_URL: str = ''
-    SUPABASE_ANON_KEY: str = ''
-    SUPABASE_SERVICE_ROLE_KEY: str = ''
-    SUPABASE_JWT_SECRET: str = ''
 
     JWT_SECRET: str = ''  # Must be set in .env (min 32 chars)
     JWT_ALGORITHM: str = 'HS256'
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 1
 
     # ===========================================
     # OBSERVABILITY

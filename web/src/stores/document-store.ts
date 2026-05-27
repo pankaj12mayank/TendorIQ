@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type DocumentStatus = 'uploaded' | 'processing' | 'retrying' | 'completed' | 'failed' | 'needs_review' | 'deleted';
 
@@ -96,7 +97,9 @@ const initialPagination = {
   pages: 0,
 };
 
-export const useDocumentStore = create<DocumentState>()((set, get) => ({
+export const useDocumentStore = create<DocumentState>()(
+  persist(
+    (set) => ({
   documents: [],
   selectedDocuments: [],
   filters: initialFilters,
@@ -148,5 +151,28 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
   setPagination: (pagination) => set((state) => ({ pagination: { ...state.pagination, ...pagination } })),
   setStats: (stats) => set({ stats }),
   setLoading: (loading) => set({ isLoading: loading }),
-  setError: (error) => set({ error }),
-}));
+      setError: (error) => set({ error }),
+    }),
+    {
+      name: 'tendoriq-documents-ui',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        filters: state.filters,
+        pagination: {
+          page: state.pagination.page,
+          limit: state.pagination.limit,
+        },
+      }),
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as Partial<DocumentState>),
+        pagination: {
+          ...current.pagination,
+          ...(persisted as Partial<DocumentState>)?.pagination,
+          total: 0,
+          pages: 0,
+        },
+      }),
+    }
+  )
+);

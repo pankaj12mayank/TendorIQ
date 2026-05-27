@@ -23,21 +23,18 @@ async def get_current_user(
     if existing:
         return existing
 
-    if not authorization:
+    cookie_token = (request.cookies.get('__session') or '').strip()
+    bearer_token = ''
+    if authorization and authorization.startswith('Bearer '):
+        bearer_token = authorization.replace('Bearer ', '').strip()
+    token = bearer_token or cookie_token
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Missing authorization header',
             headers={'WWW-Authenticate': 'Bearer'},
         )
-
-    if not authorization.startswith('Bearer '):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid authorization header format',
-            headers={'WWW-Authenticate': 'Bearer'},
-        )
-
-    token = authorization.replace('Bearer ', '').strip()
     auth = await resolve_auth_from_token(token, db)
     if not auth:
         raise HTTPException(

@@ -81,7 +81,7 @@ export function AppSidebar() {
         )}
       </div>
 
-      <nav className="flex-1 space-y-7 overflow-y-auto scroll-premium px-3 py-5">
+      <nav className="flex-1 space-y-7 overflow-x-hidden overflow-y-auto scroll-premium px-3 py-5">
         {groups.map((group) => (
           <div key={group.label}>
             {!collapsed && (
@@ -110,6 +110,7 @@ export function AppSidebar() {
                         isActive && 'nav-link-active',
                         collapsed && 'justify-center px-2.5'
                       )}
+                      aria-current={isActive ? 'page' : undefined}
                       title={collapsed ? item.name : undefined}
                     >
                       {isActive && !collapsed && (

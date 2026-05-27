@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { AiModelPicker } from '@/components/upload/ai-model-picker';
 import { Button } from '@/components/ui/button';
@@ -40,9 +40,9 @@ export function AiPanel() {
         style: selection.style,
         tone: selection.tone,
       });
-      toast.success('AI preferences saved');
+      appToast.success('AI preferences saved.');
     } catch {
-      toast.error('Failed to save preferences');
+      appToast.error('Failed to save preferences.');
     }
   };
 

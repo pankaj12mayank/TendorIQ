@@ -20,6 +20,15 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton, TableRowSkeleton } from '@/components/design-system/skeleton';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { StatusBadge } from './status-badge';
 import { useDocumentStore, Document, DocumentStatus } from '@/stores/document-store';
 import { useDocumentsApi } from '@/hooks/use-documents';
@@ -69,6 +78,9 @@ export function DocumentTable() {
   } = useDocumentsApi();
 
   const [showFilters, setShowFilters] = useState(false);
+  const startRow = (store.pagination.page - 1) * store.pagination.limit + 1;
+  const endRow = Math.min(store.pagination.page * store.pagination.limit, store.pagination.total);
+
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
   useEffect(() => {
@@ -283,13 +295,14 @@ export function DocumentTable() {
       )}
 
       {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
+      <div className="table-wrap smooth-layout overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="w-[40px] px-3 py-3">
                   <input
+                    aria-label="Select all documents"
                     type="checkbox"
                     checked={allSelected}
                     onChange={handleSelectAll}
@@ -320,8 +333,17 @@ export function DocumentTable() {
             <tbody className="divide-y">
               {loading && store.documents.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + 2} className="px-3 py-12 text-center text-muted-foreground">
-                    Loading documents...
+                  <td colSpan={columns.length + 2} className="px-3 py-6">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-48" />
+                      <table className="w-full">
+                        <tbody>
+                          <TableRowSkeleton cols={columns.length + 2} />
+                          <TableRowSkeleton cols={columns.length + 2} />
+                          <TableRowSkeleton cols={columns.length + 2} />
+                        </tbody>
+                      </table>
+                    </div>
                   </td>
                 </tr>
               ) : store.documents.length === 0 ? (
@@ -353,33 +375,31 @@ export function DocumentTable() {
 
       {/* Pagination */}
       {store.pagination.pages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {(store.pagination.page - 1) * store.pagination.limit + 1} to{' '}
-            {Math.min(store.pagination.page * store.pagination.limit, store.pagination.total)} of{' '}
-            {store.pagination.total} documents
+            Showing {startRow} to {endRow} of {store.pagination.total} documents
           </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => store.setPage(store.pagination.page - 1)}
-              disabled={store.pagination.page === 1}
-            >
-              Previous
-            </Button>
-            <span className="text-sm">
-              Page {store.pagination.page} of {store.pagination.pages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => store.setPage(store.pagination.page + 1)}
-              disabled={store.pagination.page >= store.pagination.pages}
-            >
-              Next
-            </Button>
-          </div>
+          <Pagination className="mx-0 w-auto justify-start sm:justify-end">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => store.setPage(store.pagination.page - 1)}
+                  disabled={loading || store.pagination.page === 1}
+                />
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationLink isActive>
+                  {store.pagination.page}/{store.pagination.pages}
+                </PaginationLink>
+              </PaginationItem>
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => store.setPage(store.pagination.page + 1)}
+                  disabled={loading || store.pagination.page >= store.pagination.pages}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       )}
     </div>
@@ -430,6 +450,7 @@ function DocumentRow({
     <tr className={cn('hover:bg-muted/50 transition-colors', isSelected && 'bg-muted/30')}>
       <td className="px-3 py-3">
         <input
+          aria-label={`Select ${document.name}`}
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}

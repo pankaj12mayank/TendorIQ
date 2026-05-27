@@ -40,3 +40,14 @@ def create_index_if_missing(name: str, table: str, columns: list[str], **kw) -> 
 def drop_index_if_exists(name: str, table: str) -> None:
     if index_exists(table, name):
         op.drop_index(name, table_name=table)
+
+
+def drop_column_if_exists(table: str, column: str) -> None:
+    if not column_exists(table, column):
+        return
+    bind = op.get_bind()
+    if bind.dialect.name == 'sqlite':
+        with op.batch_alter_table(table) as batch_op:
+            batch_op.drop_column(column)
+    else:
+        op.drop_column(table, column)

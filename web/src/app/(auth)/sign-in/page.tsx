@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { useAuthContext } from '@/hooks/use-auth';
+import { usePublicBranding } from '@/hooks/use-public-branding';
 import { isClerkConfigured } from '@/lib/clerk-config';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
 
@@ -21,6 +22,7 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const branding = usePublicBranding();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,14 +51,25 @@ export default function SignInPage() {
       <div className="auth-shell relative z-10">
         <div className="auth-brand-panel">
           <div className="relative z-10 space-y-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25">
-              <Shield className="h-6 w-6" />
-            </div>
+            <Link
+              href="/"
+              className="inline-flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white/15 ring-1 ring-white/25"
+              aria-label="Go to landing page"
+            >
+              {branding.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={branding.logo_url} alt="Brand logo" className="h-12 w-12 object-cover" />
+              ) : (
+                <Shield className="h-6 w-6" />
+              )}
+            </Link>
             <div>
-              <h1 className="font-display text-3xl font-semibold tracking-tight">TenderIQ</h1>
+              <h1 className="font-display text-3xl font-semibold tracking-tight">
+                {branding.brand_name || 'TenderIQ'}
+              </h1>
               <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/80">
-                Cinematic-grade procurement workspace. Upload, analyze, and propose — powered by your
-                choice of AI.
+                {branding.hero_subheadline ||
+                  'Cinematic-grade procurement workspace. Upload, analyze, and propose — powered by your choice of AI.'}
               </p>
             </div>
             <ul className="space-y-4 text-sm text-white/85">
@@ -74,7 +87,9 @@ export default function SignInPage() {
               </li>
             </ul>
           </div>
-          <p className="relative z-10 text-xs text-white/50">Secure workspace login</p>
+          <p className="relative z-10 text-xs text-white/50">
+            {branding.auth_tagline || 'Secure workspace login'}
+          </p>
         </div>
 
         <div className="auth-form-panel flex items-center justify-center">

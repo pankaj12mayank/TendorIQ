@@ -2,6 +2,8 @@
 
 Production deploy for the **9-route MVP**: landing, auth, dashboard, upload, analysis, proposal, settings (incl. billing), admin.
 
+Business model in current Lite build is **yearly pricing only** (no monthly plans).
+
 ## Architecture
 
 | Service | Stack | Default port |
@@ -141,6 +143,7 @@ run.bat deploy-check
 3. Create proposal → Export PDF  
 4. Settings → Billing (demo quota)  
 5. Homepage loads CMS from `GET /api/v1/public/site`
+6. Owner `/dashboard/admin` can manage users (suspend, soft delete, restore) and CMS publish flow
 
 ---
 

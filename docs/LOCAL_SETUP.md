@@ -31,6 +31,17 @@ Login hamesha **database** se hota hai — `.env` se direct login nahi.
 
 Details: `.tenderiq/bootstrap-credentials.json` (same folder as owner file)
 
+## Owner control center quick check
+
+After login with owner account:
+
+1. Open `/dashboard/admin`
+2. Verify tabs: CMS Control, Users, Payments, Uploads, Analytics, Pricing
+3. Users tab:
+   - Suspend / Activate works
+   - Delete is **soft delete**
+   - Deleted user can be restored from the same tab
+
 ## Start
 
 ```bat

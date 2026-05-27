@@ -12,15 +12,15 @@ AI-assisted tender workflow for teams: upload RFP documents, run structured anal
 
 ---
 
-## Features (MVP)
+## Features (Lite SaaS)
 
-- **Landing & marketing** — CMS-driven public site (admin-configurable)
-- **Authentication** — local dev login; optional Supabase or Clerk for production
-- **Dashboard** — tender list and workspace overview
-- **Upload & analysis** — PDF/DOCX ingestion, AI summary, compliance and clause extraction
-- **Proposal builder** — sectioned drafts with export (PDF)
-- **Settings** — profile, AI provider keys, billing placeholders
-- **Admin** — platform settings, pricing, and site content
+- **Landing & marketing CMS** — draft/publish/rollback, customer stories, workflow steps, branding assets
+- **Authentication & sessions** — local auth with JWT + refresh, HttpOnly cookie-first flow, inactivity controls
+- **Real user dashboard** — plan/expiry/usage cards, restriction banners, quick actions, user-scoped tenders
+- **Upload & analysis** — PDF/DOCX ingestion, AI summary/compliance/clauses, retry-safe processing
+- **Proposal builder** — sectioned proposal generation + PDF export
+- **Monetization** — yearly-only plans, usage/expiry restrictions, payment history
+- **Owner control center** — pricing/plans, support email, CMS, users (suspend/soft delete/restore), uploads, payments, analytics
 
 ---
 
@@ -64,7 +64,7 @@ Login passwords are **not** stored in `.env`. Use one of:
 1. **First run** — after `run.bat`, open `.tenderiq/bootstrap-credentials.json` for one-time bootstrap accounts (gitignored).
 2. **Register** — http://localhost:3000/sign-up (password min. 8 characters).
 
-Supabase, Clerk, and OpenAI keys are optional (auth provider and AI analysis only).
+Supabase and Clerk are optional in this Lite stack. OpenAI/AI provider keys are optional for analysis features.
 
 ---
 
@@ -158,7 +158,7 @@ docker compose up --build
 
 Migrations run automatically in the API container on startup.
 
-**Lite database note:** The `tenants` table is the per-user workspace (retained in Lite). Phase 10 migrations remove unused enterprise-only tables on MySQL/PostgreSQL; SQLite skips destructive drops where the dialect does not support them.
+**Lite database note:** The `tenants` table is used as personal workspace context (retained in Lite). Cleanup migrations remove unused enterprise-only tables on MySQL/PostgreSQL; SQLite skips destructive drops where unsupported.
 
 ---
 
@@ -233,8 +233,8 @@ run.bat stop
 |----------|----------|
 | [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) | Env files, local auth, optional Supabase/Clerk |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Production deploy and Docker |
-| [docs/TENDERIQ_REMAINING_WORK.md](docs/TENDERIQ_REMAINING_WORK.md) | Implementation status and phases |
-| [docs/CLIENT_READY_STATUS.md](docs/CLIENT_READY_STATUS.md) | Demo checklist and client handoff |
+| [docs/TENDERIQ_REMAINING_WORK.md](docs/TENDERIQ_REMAINING_WORK.md) | Current completion and remaining ops checklist |
+| [docs/CLIENT_READY_STATUS.md](docs/CLIENT_READY_STATUS.md) | Current readiness, risks, and audit snapshot |
 
 ---
 

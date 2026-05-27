@@ -5,7 +5,7 @@ import {
   type DocumentListResponse,
 } from '@/lib/documents-api';
 import { useDocumentStore, Document, DocumentStats, DocumentFilters, DocumentStatus } from '@/stores/document-store';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 import { formatPollingError, PollingCancelledError, PollingTimeoutError } from '@/lib/polling-errors';
 
 export interface DocumentStatsResponse {
@@ -164,17 +164,17 @@ export function useDocumentsApi() {
       if (res.errors?.length) {
         const msg = `Archived ${res.updated_count} of ${documentIds.length}. ${res.errors.join(' ')}`;
         setError(msg);
-        toast.warning(msg);
+        appToast.warning(msg);
         return;
       }
-      toast.success(`Archived ${res.updated_count} document(s)`);
+      appToast.success(`Archived ${res.updated_count} document(s).`);
     } catch (err: unknown) {
       for (const doc of previous) {
         if (doc) store.updateDocument(doc.id, doc);
       }
       const msg = err instanceof Error ? err.message : 'Failed to archive';
       setError(msg);
-      toast.error(msg);
+      appToast.error(msg);
       throw err;
     } finally {
       setLoading(false);
@@ -197,14 +197,14 @@ export function useDocumentsApi() {
       if (res.errors?.length) {
         const msg = `Restored ${res.updated_count} of ${documentIds.length}. ${res.errors.join(' ')}`;
         setError(msg);
-        toast.warning(msg);
+        appToast.warning(msg);
         return;
       }
-      toast.success(`Restored ${res.updated_count} document(s)`);
+      appToast.success(`Restored ${res.updated_count} document(s).`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to restore';
       setError(msg);
-      toast.error(msg);
+      appToast.error(msg);
       throw err;
     } finally {
       setLoading(false);
@@ -228,15 +228,15 @@ export function useDocumentsApi() {
       if (res.errors?.length) {
         const msg = `Deleted ${res.updated_count} of ${documentIds.length}. ${res.errors.join(' ')}`;
         setError(msg);
-        toast.warning(msg);
+        appToast.warning(msg);
         return;
       }
-      toast.success(`Deleted ${res.updated_count} document(s)`);
+      appToast.success(`Deleted ${res.updated_count} document(s).`);
     } catch (err: unknown) {
       await fetchDocuments();
       const msg = err instanceof Error ? err.message : 'Failed to delete';
       setError(msg);
-      toast.error(msg);
+      appToast.error(msg);
       throw err;
     } finally {
       setLoading(false);

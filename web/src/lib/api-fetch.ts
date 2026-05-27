@@ -35,6 +35,7 @@ export async function authenticatedFetch(
   try {
     const response = await fetch(apiUrl(path), {
       ...rest,
+      credentials: 'include',
       signal: rest.signal ?? controller.signal,
       headers: {
         ...(auth ? (getSessionRequestHeaders() as Record<string, string>) : {}),

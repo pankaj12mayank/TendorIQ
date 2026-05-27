@@ -277,10 +277,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
+        token = ''
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.replace('Bearer ', '').strip()
+        if not token:
+            token = (request.cookies.get('__session') or '').strip()
+        if not token:
             return await call_next(request)
-
-        token = auth_header.replace('Bearer ', '').strip()
         from .database import async_session_maker
 
         async with async_session_maker() as db:

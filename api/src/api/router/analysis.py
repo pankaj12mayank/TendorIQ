@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.models import AnalysisResult
 from ...core.database import get_db
 from ...core.lite_scope import apply_user_scope, parse_user_uuid, user_owns_row
+from ...core.billing.subscription_access import assert_can_use_system
 from ...core.tenant_utils import parse_tenant_uuid
 from .analysis_mapper import analysis_row_to_dashboard
 from ..dependencies.access import TenantUser, require_tenant_member
@@ -58,6 +59,8 @@ async def list_analysis(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     try:
         count_q = apply_user_scope(select(func.count(AnalysisResult.id)), AnalysisResult, current_user)
         total = await db.scalar(count_q) or 0
@@ -90,6 +93,8 @@ async def get_analysis_by_tender(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     try:
         count_q = apply_user_scope(
             select(func.count(AnalysisResult.id)).where(AnalysisResult.tender_id == UUID(tender_id)),
@@ -122,6 +127,8 @@ async def get_tender_dashboard_analysis(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     """Dashboard-shaped analysis for a tender (latest result)."""
     try:
         q = (
@@ -143,6 +150,8 @@ async def patch_tender_dashboard_analysis(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     tenant_uuid = parse_tenant_uuid(current_user.tenant_id)
     owner_uuid = parse_user_uuid(current_user.user_id)
     section = body.get('section')
@@ -193,6 +202,8 @@ async def create_analysis(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     tenant_uuid = parse_tenant_uuid(current_user.tenant_id)
     try:
         obj = AnalysisResult(
@@ -225,6 +236,8 @@ async def get_analysis(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     try:
         q = _scoped_select(current_user).where(AnalysisResult.id == analysis_id)
         row = (await db.execute(q)).scalar_one_or_none()
@@ -244,6 +257,8 @@ async def delete_analysis(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.tenant_id:
+        await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     try:
         q = _scoped_select(current_user).where(AnalysisResult.id == analysis_id)
         row = (await db.execute(q)).scalar_one_or_none()

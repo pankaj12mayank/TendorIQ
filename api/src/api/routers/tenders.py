@@ -49,6 +49,8 @@ async def list_tenders(
     filters = {}
     if status:
         filters['status'] = status
+    if search:
+        filters['search'] = search
 
     items, total = await service.list_tenders(
         page=page,

@@ -14,16 +14,17 @@ from . import BillingService, PlanLimits
 
 
 PLAN_DISPLAY = {
-    'free': {'id': 'plan_free', 'name': 'free', 'displayName': 'Free', 'priceMonthly': 0, 'priceAnnual': 0},
-    'starter': {'id': 'plan_free', 'name': 'free', 'displayName': 'Starter', 'priceMonthly': 2900, 'priceAnnual': 29000},
+    'free': {'id': 'plan_starter', 'name': 'starter', 'displayName': 'Starter', 'priceMonthly': 2900, 'priceAnnual': 29000},
+    'starter': {'id': 'plan_starter', 'name': 'starter', 'displayName': 'Starter', 'priceMonthly': 2900, 'priceAnnual': 29000},
     'professional': {'id': 'plan_pro', 'name': 'pro', 'displayName': 'Professional', 'priceMonthly': 9900, 'priceAnnual': 99000},
     'pro': {'id': 'plan_pro', 'name': 'pro', 'displayName': 'Professional', 'priceMonthly': 9900, 'priceAnnual': 99000},
     'enterprise': {'id': 'plan_enterprise', 'name': 'enterprise', 'displayName': 'Enterprise', 'priceMonthly': 29900, 'priceAnnual': 299000},
 }
 
 FE_PLAN_TO_API = {
-    'plan_free': 'starter',
-    'free': 'starter',
+    'plan_starter': 'starter',
+    'plan_free': 'starter',  # backward compatibility
+    'free': 'starter',  # backward compatibility
     'starter': 'starter',
     'plan_pro': 'professional',
     'pro': 'professional',
@@ -47,13 +48,11 @@ def normalize_plan_id(plan_id: str) -> str:
 
 
 def normalize_billing_cycle(interval: str) -> str:
-    if interval in ('annual', 'yearly'):
-        return 'yearly'
-    return 'monthly'
+    return 'yearly'
 
 
 def fe_billing_interval(cycle: str) -> str:
-    return 'annual' if cycle == 'yearly' else 'monthly'
+    return 'annual'
 
 
 async def get_ai_token_usage(db: AsyncSession, tenant_id: UUID) -> int:
@@ -147,7 +146,7 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
     plan_key = (tenant.plan or sub.get('plan') or 'free').strip().lower()
     meta = PLAN_DISPLAY.get(plan_key, PLAN_DISPLAY.get('starter', PLAN_DISPLAY['starter']))
     now = datetime.now(timezone.utc)
-    cycle = getattr(tenant, 'billing_cycle', None) or sub.get('billing_cycle') or 'monthly'
+    cycle = getattr(tenant, 'billing_cycle', None) or sub.get('billing_cycle') or 'yearly'
     raw_status = (tenant.subscription_status or sub.get('status') or 'active').strip().lower()
     access = evaluate_tenant_access(tenant)
 
@@ -186,12 +185,12 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
             **meta,
             'description': f'{meta["displayName"]} plan',
             'currency': 'USD',
-            'trialDays': 14,
+            'trialDays': 0,
             'isActive': not access['is_expired'],
             'features': [],
         },
         'status': fe_status,
-        'billingInterval': fe_billing_interval(cycle),
+        'billingInterval': 'annual',
         'currentPeriodStart': period_start,
         'currentPeriodEnd': period_end,
         'cancelAtPeriodEnd': raw_status in ('canceled', 'cancelled'),
@@ -206,27 +205,6 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
 
 def build_plans_for_fe() -> list[dict[str, Any]]:
     plans = []
-    demo_limits = __import__('src.core.billing.lite_usage', fromlist=['LITE_DEMO_LIMITS']).LITE_DEMO_LIMITS['free']
-    plans.append({
-        'id': 'plan_free',
-        'name': 'free',
-        'displayName': 'Demo (Free)',
-        'description': 'Try TenderIQ with monthly limits',
-        'priceMonthly': 0,
-        'priceAnnual': 0,
-        'priceMonthlyInr': 0,
-        'priceAnnualInr': 0,
-        'currency': 'INR',
-        'trialDays': 0,
-        'isActive': True,
-        'isDemo': True,
-        'apiPlanId': 'free',
-        'features': [
-            {'key': 'documents_per_month', 'name': 'Document uploads', 'limit': demo_limits['documents_per_month'], 'unit': '/mo', 'isEnabled': True},
-            {'key': 'ai_analyses_per_month', 'name': 'AI analyses', 'limit': demo_limits['ai_analyses_per_month'], 'unit': '/mo', 'isEnabled': True},
-            {'key': 'proposals_per_month', 'name': 'Proposals', 'limit': demo_limits['proposals_per_month'], 'unit': '/mo', 'isEnabled': True},
-        ],
-    })
     for api_id, price_inr in (('starter', 999), ('professional', 2999), ('enterprise', 9999)):
         meta = PLAN_DISPLAY.get(api_id, PLAN_DISPLAY['starter'])
         limits = PlanLimits.get_limits(api_id)
@@ -238,13 +216,13 @@ def build_plans_for_fe() -> list[dict[str, Any]]:
             'name': meta['name'],
             'displayName': meta['displayName'],
             'description': f'{meta["displayName"]} subscription',
-            'priceMonthly': price_inr * 100,
+            'priceMonthly': price_inr * 100 * 10,
             'priceAnnual': price_inr * 100 * 10,
-            'priceMonthlyInr': price_inr,
+            'priceMonthlyInr': price_inr * 10,
             'priceAnnualInr': price_inr * 10,
             'currency': 'INR',
             'isDemo': False,
-            'trialDays': 14 if api_id != 'enterprise' else 30,
+            'trialDays': 0,
             'isActive': True,
             'features': [
                 {'key': k, 'name': QUOTA_LABELS.get(k, k.replace('_per_month', '')), 'limit': v if v != -1 else None, 'unit': '/mo', 'isEnabled': True}

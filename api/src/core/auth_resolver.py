@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import AuthService, AuthContext, ClerkAuthService
 from .clerk_bootstrap import resolve_clerk_auth_context
 from .config import settings
-from .supabase_auth import verify_supabase_access_token
-from .supabase_bootstrap import resolve_supabase_auth_context
 from .roles import normalize_membership_role, is_platform_super_admin, PLATFORM_ROLE_SUPER_ADMIN
 
 
@@ -26,19 +24,6 @@ async def resolve_auth_from_token(
     db: AsyncSession,
 ) -> Optional[AuthContext]:
     """Build AuthContext from a bearer token (shared by middleware and Depends)."""
-    supabase_claims = verify_supabase_access_token(token)
-    if supabase_claims:
-        resolved = await resolve_supabase_auth_context(db, supabase_claims)
-        if resolved:
-            user_id, email, tenant_id, membership_role, _name = resolved
-            return AuthContext(
-                user_id=user_id,
-                email=email,
-                role=membership_role,
-                tenant_id=tenant_id,
-                membership_role=membership_role,
-            )
-
     clerk_key = settings.CLERK_SECRET_KEY or ''
     clerk_ready = (
         settings.AUTH_PROVIDER == 'clerk'

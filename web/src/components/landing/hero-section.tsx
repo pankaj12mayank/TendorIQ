@@ -31,8 +31,8 @@ export function HeroSection({ content }: { content?: HeroContent }) {
     setReady(true);
   }, []);
 
-  const line1 = content?.headline?.split('\n')[0] ?? 'Win more tenders';
-  const line2 = content?.headline?.split('\n')[1] ?? 'with cinematic AI';
+  const line1 = content?.headline?.split('\n')[0] ?? 'AI Procurement Platform';
+  const line2 = content?.headline?.split('\n')[1] ?? 'for enterprise tender teams';
 
   const go = () => {
     if (user) {
@@ -86,7 +86,7 @@ export function HeroSection({ content }: { content?: HeroContent }) {
             className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
             <Button size="lg" className="btn-cinematic h-12 px-8 text-base" onClick={go}>
-              {content?.cta_primary ?? 'Get started'}
+              {content?.cta_primary ?? 'Open Dashboard'}
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
             <Button

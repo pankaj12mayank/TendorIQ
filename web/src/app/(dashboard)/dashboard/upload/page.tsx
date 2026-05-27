@@ -12,7 +12,7 @@ import { useDocumentProcessing } from '@/hooks/use-document-processing';
 import { loadAiSelection, type AiSelection } from '@/hooks/use-ai-catalog';
 import { mergePrefsWithLocal, useAiPreferences } from '@/hooks/use-ai-preferences';
 import type { UploadResult } from '@/hooks/use-file-upload';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 function ProcessingBanner({ documentId }: { documentId: string }) {
   const { status, isProcessing, isComplete, isFailed, tenderId, retryAnalysis } =
@@ -72,14 +72,14 @@ export default function UploadPage() {
   const handleUploadComplete = (results: UploadResult[]) => {
     const ok = results.filter((r) => r.success && r.document_id);
     if (ok.length === 0) {
-      toast.error('Upload failed');
+      appToast.error('Upload failed. Try again with valid files.');
       return;
     }
     const last = ok[ok.length - 1];
     if (last.document_id) setLastDocumentId(last.document_id);
 
-    toast.success(
-      `${ok.length} file(s) uploaded — AI analysis started (${aiSelection.provider}/${aiSelection.model})`
+    appToast.success(
+      `${ok.length} file(s) uploaded. AI analysis started with ${aiSelection.provider}/${aiSelection.model}.`
     );
     addActivity({
       id: `activity-${Date.now()}`,

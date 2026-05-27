@@ -35,5 +35,24 @@ export function useSiteContent(initial?: PublicSiteContent | null) {
     };
   }, [initial]);
 
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/public/site`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        setContent((prev) => {
+          const next = (json.data ?? null) as PublicSiteContent | null;
+          if (!next) return prev;
+          if (prev?.updated_at && next?.updated_at && prev.updated_at === next.updated_at) return prev;
+          return next;
+        });
+      } catch {
+        /* noop */
+      }
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return { content, loading };
 }

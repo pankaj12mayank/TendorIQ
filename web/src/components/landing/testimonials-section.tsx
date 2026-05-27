@@ -1,47 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Quote, Star, ChevronLeft, ChevronRight } from 'lucide-react';
-
-const testimonials = [
-  {
-    id: 1,
-    content: "TenderIQ transformed our tender process. We've saved 70% of time on document review and increased our win rate by 40%. The AI risk detection alone has prevented multiple costly mistakes.",
-    author: 'Sarah Johnson',
-    role: 'Procurement Manager',
-    company: 'TechCorp Industries',
-    avatar: 'SJ',
-    rating: 5,
-  },
-  {
-    id: 2,
-    content: "The AI proposal generator is incredible. It took us 3 days to create a proposal, now it takes 3 hours. The quality is even better because AI helps us include everything we might have missed.",
-    author: 'Michael Chen',
-    role: 'CEO',
-    company: 'BuildRight Construction',
-    avatar: 'MC',
-    rating: 5,
-  },
-  {
-    id: 3,
-    content: "We evaluated 10 different tender management solutions. TenderIQ was the only one that could handle our enterprise scale with the AI features we needed. Worth every penny.",
-    author: 'Emily Davis',
-    role: 'Operations Director',
-    company: 'GlobalServices Ltd',
-    avatar: 'ED',
-    rating: 5,
-  },
-  {
-    id: 4,
-    content: "The risk detection feature alone paid for the entire platform. It caught compliance issues we would have missed that could have resulted in major penalties.",
-    author: 'Robert Williams',
-    role: 'Senior Analyst',
-    company: 'FinanceFirst',
-    avatar: 'RW',
-    rating: 5,
-  },
-];
 
 type TestimonialItem = {
   quote: string;
@@ -67,19 +28,9 @@ export function TestimonialsSection({ items }: { items?: TestimonialItem[] }) {
             .toUpperCase(),
           rating: 5,
         }))
-      : testimonials;
+      : [];
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    setIsLoaded(true);
-    
-    const interval = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % slides.length);
-    }, 6000);
-
-    return () => clearInterval(interval);
-  }, []);
+  if (!slides.length) return null;
 
   const handlePrev = () => {
     setActiveIndex((prev) => (prev - 1 + slides.length) % slides.length);
@@ -104,9 +55,7 @@ export function TestimonialsSection({ items }: { items?: TestimonialItem[] }) {
             Customer Stories
           </div>
           
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Loved by Procurement Teams
-          </h2>
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">Customer Stories</h2>
           
           <p className="text-xl text-muted-foreground">
             See what industry leaders are saying about TenderIQ.
@@ -202,22 +151,7 @@ export function TestimonialsSection({ items }: { items?: TestimonialItem[] }) {
           </div>
         </div>
 
-        {/* Company Logos */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="mt-20 text-center"
-        >
-          <p className="text-sm text-muted-foreground mb-6">From teams at</p>
-          <div className="flex flex-wrap justify-center items-center gap-8 opacity-50">
-            {['TechCorp', 'BuildRight', 'GlobalServices', 'FinanceFirst', 'DataPro'].map((company) => (
-              <span key={company} className="text-lg font-semibold text-muted-foreground">
-                {company}
-              </span>
-            ))}
-          </div>
-        </motion.div>
+        {/* CMS-provided stories only; no hardcoded company list */}
       </div>
     </section>
   );

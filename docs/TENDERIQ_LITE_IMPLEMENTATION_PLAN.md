@@ -1,5 +1,10 @@
 # TenderIQ Lite — Complete Implementation Adjustment Plan
 
+> **Status update (2026-05-27):** This roadmap is now largely implemented.  
+> For current completion and operational state, refer to:
+> - [CLIENT_READY_STATUS.md](./CLIENT_READY_STATUS.md)
+> - [TENDERIQ_REMAINING_WORK.md](./TENDERIQ_REMAINING_WORK.md)
+
 **Scope:** Audit of the existing repo vs **FINAL MINI PRD** (implementation roadmap).  
 **Constraint:** No new enterprise systems; no queues/Redis/workers; no multi-tenant complexity; no audit/analytics/workflow engines.
 

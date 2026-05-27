@@ -145,7 +145,6 @@ class User(Base):
     role = Column(String(20), default='member')
 
     clerk_id = Column(String(255), nullable=True, unique=True, index=True)
-    supabase_id = Column(String(255), nullable=True, unique=True, index=True)
 
     preferences = Column(JsonCol, default={})
 
@@ -657,6 +656,53 @@ class PlatformSetting(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class PasswordResetToken(Base, TimestampMixin):
+    """One-time password reset token entries (hashed token only)."""
+
+    __tablename__ = 'password_reset_tokens'
+
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    requested_ip = Column(String(45), nullable=True)
+
+    __table_args__ = (
+        Index('idx_password_reset_user_active', 'user_id', 'expires_at', 'used_at'),
+    )
+
+
+class PaymentTransaction(Base, TenantMixin, TimestampMixin):
+    """Admin-visible payment ledger for all gateways."""
+
+    __tablename__ = 'payment_transactions'
+
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    user_id = Column(UuidCol, ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    subscription_id = Column(UuidCol, ForeignKey('subscriptions.id', ondelete='SET NULL'), nullable=True, index=True)
+    provider = Column(String(32), nullable=False, index=True)  # razorpay | stripe
+    order_id = Column(String(128), nullable=True, index=True)
+    payment_id = Column(String(128), nullable=True, index=True)
+    external_customer_id = Column(String(128), nullable=True, index=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    currency = Column(String(8), nullable=False, default='INR')
+    plan = Column(String(64), nullable=True, index=True)
+    status = Column(String(32), nullable=False, default='created', index=True)
+    failure_reason = Column(Text, nullable=True)
+    metadata_json = Column('metadata', JsonCol, default=dict)
+    paid_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    __table_args__ = (
+        UniqueConstraint('provider', 'payment_id', name='uq_payment_provider_payment_id'),
+        UniqueConstraint('provider', 'order_id', name='uq_payment_provider_order_id'),
+        Index('idx_payments_tenant_status_created', 'tenant_id', 'status', 'created_at'),
+        Index('idx_payments_tenant_provider_created', 'tenant_id', 'provider', 'created_at'),
+        CheckConstraint("provider IN ('razorpay', 'stripe')", name='valid_payment_provider'),
+        CheckConstraint("status IN ('created', 'paid', 'failed', 'refunded')", name='valid_payment_status'),
     )
 
 

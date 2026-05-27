@@ -5,8 +5,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Request, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, Response, status
+from pydantic import BaseModel, EmailStr, Field
 from uuid import UUID
 
 from sqlalchemy.exc import OperationalError
@@ -24,8 +24,6 @@ from ...core.local_user_auth import (
     seed_initial_accounts_if_empty,
 )
 from ...core.clerk_bootstrap import ensure_clerk_user, resolve_clerk_tenant_session
-from ...core.supabase_auth import verify_supabase_access_token
-from ...core.supabase_bootstrap import ensure_supabase_user, resolve_supabase_session
 from ...core.database import get_db
 from ...core.logging import get_logger
 from ...core.models import User, pk_str
@@ -45,6 +43,11 @@ from ...core.personal_workspace import (
     get_company_profile_dict,
 )
 from ...core.models import CompanyProfile
+from ...core.password_reset import (
+    consume_reset_token_and_update_password,
+    request_password_reset,
+    verify_reset_token,
+)
 
 logger = get_logger('auth_api')
 
@@ -72,8 +75,8 @@ def _database_unavailable(exc: Exception) -> HTTPException:
 # ── Models ──────────────────────────────────────────────────────────
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=256)
 
 
 class RegisterRequest(BaseModel):
@@ -84,7 +87,16 @@ class RegisterRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: str = Field(min_length=8, max_length=256)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=512)
+    new_password: str = Field(min_length=8, max_length=256)
 
 
 class LoginResponse(BaseModel):
@@ -115,7 +127,7 @@ class UserResponse(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    refresh_token: str
+    refresh_token: Optional[str] = None
 
 
 class WebhookPayload(BaseModel):
@@ -137,6 +149,37 @@ def _login_response(message: str, user: dict, tokens: dict[str, Any]) -> LoginRe
         expires_in=tokens['expires_in'],
         token_type=tokens['token_type'],
     )
+
+
+def _set_session_cookies(response: Response, tokens: dict[str, Any]) -> None:
+    max_age = int(tokens.get('expires_in') or 3600)
+    refresh_max_age = int(get_settings().JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60)
+    secure = settings.is_production
+    response.set_cookie(
+        key='__session',
+        value=str(tokens['access_token']),
+        max_age=max_age,
+        httponly=True,
+        secure=secure,
+        samesite='strict',
+        path='/',
+    )
+    refresh = tokens.get('refresh_token')
+    if refresh:
+        response.set_cookie(
+            key='__refresh',
+            value=str(refresh),
+            max_age=refresh_max_age,
+            httponly=True,
+            secure=secure,
+            samesite='strict',
+            path='/',
+        )
+
+
+def _clear_session_cookies(response: Response) -> None:
+    response.delete_cookie('__session', path='/')
+    response.delete_cookie('__refresh', path='/')
 
 
 async def _resolve_display_name(
@@ -163,6 +206,7 @@ async def _resolve_display_name(
 @router.post('/login', response_model=LoginResponse)
 async def login(
     request: LoginRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Email/password login — credentials must exist in the database."""
@@ -180,12 +224,14 @@ async def login(
 
     user_payload, tokens = result
     logger.info('Login successful: %s', user_payload.get('email'))
+    _set_session_cookies(response, tokens)
     return _login_response('Login successful', user_payload, tokens)
 
 
 @router.post('/register', response_model=LoginResponse)
 async def register(
     request: RegisterRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Create a database user and sign in (local auth)."""
@@ -205,7 +251,62 @@ async def register(
         logger.exception('Database unavailable during register: %s', exc)
         raise _database_unavailable(exc) from exc
 
+    _set_session_cookies(response, tokens)
     return _login_response('Account created', user_payload, tokens)
+
+
+@router.post('/forgot-password')
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    req: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send password reset email when account exists.
+    Always returns success to avoid account enumeration.
+    """
+    try:
+        client_ip = req.client.host if req.client else None
+        await request_password_reset(
+            db,
+            email=request.email,
+            request_ip=client_ip,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        logger.exception('Forgot-password request failed for %s', request.email)
+    return {
+        'success': True,
+        'message': 'If the account exists, a reset link has been sent to your email.',
+    }
+
+
+@router.get('/reset-password/validate')
+async def validate_reset_password_token(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    ok, message = await verify_reset_token(db, token)
+    if not ok:
+        raise HTTPException(status_code=400, detail=message)
+    return {'success': True, 'message': message}
+
+
+@router.post('/reset-password')
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await consume_reset_token_and_update_password(
+            db,
+            token=request.token,
+            new_password=request.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {'success': True, 'message': 'Password reset successful. Please sign in.'}
 
 
 @router.post('/bootstrap-seed', include_in_schema=False)
@@ -261,9 +362,19 @@ async def get_token(user: CurrentUser) -> dict:
 
 
 @router.post('/refresh', response_model=TokenResponse)
-async def refresh_token(request: RefreshTokenRequest) -> dict:
+async def refresh_token(
+    request: RefreshTokenRequest,
+    req: Request,
+    response: Response,
+) -> dict:
     """Refresh access token using refresh token."""
-    payload = AuthService().verify_token(request.refresh_token)
+    refresh = (request.refresh_token or req.cookies.get('__refresh') or '').strip()
+    if not refresh:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Missing refresh token',
+        )
+    payload = AuthService().verify_token(refresh)
     if not payload or payload.exp < datetime.now(timezone.utc).timestamp():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -277,9 +388,10 @@ async def refresh_token(request: RefreshTokenRequest) -> dict:
         tenant_id=payload.tenant_id,
         membership_role=membership_role,
     )
+    _set_session_cookies(response, tokens)
     return {
         'access_token': tokens['access_token'],
-        'refresh_token': request.refresh_token,
+        'refresh_token': refresh,
         'expires_in': tokens['expires_in'],
         'token_type': 'bearer',
     }
@@ -287,6 +399,7 @@ async def refresh_token(request: RefreshTokenRequest) -> dict:
 
 @router.post('/clerk/session', response_model=LoginResponse)
 async def clerk_session_exchange(
+    response: Response,
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponse:
@@ -317,55 +430,9 @@ async def clerk_session_exchange(
         tenant_id=tenant_id,
         membership_role=membership_role,
     )
+    _set_session_cookies(response, tokens)
     return _login_response(
         'Clerk session exchanged',
-        _login_user_payload(
-            user_id=user_id,
-            email=email,
-            name=user.name,
-            role=membership_role,
-            membership_role=membership_role,
-            tenant_id=tenant_id,
-            is_super_admin=False,
-        ),
-        tokens,
-    )
-
-
-@router.post('/supabase/session', response_model=LoginResponse)
-async def supabase_session_exchange(
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
-) -> LoginResponse:
-    """Exchange a Supabase access token for TenderIQ API JWT + user profile."""
-    if not authorization or not authorization.startswith('Bearer '):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Missing Supabase bearer token',
-        )
-    token = authorization.replace('Bearer ', '').strip()
-    claims = verify_supabase_access_token(token)
-    if not claims:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid Supabase session',
-        )
-    try:
-        user = await ensure_supabase_user(db, claims)
-        user_id, tenant_id, membership_role = await resolve_supabase_session(db, user)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-    email = user.email
-    tokens = issue_session_tokens(
-        user_id=user_id,
-        email=email,
-        role=membership_role,
-        tenant_id=tenant_id,
-        membership_role=membership_role,
-    )
-    return _login_response(
-        'Supabase session exchanged',
         _login_user_payload(
             user_id=user_id,
             email=email,
@@ -558,6 +625,7 @@ async def owner_account_file_hint() -> dict:
 @router.post('/logout')
 async def logout(
     current_user: CurrentUser,
+    response: Response,
     authorization: Optional[str] = Header(None),
 ) -> dict:
     """Logout user and revoke the current access token jti."""
@@ -568,6 +636,7 @@ async def logout(
         if payload:
             auth_service.revoke_token(payload.jti)
     logger.info('User logged out', user_id=current_user.user_id)
+    _clear_session_cookies(response)
     return {'message': 'Logged out successfully'}
 
 

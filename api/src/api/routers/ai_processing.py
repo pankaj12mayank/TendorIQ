@@ -20,6 +20,8 @@ from ...core.database import get_db
 from ...core.lite_scope import user_owns_row
 from ...core.processing.document_analyzer import run_document_analysis
 from ...core.processing.tasks import schedule_document_analysis
+from ...core.billing.subscription_access import assert_can_use_system
+from ...core.tenant_utils import parse_tenant_uuid
 from ..dependencies.access import LiteUser, TenantUser
 from ..schemas.base import create_response
 from ..services.document_service import document_service
@@ -80,6 +82,7 @@ async def get_processing_status(
 ):
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Workspace context required')
+    await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
 
     doc = await file_service.get_document(db, UUID(document_id))
     if not doc:
@@ -114,6 +117,7 @@ async def analyze_document(
     """Run (or re-run) AI analysis on an uploaded document."""
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Workspace context required')
+    await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
 
     doc = await file_service.get_document(db, UUID(document_id))
     if not doc:
@@ -167,6 +171,7 @@ async def retry_document_analysis(
     """Retry failed analysis (increments retry_count)."""
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Workspace context required')
+    await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
 
     doc = await document_service.retry_document(
         db, UUID(document_id), UUID(current_user.tenant_id)

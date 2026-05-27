@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Optional
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,7 +22,7 @@ from ...core.billing.fe_responses import (
     normalize_plan_id,
 )
 from ...core.database import get_db
-from ...core.models import Tenant
+from ...core.models import Tenant, PaymentTransaction
 from ...core.tenant_utils import parse_tenant_uuid
 from ..dependencies.access import TenantUser, require_tenant_member
 from ..schemas.base import create_response
@@ -41,13 +42,13 @@ router = APIRouter(
 class PlanUpgradeRequest(BaseModel):
     plan: Optional[str] = None
     plan_id: Optional[str] = None
-    billing_cycle: str = 'monthly'
-    billing_interval: Optional[str] = None
+    billing_cycle: str = 'yearly'
+    billing_interval: Optional[str] = 'yearly'
 
 
 class SubscriptionChangeRequest(BaseModel):
     plan_id: str
-    billing_interval: str = 'monthly'
+    billing_interval: str = 'yearly'
 
 
 class CancelSubscriptionRequest(BaseModel):
@@ -284,6 +285,70 @@ async def list_invoices(
     body = create_response([])
     body['invoices'] = []
     return body
+
+
+@router.get('/payments/history')
+async def list_own_payments(
+    current_user: TenantUser,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+):
+    tenant_id = _require_tenant_uuid(current_user)
+    q = select(PaymentTransaction).where(
+        PaymentTransaction.tenant_id == tenant_id,
+        PaymentTransaction.user_id == UUID(current_user.user_id),
+    )
+    if status:
+        q = q.where(PaymentTransaction.status == status)
+    if provider:
+        q = q.where(PaymentTransaction.provider == provider)
+    if from_date:
+        q = q.where(PaymentTransaction.created_at >= datetime.fromisoformat(from_date))
+    if to_date:
+        q = q.where(PaymentTransaction.created_at <= datetime.fromisoformat(to_date))
+    total = await db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = (
+        (
+            await db.execute(
+                q.order_by(PaymentTransaction.created_at.desc())
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    items = []
+    for r in rows:
+        items.append(
+            {
+                'id': str(r.id),
+                'payment_date': r.created_at.isoformat() if r.created_at else None,
+                'amount': float(r.amount or 0),
+                'currency': r.currency,
+                'status': r.status,
+                'provider': r.provider,
+                'invoice': f'INV-{str(r.id)[:8]}',
+                'plan': r.plan,
+                'expiry': r.metadata_json.get('plan_period_end') if isinstance(r.metadata_json, dict) else None,
+            }
+        )
+    return create_response(
+        {
+            'items': items,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total': int(total),
+                'pages': (int(total) + limit - 1) // limit if total else 0,
+            },
+        }
+    )
 
 
 @router.get('/payment-methods')

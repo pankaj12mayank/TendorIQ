@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -41,6 +42,11 @@ class GenerateProposalBody(BaseModel):
 
 class UpdateProposalSectionBody(BaseModel):
     content: str = Field(..., min_length=1)
+
+
+class ProposalAutosaveBody(BaseModel):
+    title: Optional[str] = None
+    sections: list[dict] = Field(default_factory=list)
 
 
 @router.get('/tender/{tender_id}')
@@ -141,6 +147,36 @@ async def update_proposal_section(
 
     payload['sections'] = sections
     row.sections_json = payload
+    await db.commit()
+    await db.refresh(row)
+    return create_response(proposal_row_to_dict(row))
+
+
+@router.patch('/{proposal_id}/autosave')
+async def autosave_proposal(
+    proposal_id: str,
+    body: ProposalAutosaveBody,
+    current_user: TenantUser,
+    db: AsyncSession = Depends(get_db),
+):
+    q = apply_user_scope(select(Proposal), Proposal, current_user).where(
+        Proposal.id == UUID(proposal_id)
+    )
+    row = (await db.execute(q)).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail='Proposal not found')
+
+    payload = dict(row.sections_json or {})
+    incoming = body.sections or []
+    payload['sections'] = incoming
+    payload['total_words'] = sum(len(str(s.get('content') or '').split()) for s in incoming)
+    payload['estimated_pages'] = max(1, payload['total_words'] // 300)
+    payload['autosaved_at'] = datetime.utcnow().isoformat()
+    if body.title:
+        row.title = body.title[:500]
+        payload['title'] = row.title
+    row.sections_json = payload
+    row.status = 'draft'
     await db.commit()
     await db.refresh(row)
     return create_response(proposal_row_to_dict(row))

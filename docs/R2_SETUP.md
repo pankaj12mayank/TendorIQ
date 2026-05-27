@@ -41,3 +41,7 @@ In R2 bucket → Settings → CORS policy:
 3. Network tab: `POST .../upload/initiate` → `PUT` to `*.r2.cloudflarestorage.com` → `POST .../upload/complete`
 
 Local dev without R2: keep `STORAGE_PROVIDER=local` (direct upload, no CORS).
+
+## Notes
+
+- Same storage config is also used for owner CMS assets (story logos, workflow images, branding uploads).

@@ -102,7 +102,9 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
     }
   }, [status]);
 
-  const isProcessing = status?.processing_status === 'processing' || status?.processing_status === 'retrying';
+  const isProcessing = ['queued', 'extracting', 'processing', 'validating', 'retrying'].includes(
+    status?.processing_status ?? ''
+  );
   const isComplete = status?.processing_status === 'completed';
   const isFailed = status?.processing_status === 'failed';
 

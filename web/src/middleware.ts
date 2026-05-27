@@ -14,6 +14,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/forgot-password(.*)',
+  '/reset-password(.*)',
   '/api/webhooks(.*)',
   '/_next(.*)',
   '/favicon.ico',

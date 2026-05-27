@@ -38,6 +38,7 @@ from .api.routers.payments_lite import router as payments_lite_router
 from .api.router.billing import router as billing_router
 from .api.router.admin_auth import router as admin_auth_router
 from .api.router.admin_platform import router as admin_platform_router
+from .api.router.admin_dashboard import router as admin_dashboard_router
 from .api.routers.public_lite import router as public_lite_router
 
 configure_logging()
@@ -104,6 +105,26 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+@app.middleware('http')
+async def no_store_api_cache(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    no_store_prefixes = (
+        '/api/v1/auth',
+        '/api/v1/files',
+        '/api/v1/documents',
+        '/api/v1/analysis',
+        '/api/v1/proposals',
+        '/api/v1/admin/platform/dashboard',
+        '/api/v1/admin/platform/analytics',
+    )
+    if path.startswith(no_store_prefixes):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
+
 def _http_exception_message(detail: object) -> str:
     if isinstance(detail, str):
         return detail
@@ -161,6 +182,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(base_router, tags=['Base'])
 app.include_router(admin_platform_router, prefix='/api/v1')
+app.include_router(admin_dashboard_router, prefix='/api/v1')
 app.include_router(public_lite_router, prefix='/api/v1')
 app.include_router(auth_router, prefix='/api/v1')
 app.include_router(tenders_router, prefix='/api/v1')

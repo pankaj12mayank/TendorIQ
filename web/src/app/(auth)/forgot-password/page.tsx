@@ -3,34 +3,26 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getAuthProvider, isSupabaseConfigured } from '@/lib/supabase-config';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { requestPasswordReset } from '@/lib/auth-api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const supabaseMode = getAuthProvider() === 'supabase' && isSupabaseConfigured();
 
   async function handleReset(e: React.FormEvent) {
     e.preventDefault();
-    if (!supabaseMode) return;
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/sign-in`,
-      });
-      if (error) throw error;
-      toast.success('Password reset email sent — check your inbox.');
+      await requestPasswordReset(email);
+      appToast.success('If this account exists, reset email has been sent.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send reset email');
+      appToast.error(err instanceof Error ? err.message : 'Failed to request reset');
     } finally {
       setSubmitting(false);
     }
@@ -42,29 +34,25 @@ export default function ForgotPasswordPage() {
         <CardHeader>
           <CardTitle>Reset password</CardTitle>
           <CardDescription>
-            {supabaseMode
-              ? 'Enter your email and we will send a Supabase password reset link.'
-              : 'Password reset is not configured. Use your workspace admin or demo credentials.'}
+            Enter your email and we will send a reset link.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {supabaseMode ? (
-            <form onSubmit={handleReset} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? 'Sending...' : 'Send reset link'}
-              </Button>
-            </form>
-          ) : null}
+          <form onSubmit={handleReset} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? 'Sending...' : 'Send reset link'}
+            </Button>
+          </form>
           <Button asChild variant="outline" className="w-full">
             <Link href="/sign-in">
               <ArrowLeft className="mr-2 h-4 w-4" />

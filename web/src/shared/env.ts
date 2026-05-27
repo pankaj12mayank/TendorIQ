@@ -38,9 +38,9 @@ export const envSchema = z.object({
   REDIS_URL: z.string().optional(),
 
   // ===========================================
-  // AUTH - Clerk (Primary) or Supabase (Alternative)
+  // AUTH - Local (default) or Clerk
   // ===========================================
-  AUTH_PROVIDER: z.enum(['clerk', 'supabase']).default('clerk'),
+  AUTH_PROVIDER: z.enum(['local', 'clerk']).default('local'),
 
   // Clerk
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
@@ -50,11 +50,6 @@ export const envSchema = z.object({
   NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().default('/sign-up'),
   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().default('/dashboard'),
   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: z.string().default('/dashboard'),
-
-  // Supabase
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
   // JWT (dev default applied in buildEnvData when unset)
   JWT_SECRET: z.string().min(32).optional(),
@@ -198,7 +193,7 @@ function getDefaultValue(key: string): string | undefined {
     REDIS_HOST: 'localhost',
     REDIS_PORT: '6379',
     REDIS_DB: '0',
-    AUTH_PROVIDER: 'clerk',
+    AUTH_PROVIDER: 'local',
     NEXT_PUBLIC_CLERK_SIGN_IN_URL: '/sign-in',
     NEXT_PUBLIC_CLERK_SIGN_UP_URL: '/sign-up',
     NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: '/dashboard',

@@ -32,6 +32,25 @@ interface UseBillingApiReturn {
   fetchSubscription: () => Promise<Subscription>;
   fetchInvoices: () => Promise<Invoice[]>;
   fetchQuotaStatus: () => Promise<QuotaStatus[]>;
+  fetchPaymentHistory: (params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    provider?: string;
+  }) => Promise<{
+    items: Array<{
+      id: string;
+      payment_date: string | null;
+      amount: number;
+      currency: string;
+      status: string;
+      provider: string;
+      invoice: string;
+      plan?: string | null;
+      expiry?: string | null;
+    }>;
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }>;
 
   createSubscription: (planId: string, billingInterval: BillingInterval, paymentMethodId: string) => Promise<Subscription>;
   changePlan: (planId: string, billingInterval: BillingInterval) => Promise<PlanChangeResult>;
@@ -119,6 +138,24 @@ export function useBillingApi(): UseBillingApiReturn {
       setLoading(false);
     }
   }, [store]);
+
+  const fetchPaymentHistory = useCallback(
+    async (params?: { page?: number; limit?: number; status?: string; provider?: string }) => {
+      const qs = new URLSearchParams();
+      Object.entries(params ?? {}).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && String(v) !== '') qs.set(k, String(v));
+      });
+      const res = await api.get<{ items: any[]; pagination: any }>(
+        `/api/v1/billing/payments/history${qs.toString() ? `?${qs}` : ''}`
+      );
+      const data = (res as any)?.data ?? res;
+      return {
+        items: data.items ?? [],
+        pagination: data.pagination ?? { page: 1, limit: 20, total: 0, pages: 0 },
+      };
+    },
+    []
+  );
 
   const initialize = useCallback(async () => {
     await Promise.all([fetchPlans(), fetchSubscription(), fetchQuotaStatus(), fetchInvoices()]);
@@ -289,6 +326,7 @@ export function useBillingApi(): UseBillingApiReturn {
     fetchSubscription,
     fetchInvoices,
     fetchQuotaStatus,
+    fetchPaymentHistory,
     createSubscription,
     changePlan,
     cancelSubscription,

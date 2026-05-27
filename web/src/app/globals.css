@@ -58,6 +58,9 @@
     --sidebar-width: 17rem;
     --sidebar-collapsed: 4.5rem;
     --content-max: 80rem;
+    --space-page-x: 1rem;
+    --space-page-y: 1.25rem;
+    --space-section: 1rem;
   }
 
   .dark {
@@ -154,6 +157,24 @@
 }
 
 @layer components {
+  .app-page {
+    @apply w-full;
+    padding-inline: var(--space-page-x);
+    padding-block: var(--space-page-y);
+  }
+
+  .app-section {
+    margin-top: var(--space-section);
+  }
+
+  .app-card {
+    @apply rounded-xl border border-border/80 bg-card text-card-foreground shadow-sm;
+  }
+
+  .table-wrap {
+    @apply w-full overflow-x-auto rounded-lg border border-border/70;
+  }
+
   .surface-card {
     @apply rounded-xl border border-border/80 bg-card text-card-foreground;
     box-shadow: var(--shadow-sm);
@@ -408,6 +429,10 @@
 }
 
 @layer utilities {
+  .smooth-layout {
+    @apply transition-all duration-200;
+  }
+
   .animate-shimmer {
     background: linear-gradient(
       90deg,
@@ -426,5 +451,21 @@
     100% {
       background-position: -200% 0;
     }
+  }
+}
+
+@media (min-width: 640px) {
+  :root {
+    --space-page-x: 1.25rem;
+    --space-page-y: 1.5rem;
+    --space-section: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --space-page-x: 1.5rem;
+    --space-page-y: 1.75rem;
+    --space-section: 1.5rem;
   }
 }

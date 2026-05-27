@@ -22,7 +22,7 @@ import { parseApiErrorMessage } from '@/lib/api-envelope';
 import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
 import { isProtectedPath } from '@/lib/clerk-config';
 import { isSuperAdmin } from '@/lib/permissions';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
 
@@ -178,7 +178,7 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
         expiresInSec: tokens.expires_in,
       });
       setSyncedUser(sessionUser);
-      toast.success('Signed in successfully');
+      appToast.success('Signed in successfully.');
       const postLoginPath = getPostLoginPath(
         sessionUser.role === 'super_admin'
           ? sessionUser.role

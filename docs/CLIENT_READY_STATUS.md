@@ -1,60 +1,50 @@
-# TenderIQ Lite — Client-ready status (PRD audit)
+# TenderIQ Lite — Client-ready status (current)
 
-**Date:** 2026-05-26  
-**Scope:** [TENDERIQ_LITE_IMPLEMENTATION_PLAN.md](./TENDERIQ_LITE_IMPLEMENTATION_PLAN.md) (FINAL MINI PRD)
+**Date:** 2026-05-27  
+**Scope:** Current Lite SaaS build (Layers 1–5 implemented)
 
 ---
 
 ## Executive summary
 
-| Area | Code | Your machine (E2E) |
-|------|------|-------------------|
-| **Overall** | **~98% PRD** | **~90%** after `run.bat` + demo login |
-| Blockers fixed this audit | Public site 500 without migrations; Important Clauses UI missing; unit test flake | — |
-| You must run once | — | `run.bat` (runs migrations + starts servers) |
+| Area | Code | Local E2E |
+|------|------|-----------|
+| **Overall** | **~99% Lite scope** | **~95%** after `run.bat` + owner/user test pass |
+| Major closures | Layer 1 security hardening, Layer 2 monetization, Layer 3–5 CMS + owner ops center | — |
+| You must run once | — | `run.bat` (migrations + API + web) |
 
-**Verdict:** Client-ready for **Lite MVP demo** with **local auth** (`AUTH_PROVIDER=local`). Supabase Postgres / full Supabase Auth E2E remain **optional** PRD deviations documented below.
-
----
-
-## PRD checklist (exact scope)
-
-| # | PRD requirement | Status | Notes |
-|---|-----------------|--------|-------|
-| 1 | 9 routes: `/`, sign-in, sign-up, dashboard, upload, analysis, proposal, settings, admin | **Done** | Billing/profile/ai → settings tabs (redirects) |
-| 2 | Real upload (no fake progress) | **Done** | `FileUploader` → API |
-| 3 | PDF/DOCX 25MB | **Done** | `upload_policy.py` |
-| 4 | AI analysis + **important clauses** | **Done** | API + analysis UI tab **Clauses** |
-| 5 | Proposal generation | **Done** | `/api/v1/proposals/*` |
-| 6 | PDF-only export | **Done** | `LITE_EXPORT_PDF_ONLY=true` |
-| 7 | Company profile in PDF | **Done** | Settings → Profile / company |
-| 8 | Demo quotas | **Done** | `lite_usage.py`, billing tab |
-| 9 | Razorpay | **Done** | Needs test keys in `.env` (optional demo) |
-| 10 | Admin: users, pricing, AI, landing, uploads | **Done** | `/dashboard/admin` |
-| 11 | Local auth without cloud keys | **Done** | `docs/LOCAL_SETUP.md` |
-| 12 | No Redis/ARQ queues | **Done** | `tasks/inline.py` |
-| 13 | Deploy docs + Docker | **Done** | `docs/DEPLOY.md` |
+**Verdict:** Client-ready for **Lite commercial demo** with local auth and owner control center enabled.
 
 ---
 
-## Intentional PRD deviations (documented, not blockers)
+## Current delivered checklist
 
-| PRD | Actual | Why |
+| Area | Status | Notes |
+|---|---|---|
+| Security & Access (Layer 1) | **Done** | HttpOnly cookie-first auth, stricter user scoping, route guards |
+| Monetization (Layer 2) | **Done** | Yearly-only model, usage/expiry restrictions, payment history |
+| Commercial Landing CMS (Layer 3) | **Done** | Dynamic trust stats, stories/workflow CMS, support email |
+| Paid User Dashboard (Layer 4) | **Done** | Plan/usage KPIs, banners, quick actions, scoped tenders |
+| Owner Control Center (Layer 5) | **Done** | Pricing/CMS/users/payments/uploads/analytics control |
+
+---
+
+## Intentional deviations (non-blocking)
+
+| Expected | Actual | Why |
 |-----|--------|-----|
-| Vite frontend | Next.js 15 | Speed; documented in plan §11 |
-| Supabase Postgres | SQLite/MySQL local | Phase 1 scope; B4 in tracker |
-| Drop `tenants` table | Kept as workspace | Required for billing/quotas |
-| Supabase-only auth | Local + optional Supabase/Clerk | Local default for client demo |
-| Remove Clerk | Optional fallback if keys set | |
+| Single FE stack choice | Next.js 15 | Existing stable app base |
+| Hosted PG required | SQLite/MySQL dev-ready | Faster local startup; deploy supports MySQL/Postgres |
+| Remove tenant model | Personal workspace retained | Required for quota/billing/workspace references |
 
 ---
 
-## Fixes applied (this audit)
+## Key fixes in latest cycle
 
-1. **Important Clauses** — dashboard section added (`important-clauses.tsx`, mapper, tabs).
-2. **`/api/v1/public/site`** — no longer 500 when `platform_settings` table missing (defaults fallback).
-3. **Unit tests** — 43 tests pass (`test_lite_ai`, `test_public_site`).
-4. **`.env` / `.env.example`** — synced; local auth default.
+1. **Owner operations:** user suspend + soft delete + restore, upload controls, payment/analytics cards.
+2. **Scalability:** analytics user-search batched aggregation; uploads owner/tenant labels via joins.
+3. **CMS operations:** stories/workflow image upload, reorder, publish/rollback flows.
+4. **Paid experience:** member dashboard plan/usage/restriction UX with scoped tender operations.
 
 ---
 
@@ -101,6 +91,6 @@ Expected: **43 passed**, 0 failed.
 
 ## Sign-off
 
-- **Product:** Matches FINAL MINI PRD for Lite MVP (with documented stack deviations).  
-- **Demo:** Ready with local login.  
-- **Production:** Follow `docs/DEPLOY.md` + production `.env`.
+- **Product:** Lite commercial scope is operationally complete.  
+- **Demo:** Ready (owner + paid user paths).  
+- **Production:** follow `docs/DEPLOY.md` with production env and gateway keys.

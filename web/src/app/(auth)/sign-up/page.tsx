@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ComponentType } from 'react';
 import { Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
+import { usePublicBranding } from '@/hooks/use-public-branding';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
 import {
-  exchangeSupabaseSession,
   tokensFromLoginResponse,
   userFromLoginResponse,
 } from '@/lib/auth-api';
@@ -19,14 +19,12 @@ import { apiUrl } from '@/lib/api-config';
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { setStoredSession } from '@/lib/auth-session';
 import { isClerkConfigured } from '@/lib/clerk-config';
-import { getAuthProvider, isSupabaseConfigured } from '@/lib/supabase-config';
-import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { getAuthProvider } from '@/lib/auth-provider';
 
 export default function SignUpPage() {
   const router = useRouter();
   const provider = getAuthProvider();
   const isLocalAuth = provider === 'local';
-  const supabaseEnabled = provider === 'supabase' && isSupabaseConfigured();
   const clerkEnabled = provider === 'clerk' && isClerkConfigured();
   const [ClerkView, setClerkView] = useState<ComponentType | null>(null);
   const [email, setEmail] = useState('');
@@ -34,6 +32,7 @@ export default function SignUpPage() {
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const branding = usePublicBranding();
 
   useEffect(() => {
     if (!clerkEnabled) return;
@@ -47,6 +46,7 @@ export default function SignUpPage() {
     try {
       const res = await fetch(apiUrl('/auth/register'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name: name || undefined }),
       });
@@ -65,7 +65,7 @@ export default function SignUpPage() {
         refreshToken: tokens.refresh_token,
         expiresInSec: tokens.expires_in,
       });
-      toast.success('Account created');
+      appToast.success('Account created.');
       router.push(
         getPostLoginPath(
           authUser.role === 'super_admin'
@@ -80,48 +80,6 @@ export default function SignUpPage() {
     }
   }
 
-  async function handleSupabaseSignUp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) {
-      setError('Supabase is not configured');
-      setSubmitting(false);
-      return;
-    }
-    try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name || undefined },
-          emailRedirectTo: `${window.location.origin}/sign-in`,
-        },
-      });
-      if (signUpError) throw new Error(signUpError.message);
-      const token = data.session?.access_token;
-      if (token) {
-        const exchanged = await exchangeSupabaseSession(token);
-        if (exchanged) {
-          setStoredSession(exchanged.token, exchanged.user, {
-            refreshToken: exchanged.refreshToken,
-            expiresInSec: exchanged.expiresIn,
-          });
-          toast.success('Account created');
-          router.push(getPostLoginPath(exchanged.user.role));
-          return;
-        }
-      }
-      toast.success('Check your email to confirm your account, then sign in.');
-      router.push('/sign-in');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign up failed');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   if (isLocalAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background to-muted/30 p-6">
@@ -131,9 +89,12 @@ export default function SignUpPage() {
               <Sparkles className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Create your account</h1>
+              <h1 className="text-xl font-semibold">
+                Create your {branding.brand_name || 'TenderIQ'} account
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Register with email and password. Your account is stored securely in the database.
+                {branding.auth_tagline ||
+                  'Register with email and password. Your account is stored securely in the database.'}
               </p>
             </div>
           </div>
@@ -173,51 +134,6 @@ export default function SignUpPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? 'Creating account...' : 'Create account'}
-            </Button>
-          </form>
-          <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
-            <Link href="/sign-in" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (supabaseEnabled) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-background to-muted/30 p-6">
-        <div className="w-full max-w-md space-y-6 rounded-2xl border bg-card p-8 shadow-lg">
-          <h1 className="text-xl font-semibold">Create your account</h1>
-          <form onSubmit={handleSupabaseSignUp} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <PasswordInput
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? 'Creating account...' : 'Sign up'}
             </Button>
           </form>
           <p className="text-center text-sm text-muted-foreground">

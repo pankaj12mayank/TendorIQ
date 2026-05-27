@@ -16,7 +16,13 @@ const navLinks = [
   { name: 'Contact', href: '#contact' },
 ];
 
-export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
+export function Navbar({
+  isSignedIn,
+  branding,
+}: {
+  isSignedIn: boolean;
+  branding?: { logo_url?: string; brand_name?: string };
+}) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const router = useRouter();
@@ -46,11 +52,16 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
       >
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="/" className="group flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/30 transition group-hover:ring-primary/50">
-              <LayoutDashboard className="h-4 w-4 text-primary" />
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-primary/20 ring-1 ring-primary/30 transition group-hover:ring-primary/50">
+              {branding?.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={branding.logo_url} alt="Brand logo" className="h-9 w-9 object-cover" />
+              ) : (
+                <LayoutDashboard className="h-4 w-4 text-primary" />
+              )}
             </div>
             <span className="font-display text-lg font-semibold tracking-tight text-gradient-cinematic-accent">
-              TenderIQ
+              {branding?.brand_name || 'TenderIQ'}
             </span>
           </Link>
 
@@ -78,7 +89,7 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
                   <Link href={ROUTES.signIn}>Log in</Link>
                 </Button>
                 <Button asChild className="btn-cinematic">
-                  <Link href={ROUTES.signUp}>Start free</Link>
+                  <Link href={ROUTES.signUp}>Get started</Link>
                 </Button>
               </>
             )}
@@ -127,7 +138,7 @@ export function Navbar({ isSignedIn }: { isSignedIn: boolean }) {
                       <Link href={ROUTES.signIn}>Log in</Link>
                     </Button>
                     <Button asChild className="btn-cinematic w-full">
-                      <Link href={ROUTES.signUp}>Start free</Link>
+                      <Link href={ROUTES.signUp}>Get started</Link>
                     </Button>
                   </>
                 )}

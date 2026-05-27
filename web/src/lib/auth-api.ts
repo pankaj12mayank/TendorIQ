@@ -45,6 +45,7 @@ export async function fetchMeFromApi(
 ): Promise<FetchMeResult> {
   try {
     const res = await fetch(apiUrl('/auth/me'), {
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...buildApiAuthHeaders(token, existingUser ?? undefined),
@@ -70,6 +71,7 @@ export async function refreshAccessToken(
   try {
     const res = await fetch(apiUrl('/auth/refresh'), {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refreshToken }),
       signal: AbortSignal.timeout(15_000),
@@ -120,35 +122,45 @@ export interface ClerkSessionExchangeResult {
   user: AuthUser;
 }
 
-export interface SupabaseSessionExchangeResult {
-  token: string;
-  refreshToken?: string;
-  expiresIn?: number;
-  user: AuthUser;
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const res = await fetch(apiUrl('/auth/forgot-password'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(err.error?.message ?? 'Failed to request password reset');
+  }
 }
 
-/** Exchange Supabase access token for TenderIQ API JWT + user profile. */
-export async function exchangeSupabaseSession(
-  supabaseAccessToken: string
-): Promise<SupabaseSessionExchangeResult | null> {
-  const res = await fetch(apiUrl('/api/v1/auth/supabase/session'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${supabaseAccessToken}`,
-    },
+export async function validatePasswordResetToken(token: string): Promise<void> {
+  const res = await fetch(apiUrl(`/auth/reset-password/validate?token=${encodeURIComponent(token)}`), {
+    method: 'GET',
+    credentials: 'include',
+    signal: AbortSignal.timeout(15_000),
   });
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data.token && !data.access_token) return null;
-  const tokens = tokensFromLoginResponse(data);
-  const user = userFromLoginResponse(data);
-  return {
-    token: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    expiresIn: tokens.expires_in,
-    user,
-  };
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(err.error?.message ?? 'Invalid or expired reset token');
+  }
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string): Promise<void> {
+  const res = await fetch(apiUrl('/auth/reset-password'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(err.error?.message ?? 'Failed to reset password');
+  }
 }
 
 /** Exchange Clerk session token for TenderIQ local JWT + user profile. */
@@ -157,6 +169,7 @@ export async function exchangeClerkSession(
 ): Promise<ClerkSessionExchangeResult | null> {
   const res = await fetch(apiUrl('/api/v1/auth/clerk/session'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${clerkToken}`,

@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { useCurrentUser } from '@/hooks/use-auth';
 import { useCompanyProfile, useUpdateCompanyProfile } from '@/hooks/use-company-profile';
 import { apiUrl } from '@/lib/api-config';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
 import { getStoredSession } from '@/lib/auth-session';
-import { getAuthProvider } from '@/lib/supabase-config';
+import { getAuthProvider } from '@/lib/auth-provider';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,16 +42,16 @@ export function ProfilePanel() {
 
   const changePassword = async () => {
     if (newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters');
+      appToast.warning('New password must be at least 8 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('New passwords do not match');
+      appToast.warning('New passwords do not match.');
       return;
     }
     const token = getStoredSession()?.token;
     if (!token) {
-      toast.error('Sign in again to change your password');
+      appToast.error('Sign in again to change your password.');
       return;
     }
     setChangingPassword(true);
@@ -75,9 +75,9 @@ export function ProfilePanel() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      toast.success('Password updated');
+      appToast.success('Password updated.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Password change failed');
+      appToast.error(err instanceof Error ? err.message : 'Password change failed');
     } finally {
       setChangingPassword(false);
     }
@@ -92,9 +92,9 @@ export function ProfilePanel() {
         phone: phone || undefined,
         website: website || undefined,
       });
-      toast.success('Company profile saved');
+      appToast.success('Company profile saved.');
     } catch {
-      toast.error('Failed to save company profile');
+      appToast.error('Failed to save company profile.');
     }
   };
 

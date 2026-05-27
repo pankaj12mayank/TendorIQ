@@ -9,12 +9,14 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import {
   clearStoredSession,
   getStoredSession,
+  getSessionLastActivityMs,
   getSessionTimeRemainingMs,
+  markSessionActivity,
   setStoredSession,
   SESSION_MAX_AGE_MS,
   type AuthUser,
@@ -32,7 +34,7 @@ import { syncTenantStoreFromUser } from '@/lib/sync-tenant-store';
 import { parseApiErrorMessage } from '@/lib/api-envelope';
 import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
-import { getAuthProvider } from '@/lib/supabase-config';
+import { getAuthProvider } from '@/lib/auth-provider';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
@@ -69,6 +71,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     setUnauthorizedHandler(({ pathname, search }) => {
@@ -106,7 +109,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setUser(session.user);
           setIsLoading(false);
-          toast.error('API is not reachable. Run run.bat and keep the API window open.');
+          appToast.error('API is not reachable. Run run.bat and keep the API window open.');
         }
         return;
       }
@@ -123,7 +126,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
             if (!cancelled) {
               setUser(session.user);
               setIsLoading(false);
-              toast.error('API is not reachable. Run run.bat and keep the API window open.');
+              appToast.error('API is not reachable. Run run.bat and keep the API window open.');
             }
             return;
           }
@@ -154,12 +157,13 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         setStoredSession(accessToken, restored, {
           refreshToken,
         });
+        markSessionActivity();
         setIsLoading(false);
       }
 
       const remaining = getSessionTimeRemainingMs();
       if (remaining > 0 && remaining < 15 * 60 * 1000) {
-        toast.info('Your session will expire soon. Please save your work.');
+        appToast.info('Your session will expire soon. Please save your work.');
       }
     }
 
@@ -171,17 +175,49 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let notified = false;
+    const inactivityLimit = SESSION_MAX_AGE_MS;
     const interval = setInterval(() => {
       const session = getStoredSession();
       if (!session && !notified) {
         notified = true;
         setUser(null);
-        toast.error('Your session has expired. Please sign in again.');
+        appToast.error('Your session has expired. Please sign in again.');
+        router.replace('/sign-in');
+        return;
+      }
+      const lastActive = getSessionLastActivityMs();
+      if (session && lastActive && Date.now() - lastActive > inactivityLimit) {
+        clearStoredSession();
+        setUser(null);
+        appToast.error('Logged out due to inactivity.');
         router.replace('/sign-in');
       }
     }, 60_000);
     return () => clearInterval(interval);
   }, [router]);
+
+  useEffect(() => {
+    if (!user) return;
+    const touch = () => markSessionActivity();
+    const events: (keyof WindowEventMap)[] = ['click', 'keydown', 'mousemove', 'focus', 'scroll'];
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    touch();
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, touch));
+    };
+  }, [user, pathname]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || !event.key.startsWith('tenderiq_auth_')) return;
+      const session = getStoredSession();
+      if (!session) {
+        setUser(null);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   useRouteGuard(!!user, isLoading, user?.role);
 
@@ -195,6 +231,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       try {
         await fetch(apiUrl('/auth/logout'), {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
             ...buildApiAuthHeaders(token, user ?? undefined),
@@ -217,6 +254,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       try {
         res = await fetch(apiUrl('/auth/login'), {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
           signal: AbortSignal.timeout(30_000),
@@ -246,7 +284,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         expiresInSec: tokens.expires_in,
       });
       setUser(authUser);
-      toast.success('Signed in successfully');
+      appToast.success('Signed in successfully.');
       const params = new URLSearchParams(window.location.search);
       const redirectUrl = params.get('redirect_url');
 
@@ -282,20 +320,12 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const provider = getAuthProvider();
-  const SupabaseAuthProvider = useLazyClientModule<{ children: ReactNode }>(
-    provider === 'supabase',
-    () => import('./supabase-auth-provider'),
-    'SupabaseAuthProvider'
-  );
   const ClerkAuthProvider = useLazyClientModule<{ children: ReactNode }>(
     provider === 'clerk' && isClerkConfigured(),
     () => import('./clerk-auth-provider'),
     'ClerkAuthProvider'
   );
 
-  if (provider === 'supabase' && SupabaseAuthProvider) {
-    return <SupabaseAuthProvider>{children}</SupabaseAuthProvider>;
-  }
   if (provider === 'clerk' && ClerkAuthProvider) {
     return <ClerkAuthProvider>{children}</ClerkAuthProvider>;
   }

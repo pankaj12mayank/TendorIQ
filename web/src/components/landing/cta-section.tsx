@@ -5,11 +5,12 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useCurrentUser } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Calendar, Sparkles } from 'lucide-react';
+import { ArrowRight, Mail, Sparkles } from 'lucide-react';
 
 type CtaContent = { headline?: string; button?: string };
+type ContactContent = { title?: string; support_email?: string };
 
-export function CTASection({ cta }: { cta?: CtaContent }) {
+export function CTASection({ cta, contact }: { cta?: CtaContent; contact?: ContactContent }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const router = useRouter();
   const user = useCurrentUser();
@@ -37,7 +38,7 @@ export function CTASection({ cta }: { cta?: CtaContent }) {
         >
         <p className="cinematic-eyebrow mb-6 inline-flex">
           <Sparkles className="h-3.5 w-3.5" />
-          Start today
+          Talk to our team
         </p>
 
         <motion.h2
@@ -62,8 +63,7 @@ export function CTASection({ cta }: { cta?: CtaContent }) {
           transition={{ delay: 0.4 }}
           className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
         >
-          Join 500+ companies already using TenderIQ to win more tenders, 
-          reduce risk, and save time. Start your free trial today.
+          Deploy a commercially reliable AI procurement workflow with secure yearly plans and owner-controlled CMS.
         </motion.p>
 
         {/* Buttons */}
@@ -84,46 +84,15 @@ export function CTASection({ cta }: { cta?: CtaContent }) {
             </Button>
           </motion.div>
 
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              className="btn-cinematic-outline h-12 px-8 text-base"
-            >
-              <Calendar className="mr-2 w-5 h-5" />
-              Schedule Demo
-            </Button>
-          </motion.div>
+          <a
+            href={`mailto:${contact?.support_email || 'support@tendoriq.com'}`}
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-3 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            {contact?.title || 'Talk to our team'}
+          </a>
         </motion.div>
 
-        {/* Trust Note */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={isLoaded ? { opacity: 1 } : {}}
-          transition={{ delay: 0.7 }}
-          className="mt-8 text-sm text-muted-foreground"
-        >
-          No credit card required • 14-day free trial • Cancel anytime
-        </motion.p>
-
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={isLoaded ? { opacity: 1, y: 0 } : {}}
-          transition={{ delay: 0.8 }}
-          className="grid grid-cols-3 gap-8 mt-16 pt-16 border-t border-border/20"
-        >
-          {[
-            { value: '500+', label: 'Companies' },
-            { value: '$2B+', label: 'Tenders Processed' },
-            { value: '99.9%', label: 'Uptime' },
-          ].map((stat, index) => (
-            <div key={stat.label}>
-              <div className="text-2xl md:text-3xl font-bold">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
-            </div>
-          ))}
-        </motion.div>
         </motion.div>
       </div>
     </section>

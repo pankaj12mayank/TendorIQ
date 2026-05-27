@@ -76,3 +76,15 @@ export async function downloadProposalPdf(proposalId: string): Promise<void> {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export async function autosaveProposal(
+  proposalId: string,
+  payload: { title?: string; sections: ProposalSection[] }
+): Promise<void> {
+  const res = await authenticatedFetch(`/api/v1/proposals/${proposalId}/autosave`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error('Autosave failed');
+}

@@ -178,20 +178,43 @@ Type: {doc.file_type}
         if isinstance(conf, dict) and conf.get('value') is not None:
             confidence = float(conf['value'])
 
-        row = AnalysisResult(
-            tenant_id=tenant_id,
-            owner_id=owner_id,
-            tender_id=tender.id,
-            document_id=document_id,
-            analysis_type='tender_dashboard',
-            result=dashboard,
-            summary=summary_block.get('overallAssessment') if isinstance(summary_block, dict) else None,
-            score=float((dashboard.get('eligibility') or {}).get('overallScore') or 0),
-            confidence=confidence,
-            model_used=f"{completion['provider']}:{completion['model']}",
-            tokens_used=tokens or None,
-        )
-        db.add(row)
+        existing_row = (
+            await db.execute(
+                select(AnalysisResult)
+                .where(
+                    AnalysisResult.tenant_id == tenant_id,
+                    AnalysisResult.document_id == document_id,
+                    AnalysisResult.analysis_type == 'tender_dashboard',
+                )
+                .order_by(AnalysisResult.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing_row:
+            row = existing_row
+            row.owner_id = owner_id
+            row.tender_id = tender.id
+            row.result = dashboard
+            row.summary = summary_block.get('overallAssessment') if isinstance(summary_block, dict) else None
+            row.score = float((dashboard.get('eligibility') or {}).get('overallScore') or 0)
+            row.confidence = confidence
+            row.model_used = f"{completion['provider']}:{completion['model']}"
+            row.tokens_used = tokens or None
+        else:
+            row = AnalysisResult(
+                tenant_id=tenant_id,
+                owner_id=owner_id,
+                tender_id=tender.id,
+                document_id=document_id,
+                analysis_type='tender_dashboard',
+                result=dashboard,
+                summary=summary_block.get('overallAssessment') if isinstance(summary_block, dict) else None,
+                score=float((dashboard.get('eligibility') or {}).get('overallScore') or 0),
+                confidence=confidence,
+                model_used=f"{completion['provider']}:{completion['model']}",
+                tokens_used=tokens or None,
+            )
+            db.add(row)
 
         doc.processing_status = 'completed'
         doc.processed_at = datetime.now(timezone.utc)

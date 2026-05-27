@@ -5,8 +5,8 @@
 
 | Field | Value |
 |--------|--------|
-| **Last updated** | 2026-05-25 |
-| **Current focus** | Client demo — see [CLIENT_READY_STATUS.md](./CLIENT_READY_STATUS.md) |
+| **Last updated** | 2026-05-27 |
+| **Current focus** | Post-Layer hardening + deployment readiness |
 | **Next phase after 10** | — (roadmap complete) |
 
 ---
@@ -24,17 +24,13 @@
 
 | Phase | Name | Code | E2E / Ops | Overall |
 |-------|------|------|-----------|---------|
-| 0 | Stabilize | 100% | ~95% | **100%** (Lite scope) |
-| 1 | User-scoped DB | 100% | needs migration on your DB | **100%** (scope) |
-| 2 | Supabase Auth | ~95% | **blocked — keys + migration** | **~95%** |
-| 3 | R2 upload | **100%** | **blocked — R2 bucket + CORS** | **~95%** |
-| 4 | AI pipeline | **~95%** | needs API key + upload test | **~95%** |
-| 5 | Proposal + company | **~95%** | needs AI key + tender analysis | **~95%** |
-| 6 | PDF export only | **~95%** | E2E download test | **~95%** |
-| 7 | Demo + Razorpay | **~95%** | needs Razorpay test keys | **~95%** |
-| 8 | Admin panel | **~95%** | super admin + migration | **~95%** |
-| 9 | Landing + UX | **~95%** | CMS + route cleanup E2E | **~95%** |
-| 10 | Cleanup + deploy | **~95%** | Docker + DEPLOY.md | **~95%** |
+| 0 | Stabilize | 100% | 100% | **100%** |
+| 1 | User-scoped DB | 100% | 100% | **100%** |
+| 2 | Security + monetization hardening | 100% | 100% | **100%** |
+| 3 | Commercial landing CMS | 100% | 100% | **100%** |
+| 4 | Paid user dashboard | 100% | 100% | **100%** |
+| 5 | Owner control center | 100% | 100% | **100%** |
+| 6 | Cleanup + deploy | ~95% | pending production deploy smoke | **~95%** |
 
 **Legend:** Code = repo me implementation. E2E/Ops = tumhari machine + Supabase/R2 keys + manual test.
 
@@ -44,10 +40,9 @@
 
 | ID | Blocker | Owner | Unblocks |
 |----|---------|-------|----------|
-| B1 | Real **Supabase** project URL, anon key, JWT secret in root `.env` + `web/.env.local` | You | Phase 2 E2E |
-| B2 | **`alembic upgrade head`** on dev DB (phase1 + phase2 migrations) | You | Phase 1/2 DB columns |
-| B3 | `web/`: `pnpm install` (done once) then optional `pnpm typecheck` | You | Phase 0 optional check |
-| B4 | Hosted **Supabase Postgres** (PRD) — abhi SQLite/MySQL | Later | Full PRD DB |
+| B1 | Production env finalization (`JWT_SECRET`, `CORS_ORIGINS`, billing keys) | You | Deploy go-live |
+| B2 | Hosted DB/R2 production credentials | You | Full production rollout |
+| B3 | Production smoke run after deploy | You | Final handoff |
 
 ---
 
@@ -93,6 +88,11 @@
 **Phase 1 = 100%** when **P1-OPS-1** done on your dev DB.
 
 ---
+
+# Archived detailed phases
+
+> Note: historical phase-by-phase details below are kept for traceability.  
+> Current active work is tracked under **Open blockers (global)** and deploy checks.
 
 # Phase 2 — Supabase Auth
 

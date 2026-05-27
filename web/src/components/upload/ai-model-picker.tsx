@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Loader2, RefreshCw, Sparkles, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,13 +66,13 @@ export function AiModelPicker({ value, onChange, showTest = true, className }: A
     try {
       const result = await refetch({ silent: true });
       if (result?.changed) {
-        toast.success('Model list updated from API');
+        appToast.success('Model list updated from API.');
         onChange?.(result.next);
       } else {
-        toast.message('Model list is up to date');
+        appToast.info('Model list is up to date.');
       }
     } catch {
-      toast.error('Could not refresh providers');
+      appToast.error('Could not refresh providers.');
     } finally {
       setRefreshing(false);
     }
@@ -212,9 +212,9 @@ export function AiModelPicker({ value, onChange, showTest = true, className }: A
                 setTesting(true);
                 try {
                   await testConnection();
-                  toast.success(`Connected: ${active.provider} / ${active.model}`);
+                  appToast.success(`Connected: ${active.provider} / ${active.model}.`);
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : 'Test failed');
+                  appToast.error(err instanceof Error ? err.message : 'Test failed');
                 } finally {
                   setTesting(false);
                 }

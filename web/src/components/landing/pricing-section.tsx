@@ -1,14 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Check, Sparkles, Building2, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/lib/routes';
-
-const YEARLY_DISCOUNT = 0.2;
 
 const plans = [
   {
@@ -75,16 +72,11 @@ const plans = [
 
 function getPlanDisplayPrice(
   monthlyPrice: number | null,
-  billingPeriod: 'monthly' | 'yearly',
   opts?: { yearlyPrice?: number | null; currencyInr?: boolean }
 ): { price: string; period: string; sublabel?: string } {
   const sym = opts?.currencyInr ? '₹' : '$';
   if (monthlyPrice === null && !opts?.yearlyPrice) {
     return { price: 'Custom', period: '' };
-  }
-  if (billingPeriod === 'monthly') {
-    const m = monthlyPrice ?? 0;
-    return { price: `${sym}${m}`, period: '/month' };
   }
   if (opts?.yearlyPrice != null) {
     const perMonth = Math.round(opts.yearlyPrice / 12);
@@ -94,7 +86,7 @@ function getPlanDisplayPrice(
       sublabel: `${sym}${opts.yearlyPrice} billed yearly`,
     };
   }
-  const yearlyMonthly = Math.round((monthlyPrice ?? 0) * (1 - YEARLY_DISCOUNT));
+  const yearlyMonthly = Math.round((monthlyPrice ?? 0) * 0.8);
   return {
     price: `${sym}${yearlyMonthly}`,
     period: '/month',
@@ -129,8 +121,13 @@ function adminPlansToCards(adminPlans: AdminPlan[]) {
   }));
 }
 
-export function PricingSection({ plans: adminPlans }: { plans?: AdminPlan[] }) {
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
+export function PricingSection({
+  plans: adminPlans,
+  copy,
+}: {
+  plans?: AdminPlan[];
+  copy?: { title?: string; subtitle?: string; billing_note?: string };
+}) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const router = useRouter();
   const displayPlans =
@@ -157,42 +154,20 @@ export function PricingSection({ plans: adminPlans }: { plans?: AdminPlan[] }) {
             <Sparkles className="h-4 w-4" />
             Simple Pricing
           </div>
-          <h2 className="mb-6 text-4xl font-bold md:text-5xl">Plans That Scale With You</h2>
-          <p className="mb-8 text-xl text-muted-foreground">Start free, upgrade when you need more power.</p>
-          <div className="inline-flex items-center rounded-full bg-muted p-1">
-            <button
-              type="button"
-              onClick={() => setBillingPeriod('monthly')}
-              className={cn(
-                'rounded-full px-6 py-2 text-sm font-medium transition-all',
-                billingPeriod === 'monthly'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground'
-              )}
-            >
-              Monthly
-            </button>
-            <button
-              type="button"
-              onClick={() => setBillingPeriod('yearly')}
-              className={cn(
-                'rounded-full px-6 py-2 text-sm font-medium transition-all',
-                billingPeriod === 'yearly'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground'
-              )}
-            >
-              Yearly
-              <span className="ml-1 text-xs text-green-500">-20%</span>
-            </button>
-          </div>
+          <h2 className="mb-6 text-4xl font-bold md:text-5xl">
+            {copy?.title ?? 'Plans That Scale With You'}
+          </h2>
+          <p className="mb-8 text-xl text-muted-foreground">
+            {copy?.subtitle ?? 'Simple yearly subscriptions for procurement teams.'}
+          </p>
+          <p className="text-sm text-muted-foreground">Yearly plans only</p>
         </motion.div>
 
         <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-3">
           {displayPlans.map((plan, index) => {
             const highlighted = hoveredId ? plan.id === hoveredId : plan.popular;
             const useInr = Boolean(adminPlans?.length);
-            const display = getPlanDisplayPrice(plan.monthlyPrice, billingPeriod, {
+            const display = getPlanDisplayPrice(plan.monthlyPrice, {
               yearlyPrice: 'yearlyPrice' in plan ? (plan as { yearlyPrice?: number | null }).yearlyPrice : undefined,
               currencyInr: useInr,
             });
@@ -231,11 +206,6 @@ export function PricingSection({ plans: adminPlans }: { plans?: AdminPlan[] }) {
                   <h3 className="mb-2 text-xl font-bold">{plan.name}</h3>
                   <div className="flex flex-col items-center gap-1">
                     <div className="flex items-baseline justify-center gap-1">
-                      {billingPeriod === 'yearly' && plan.monthlyPrice !== null && (
-                        <span className="text-lg text-muted-foreground line-through">
-                          ${plan.monthlyPrice}
-                        </span>
-                      )}
                       <span className="text-4xl font-bold">{display.price}</span>
                       <span className="text-muted-foreground">{display.period}</span>
                     </div>
@@ -288,6 +258,7 @@ export function PricingSection({ plans: adminPlans }: { plans?: AdminPlan[] }) {
           viewport={{ once: true }}
           className="mt-12 text-center"
         >
+          {copy?.billing_note && <p className="mb-2 text-xs text-muted-foreground">{copy.billing_note}</p>}
           <p className="text-muted-foreground">
             Need a custom solution?{' '}
             <button

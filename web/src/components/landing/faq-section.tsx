@@ -32,14 +32,15 @@ const faqs = [
   },
   {
     id: 6,
-    question: 'Do you offer a free trial?',
-    answer: 'Yes! All plans come with a 14-day free trial. No credit card required. You get full access to all features so you can experience the platform before committing.',
+    question: 'Do you offer monthly plans?',
+    answer: 'TenderIQ Lite supports yearly subscriptions only for predictable procurement operations and renewal planning.',
   },
 ];
 
 type FaqItem = { question: string; answer: string };
+type ContactContent = { title?: string; support_email?: string };
 
-export function FAQSection({ items }: { items?: FaqItem[] }) {
+export function FAQSection({ items, contact }: { items?: FaqItem[]; contact?: ContactContent }) {
   const faqList =
     items && items.length > 0
       ? items.map((f, i) => ({ id: i + 1, question: f.question, answer: f.answer }))
@@ -135,9 +136,12 @@ export function FAQSection({ items }: { items?: FaqItem[] }) {
           <p className="text-muted-foreground mb-4">
             Still have questions?
           </p>
-          <button className="text-primary font-medium hover:underline">
-            Contact our support team →
-          </button>
+          <a
+            className="text-primary font-medium hover:underline"
+            href={`mailto:${contact?.support_email || 'support@tendoriq.com'}`}
+          >
+            {contact?.title || 'Talk to our team'} →
+          </a>
         </motion.div>
       </div>
     </section>

@@ -1,20 +1,19 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { FileDown, Loader2, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { PageHeader } from '@/components/design-system/page-header';
 import { AiModelPicker } from '@/components/upload/ai-model-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { authenticatedFetch } from '@/lib/api-fetch';
-import { parseApiErrorMessage } from '@/lib/api-envelope';
 import {
   downloadProposalPdf,
+  autosaveProposal,
   useGenerateProposal,
   useTenderProposal,
   type ProposalSection,
@@ -24,13 +23,16 @@ import { ROUTES } from '@/lib/routes';
 
 function SectionCard({
   section,
-  onSave,
+  onChange,
 }: {
   section: ProposalSection;
-  onSave: (id: string, content: string) => void;
+  onChange: (id: string, content: string) => void;
 }) {
   const [content, setContent] = useState(section.content);
-  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setContent(section.content);
+  }, [section.content]);
 
   return (
     <Card>
@@ -44,21 +46,9 @@ function SectionCard({
           value={content}
           onChange={(e) => {
             setContent(e.target.value);
-            setDirty(true);
+            onChange(section.section_id, e.target.value);
           }}
         />
-        {dirty && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              onSave(section.section_id, content);
-              setDirty(false);
-            }}
-          >
-            Save section
-          </Button>
-        )}
       </CardContent>
     </Card>
   );
@@ -69,35 +59,46 @@ export default function ProposalPage() {
   const tenderId = searchParams.get('tenderId') ?? undefined;
   const { data: aiPrefs } = useAiPreferences();
   const selection = mergePrefsWithLocal(aiPrefs ?? undefined);
-  const { data: proposal, isLoading, refetch } = useTenderProposal(tenderId);
+  const { data: proposal, isLoading } = useTenderProposal(tenderId);
   const generate = useGenerateProposal(tenderId);
   const [exporting, setExporting] = useState(false);
+  const [draftSections, setDraftSections] = useState<ProposalSection[]>([]);
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setDraftSections(proposal?.sections ?? []);
+  }, [proposal?.sections]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, []);
 
   const patchSection = useCallback(
     async (sectionId: string, content: string) => {
+      const updated = draftSections.map((s) => (s.section_id === sectionId ? { ...s, content } : s));
+      setDraftSections(updated);
       if (!proposal?.id) return;
-      const res = await authenticatedFetch(
-        `/api/v1/proposals/${proposal.id}/sections/${sectionId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      setAutosaveState('saving');
+      saveTimer.current = setTimeout(async () => {
+        try {
+          await autosaveProposal(proposal.id, { title: proposal.title, sections: updated });
+          setAutosaveState('saved');
+        } catch (err) {
+          setAutosaveState('error');
+          appToast.error(err instanceof Error ? err.message : 'Autosave failed');
         }
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(parseApiErrorMessage(err) || 'Failed to save section');
-        return;
-      }
-      toast.success('Section saved');
-      void refetch();
+      }, 1200);
     },
-    [proposal?.id, refetch]
+    [draftSections, proposal?.id, proposal?.title]
   );
 
   const handleGenerate = async () => {
     if (!tenderId) {
-      toast.error('Open from analysis or upload with a tender ID');
+      appToast.error('Open from analysis or upload with a tender ID.');
       return;
     }
     try {
@@ -105,9 +106,9 @@ export default function ProposalPage() {
         provider: selection.provider,
         model: selection.model,
       });
-      toast.success('Proposal generated');
+      appToast.success('Proposal generated.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Generation failed');
+      appToast.error(err instanceof Error ? err.message : 'Generation failed');
     }
   };
 
@@ -116,9 +117,9 @@ export default function ProposalPage() {
     setExporting(true);
     try {
       await downloadProposalPdf(proposal.id);
-      toast.success('PDF downloaded');
+      appToast.success('PDF downloaded.');
     } catch {
-      toast.error('PDF export failed — complete company profile in Settings');
+      appToast.error('PDF export failed — complete company profile in Settings.');
     } finally {
       setExporting(false);
     }
@@ -179,11 +180,18 @@ export default function ProposalPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{proposal.title}</h2>
             <span className="text-xs text-muted-foreground">
-              {proposal.total_words ?? 0} words · {proposal.model_used ?? '—'}
+              {proposal.total_words ?? 0} words · {proposal.model_used ?? '—'} ·{' '}
+              {autosaveState === 'saving'
+                ? 'Saving...'
+                : autosaveState === 'saved'
+                  ? 'Saved'
+                  : autosaveState === 'error'
+                    ? 'Save failed'
+                    : 'Idle'}
             </span>
           </div>
-          {proposal.sections?.map((section) => (
-            <SectionCard key={section.section_id} section={section} onSave={patchSection} />
+          {draftSections?.map((section) => (
+            <SectionCard key={section.section_id} section={section} onChange={patchSection} />
           ))}
         </div>
       )}

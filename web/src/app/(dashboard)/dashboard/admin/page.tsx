@@ -1,12 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { AdminRouteGuard } from '@/components/auth/admin-route-guard';
+import { CmsControlPanel } from '@/components/admin/cms-control-panel';
+import { DashboardIntelligence } from '@/components/dashboard/dashboard-intelligence';
 import { PageHeader } from '@/components/design-system/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { LoadingState } from '@/components/ui/loading-state';
 import { authenticatedJson } from '@/lib/api-fetch';
@@ -14,6 +18,7 @@ import {
   useAdminPlatform,
   type AdminUpload,
   type PlatformSettings,
+  type PlatformUserRow,
 } from '@/hooks/use-admin-platform';
 
 type PlatformUser = {
@@ -26,61 +31,182 @@ type PlatformUser = {
 
 type UsageSummary = {
   total_users: number;
+  active_users: number;
+  uploads_total: number;
+  ai_jobs_total: number;
+  failed_ai_jobs: number;
+  revenue: number;
   total_actions: number;
   ai_tokens_used: number;
 };
 
-type Tab = 'overview' | 'users' | 'pricing' | 'ai' | 'landing' | 'uploads';
+type Tab =
+  | 'overview'
+  | 'owner'
+  | 'users'
+  | 'billing'
+  | 'payments'
+  | 'pricing'
+  | 'cms'
+  | 'ai'
+  | 'smtp'
+  | 'uploads'
+  | 'analytics';
+type UserStatusFilter = 'all' | 'active' | 'inactive' | 'deleted';
+
+function JsonEditor({
+  label,
+  help,
+  value,
+  onChange,
+  onSave,
+  saving,
+  minHeight = 'min-h-[220px]',
+}: {
+  label: string;
+  help: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => Promise<void> | void;
+  saving?: boolean;
+  minHeight?: string;
+}) {
+  return (
+    <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-3 sm:p-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{help}</p>
+      </div>
+      <Textarea
+        aria-label={`${label} JSON editor`}
+        className={`${minHeight} font-mono text-xs`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <Button loading={saving} disabled={saving} onClick={() => void onSave()}>
+        Save {label.toLowerCase()}
+      </Button>
+    </div>
+  );
+}
 
 export default function AdminDashboardPage() {
   const [tab, setTab] = useState<Tab>('overview');
-  const [users, setUsers] = useState<PlatformUser[]>([]);
+  const [users, setUsers] = useState<PlatformUserRow[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserDetail, setSelectedUserDetail] = useState<Record<string, unknown> | null>(null);
+  const [userSearch, setUserSearch] = useState('');
+  const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('all');
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [uploads, setUploads] = useState<AdminUpload[]>([]);
+  const [uploadSearch, setUploadSearch] = useState('');
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [selectedUploads, setSelectedUploads] = useState<string[]>([]);
+  const [paymentSettings, setPaymentSettings] = useState<Record<string, unknown>>({});
+  const [paymentHistory, setPaymentHistory] = useState<Record<string, unknown> | null>(null);
+  const [analyticsQuery, setAnalyticsQuery] = useState('');
+  const [analyticsRows, setAnalyticsRows] = useState<Record<string, unknown>[]>([]);
+  const [ownerProfile, setOwnerProfile] = useState<Record<string, unknown> | null>(null);
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerUsername, setOwnerUsername] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { settings, saving, loadSettings, saveSection, loadUploads } = useAdminPlatform();
+  const {
+    settings,
+    saving,
+    loadSettings,
+    saveSection,
+    loadUploads,
+    loadUsers,
+    loadUserDetail,
+    updateUserStatus,
+    deleteUser,
+    restoreUser,
+    loadOwnerProfile,
+    saveOwnerProfile,
+    uploadOwnerAsset,
+    loadSmtpSettings,
+    saveSmtpSettings,
+    testSmtpSettings,
+    loadPaymentSettings,
+    savePaymentSettings,
+    testPaymentSettings,
+    loadPaymentHistory,
+    saveBillingPricing,
+    searchAnalyticsUser,
+    deleteUpload,
+    batchDeleteUploads,
+  } = useAdminPlatform();
 
   const [pricingJson, setPricingJson] = useState('');
   const [aiJson, setAiJson] = useState('');
-  const [landingJson, setLandingJson] = useState('');
   const [demoJson, setDemoJson] = useState('');
+  const [smtp, setSmtp] = useState({
+    host: '',
+    port: 587,
+    sender_email: '',
+    sender_name: 'TenderIQ',
+    app_password: '',
+  });
+  const [smtpTestEmail, setSmtpTestEmail] = useState('');
+  const [smtpTesting, setSmtpTesting] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [usersRes, usageRes] = await Promise.all([
-          authenticatedJson<{ data: PlatformUser[] }>('/api/v1/admin/platform/users'),
+        const [usersRes, usageRes, ownerRes, paymentCfg] = await Promise.all([
+          loadUsers({ page: 1, limit: 25, include_deleted: true }),
           authenticatedJson<{ data: UsageSummary }>('/api/v1/admin/platform/analytics/summary'),
+          loadOwnerProfile(),
+          loadPaymentSettings(),
         ]);
-        setUsers(usersRes.data ?? []);
+        setUsers(usersRes.rows ?? []);
         setUsage(usageRes.data ?? null);
+        setOwnerProfile(ownerRes);
+        setOwnerUsername(String(ownerRes.username ?? ''));
+        setPaymentSettings(paymentCfg);
         const s = await loadSettings();
         syncEditors(s);
+        const smtpLoaded = await loadSmtpSettings();
+        setSmtp({
+          host: String(smtpLoaded.host ?? ''),
+          port: Number(smtpLoaded.port ?? 587),
+          sender_email: String(smtpLoaded.sender_email ?? ''),
+          sender_name: String(smtpLoaded.sender_name ?? 'TenderIQ'),
+          app_password: String(smtpLoaded.app_password ?? ''),
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load admin data');
       } finally {
         setLoading(false);
       }
     })();
-  }, [loadSettings]);
+  }, [loadSettings, loadSmtpSettings, loadUsers, loadOwnerProfile, loadPaymentSettings]);
 
   const syncEditors = (s: PlatformSettings | null) => {
     if (!s) return;
     setPricingJson(JSON.stringify(s.pricing ?? {}, null, 2));
     setAiJson(JSON.stringify(s.ai_defaults ?? {}, null, 2));
-    setLandingJson(JSON.stringify(s.landing ?? {}, null, 2));
     setDemoJson(JSON.stringify(s.demo_limits ?? {}, null, 2));
   };
 
   const loadUploadList = useCallback(async () => {
-    const rows = await loadUploads();
+    const rows = await loadUploads({
+      limit: 100,
+      search: uploadSearch || undefined,
+      status: uploadStatus || undefined,
+    });
     setUploads(rows);
-  }, [loadUploads]);
+  }, [loadUploads, uploadSearch, uploadStatus]);
 
   useEffect(() => {
     if (tab === 'uploads') void loadUploadList();
   }, [tab, loadUploadList]);
+
+  useEffect(() => {
+    if (loading || tab !== 'users') return;
+    void fetchUsers();
+  }, [loading, tab, fetchUsers]);
 
   const saveJsonSection = async (
     section: keyof PlatformSettings,
@@ -89,30 +215,57 @@ export default function AdminDashboardPage() {
     try {
       const data = JSON.parse(raw) as Record<string, unknown>;
       await saveSection(section, data);
-      toast.success(`${section} saved`);
+      appToast.success(`${section} settings saved.`);
     } catch {
-      toast.error('Invalid JSON');
+      appToast.error('Invalid JSON. Please fix formatting and try again.');
     }
   };
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
+    { id: 'owner', label: 'Owner' },
     { id: 'users', label: 'Users' },
+    { id: 'billing', label: 'Billing' },
+    { id: 'payments', label: 'Payments' },
     { id: 'pricing', label: 'Pricing' },
+    { id: 'cms', label: 'CMS Control' },
     { id: 'ai', label: 'AI defaults' },
-    { id: 'landing', label: 'Landing CMS' },
+    { id: 'smtp', label: 'SMTP' },
     { id: 'uploads', label: 'Uploads' },
+    { id: 'analytics', label: 'Analytics' },
   ];
+
+  const fetchUsers = useCallback(async () => {
+    const params: Record<string, string | number | boolean> = {
+      search: userSearch,
+      page: 1,
+      limit: 25,
+      include_deleted: true,
+    };
+    if (userStatusFilter === 'active' || userStatusFilter === 'inactive') {
+      params.status = userStatusFilter;
+    }
+    const out = await loadUsers(params);
+    let rows = out.rows;
+    if (userStatusFilter === 'deleted') {
+      rows = rows.filter((u) => u.status === 'deleted');
+    } else if (userStatusFilter === 'all') {
+      rows = rows;
+    } else {
+      rows = rows.filter((u) => u.status === userStatusFilter);
+    }
+    setUsers(rows);
+  }, [loadUsers, userSearch, userStatusFilter]);
 
   return (
     <AdminRouteGuard>
-      <div className="space-y-8">
+      <div className="space-y-8 app-section">
         <PageHeader
           title="Platform admin"
           description="Users, pricing, AI defaults, landing CMS, and uploads. Super admin only."
         />
 
-        <div className="tabs-pill-list max-w-4xl">
+        <div className="tabs-pill-list max-w-full overflow-x-auto whitespace-nowrap scroll-premium" role="tablist" aria-label="Admin modules">
           {tabs.map((t) => (
             <Button
               key={t.id}
@@ -124,6 +277,11 @@ export default function AdminDashboardPage() {
                   : 'rounded-lg text-muted-foreground'
               }
               onClick={() => setTab(t.id)}
+              disabled={loading}
+              role="tab"
+              aria-selected={tab === t.id}
+              aria-controls={`admin-panel-${t.id}`}
+              id={`admin-tab-${t.id}`}
             >
               {t.label}
             </Button>
@@ -133,151 +291,577 @@ export default function AdminDashboardPage() {
         {loading && <LoadingState message="Loading admin..." />}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {!loading && tab === 'overview' && usage && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Users</CardTitle>
-              </CardHeader>
-              <CardContent className="text-2xl font-bold">{usage.total_users}</CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="text-2xl font-bold">{usage.total_actions}</CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">AI tokens</CardTitle>
-              </CardHeader>
-              <CardContent className="text-2xl font-bold">{usage.ai_tokens_used}</CardContent>
-            </Card>
-          </div>
+        {!loading && tab === 'overview' && <DashboardIntelligence />}
+        {!loading && tab === 'cms' && <CmsControlPanel />}
+
+        {!loading && tab === 'owner' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>System owner profile</CardTitle>
+              <CardDescription>Update username/password and branding assets.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Username</Label>
+                  <Input value={ownerUsername} onChange={(e) => setOwnerUsername(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>New password</Label>
+                  <Input
+                    type="password"
+                    value={ownerPassword}
+                    onChange={(e) => setOwnerPassword(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button
+                loading={saving}
+                disabled={saving}
+                onClick={async () => {
+                  const toastId = appToast.loading('Saving owner profile...');
+                  await saveOwnerProfile({
+                    username: ownerUsername,
+                    ...(ownerPassword ? { password: ownerPassword } : {}),
+                  });
+                  setOwnerPassword('');
+                  appToast.dismiss(toastId);
+                  appToast.success('Owner profile updated.');
+                  const latest = await loadOwnerProfile();
+                  setOwnerProfile(latest);
+                }}
+              >
+                Save owner profile
+              </Button>
+              <div className="grid gap-2 md:grid-cols-3">
+                {(['avatar', 'logo', 'favicon'] as const).map((kind) => (
+                  <div key={kind} className="space-y-2 rounded-md border p-3">
+                    <Label className="capitalize">{kind} upload</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        try {
+                          await uploadOwnerAsset(kind, f);
+                          const latest = await loadOwnerProfile();
+                          setOwnerProfile(latest);
+                          appToast.success(`${kind} updated.`);
+                        } catch (err) {
+                          appToast.error(err instanceof Error ? err.message : 'Upload failed');
+                        }
+                      }}
+                    />
+                    {Boolean(ownerProfile?.[`${kind}_url`]) && (
+                      <img
+                        src={String(ownerProfile[`${kind}_url`])}
+                        alt={kind}
+                        className="h-10 w-10 rounded object-cover"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {!loading && tab === 'users' && (
-          <Card>
+          <Card id="admin-panel-users" role="tabpanel" aria-labelledby="admin-tab-users">
             <CardHeader>
               <CardTitle>Users</CardTitle>
               <CardDescription>All registered users across workspaces</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 flex gap-2">
+                <Input
+                  placeholder="Search user..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    await fetchUsers();
+                  }}
+                >
+                  Search
+                </Button>
+              </div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {(['all', 'active', 'inactive', 'deleted'] as UserStatusFilter[]).map((chip) => (
+                  <Button
+                    key={chip}
+                    size="sm"
+                    variant={userStatusFilter === chip ? 'default' : 'outline'}
+                    onClick={async () => {
+                      setUserStatusFilter(chip);
+                    }}
+                  >
+                    {chip === 'all'
+                      ? 'All'
+                      : chip === 'active'
+                        ? 'Active'
+                        : chip === 'inactive'
+                          ? 'Inactive'
+                          : 'Deleted'}
+                  </Button>
+                ))}
+              </div>
               <ul className="divide-y text-sm">
                 {users.map((u) => (
                   <li key={u.id} className="flex justify-between py-2">
                     <span>
-                      {u.name} &lt;{u.email}&gt; — {u.role}
+                      {u.name} &lt;{u.email}&gt; — {u.role} · {u.plan ?? 'free'}
                     </span>
-                    <span className="text-muted-foreground">{u.organization}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">{u.organization}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={u.status === 'deleted'}
+                        onClick={async () => {
+                          const next = u.status === 'active' ? 'inactive' : 'active';
+                          await updateUserStatus(u.id, next);
+                          await fetchUsers();
+                          appToast.success(`User ${next === 'inactive' ? 'suspended' : 'activated'}.`);
+                        }}
+                      >
+                        {u.status === 'active' ? 'Suspend' : 'Activate'}
+                      </Button>
+                      {u.status === 'deleted' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            await restoreUser(u.id);
+                            await fetchUsers();
+                            appToast.success('User restored.');
+                          }}
+                        >
+                          Restore
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={async () => {
+                            if (!confirm(`Delete user ${u.email}? You can restore later.`)) return;
+                            await deleteUser(u.id);
+                            await fetchUsers();
+                            if (selectedUserId === u.id) {
+                              setSelectedUserId(null);
+                              setSelectedUserDetail(null);
+                            }
+                            appToast.success('User soft deleted.');
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          const d = await loadUserDetail(u.id);
+                          setSelectedUserId(u.id);
+                          setSelectedUserDetail(d);
+                        }}
+                      >
+                        Details
+                      </Button>
+                    </div>
                   </li>
                 ))}
                 {users.length === 0 && <li className="text-muted-foreground">No users</li>}
               </ul>
+              {selectedUserId && selectedUserDetail && (
+                <div className="mt-4 table-wrap p-3 text-xs">
+                  <pre className="max-h-[340px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                    {JSON.stringify(selectedUserDetail, null, 2)}
+                  </pre>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
         {!loading && tab === 'pricing' && (
-          <Card>
+          <Card id="admin-panel-pricing" role="tabpanel" aria-labelledby="admin-tab-pricing">
             <CardHeader>
               <CardTitle>Pricing plans</CardTitle>
               <CardDescription>
-                JSON: plans with id, name, monthly_inr, yearly_inr, features. Razorpay uses these
+                JSON: plans with id, yearly_inr, upload_limit, expiry_period_days, features. Razorpay uses these
                 amounts.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                className="min-h-[280px] font-mono text-xs"
+            <CardContent className="space-y-5">
+              <JsonEditor
+                label="Pricing"
+                help="Use plans[] with unique id and yearly_inr. monthly_inr must be 0/empty."
                 value={pricingJson}
-                onChange={(e) => setPricingJson(e.target.value)}
+                onChange={setPricingJson}
+                saving={saving}
+                minHeight="min-h-[300px]"
+                onSave={() => saveJsonSection('pricing', pricingJson)}
               />
-              <Button disabled={saving} onClick={() => void saveJsonSection('pricing', pricingJson)}>
-                Save pricing
-              </Button>
+              <JsonEditor
+                label="Demo limits"
+                help="Fallback quotas for platform demo/testing buckets."
+                value={demoJson}
+                onChange={setDemoJson}
+                saving={saving}
+                onSave={() => saveJsonSection('demo_limits', demoJson)}
+              />
             </CardContent>
           </Card>
         )}
 
-        {!loading && tab === 'ai' && (
-          <Card>
+        {!loading && tab === 'billing' && (
+          <Card id="admin-panel-billing" role="tabpanel" aria-labelledby="admin-tab-billing">
             <CardHeader>
-              <CardTitle>AI defaults</CardTitle>
-              <CardDescription>Platform-wide hints: default_provider, default_model, etc.</CardDescription>
+              <CardTitle>Billing management</CardTitle>
+              <CardDescription>Yearly plans only with upload limits and expiry periods.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                className="min-h-[200px] font-mono text-xs"
-                value={aiJson}
-                onChange={(e) => setAiJson(e.target.value)}
+            <CardContent>
+              <JsonEditor
+                label="Billing pricing"
+                help="Use yearly_inr only. Set upload_limit and expiry_period_days per active plan."
+                value={pricingJson}
+                onChange={setPricingJson}
+                onSave={async () => {
+                  try {
+                    const parsed = JSON.parse(pricingJson) as Record<string, unknown>;
+                    await saveBillingPricing(parsed);
+                    appToast.success('Billing pricing updated.');
+                  } catch (e) {
+                    appToast.error(e instanceof Error ? e.message : 'Billing update failed');
+                  }
+                }}
               />
-              <Button disabled={saving} onClick={() => void saveJsonSection('ai_defaults', aiJson)}>
-                Save AI settings
-              </Button>
             </CardContent>
           </Card>
         )}
 
-        {!loading && tab === 'landing' && (
-          <div className="grid gap-6 lg:grid-cols-2">
+        {!loading && tab === 'payments' && (
+          <div className="space-y-6" id="admin-panel-payments" role="tabpanel" aria-labelledby="admin-tab-payments">
             <Card>
               <CardHeader>
-                <CardTitle>Landing CMS</CardTitle>
-                <CardDescription>hero, faq, cta — served at GET /api/v1/public/site</CardDescription>
+                <CardTitle>Payment gateways</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  className="min-h-[320px] font-mono text-xs"
-                  value={landingJson}
-                  onChange={(e) => setLandingJson(e.target.value)}
-                />
-                <Button
-                  disabled={saving}
-                  onClick={() => void saveJsonSection('landing', landingJson)}
-                >
-                  Save landing
-                </Button>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input
+                    placeholder="Razorpay key id"
+                    value={String(paymentSettings.razorpay_key_id ?? '')}
+                    onChange={(e) =>
+                      setPaymentSettings((s) => ({ ...s, razorpay_key_id: e.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="Razorpay key secret"
+                    value={String(paymentSettings.razorpay_key_secret ?? '')}
+                    onChange={(e) =>
+                      setPaymentSettings((s) => ({ ...s, razorpay_key_secret: e.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="Stripe publishable key"
+                    value={String(paymentSettings.stripe_publishable_key ?? '')}
+                    onChange={(e) =>
+                      setPaymentSettings((s) => ({ ...s, stripe_publishable_key: e.target.value }))
+                    }
+                  />
+                  <Input
+                    placeholder="Stripe secret key"
+                    value={String(paymentSettings.stripe_secret_key ?? '')}
+                    onChange={(e) =>
+                      setPaymentSettings((s) => ({ ...s, stripe_secret_key: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    loading={saving}
+                    disabled={saving}
+                    onClick={async () => {
+                      await savePaymentSettings(paymentSettings);
+                      appToast.success('Payment settings saved.');
+                    }}
+                  >
+                    Save gateway settings
+                  </Button>
+                  <Button variant="outline" onClick={() => void testPaymentSettings('razorpay')}>
+                    Test Razorpay
+                  </Button>
+                  <Button variant="outline" onClick={() => void testPaymentSettings('stripe')}>
+                    Test Stripe
+                  </Button>
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Demo quotas</CardTitle>
-                <CardDescription>Per-plan limits under demo_limits (e.g. free)</CardDescription>
+                <CardTitle>Payment history</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  className="min-h-[200px] font-mono text-xs"
-                  value={demoJson}
-                  onChange={(e) => setDemoJson(e.target.value)}
-                />
+              <CardContent className="space-y-3">
                 <Button
-                  disabled={saving}
-                  onClick={() => void saveJsonSection('demo_limits', demoJson)}
+                  variant="outline"
+                  onClick={async () => {
+                    const hist = (await loadPaymentHistory({ page: 1, limit: 25 })) as Record<
+                      string,
+                      unknown
+                    >;
+                    setPaymentHistory(hist);
+                  }}
                 >
-                  Save demo limits
+                  Load payment history
                 </Button>
+                {paymentHistory && (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <Card>
+                        <CardContent className="pt-4 text-sm">
+                          <p className="text-muted-foreground">Revenue</p>
+                          <p className="text-xl font-semibold">
+                            ₹{Number((paymentHistory as any).cards?.total_revenue ?? 0).toLocaleString('en-IN')}
+                          </p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4 text-sm">
+                          <p className="text-muted-foreground">Failed payments</p>
+                          <p className="text-xl font-semibold">{Number((paymentHistory as any).cards?.failed_count ?? 0)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4 text-sm">
+                          <p className="text-muted-foreground">Renewals</p>
+                          <p className="text-xl font-semibold">{Number((paymentHistory as any).cards?.renewals_count ?? 0)}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    <ul className="max-h-[260px] divide-y overflow-auto rounded-md border text-xs scroll-premium">
+                      {(((paymentHistory as any).data ?? []) as Array<any>).map((p) => (
+                        <li key={String(p.id)} className="flex items-center justify-between gap-2 p-2">
+                          <span>
+                            {p.provider} · {p.plan || '—'} · ₹{Number(p.amount || 0).toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-muted-foreground">{p.status}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
         )}
 
+        {!loading && tab === 'ai' && (
+          <Card id="admin-panel-ai" role="tabpanel" aria-labelledby="admin-tab-ai">
+            <CardHeader>
+              <CardTitle>AI defaults</CardTitle>
+              <CardDescription>Platform-wide hints: default_provider, default_model, etc.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <JsonEditor
+                label="AI defaults"
+                help="Set fallback provider/model/style/tone used when user-level preferences are missing."
+                value={aiJson}
+                onChange={setAiJson}
+                saving={saving}
+                onSave={() => saveJsonSection('ai_defaults', aiJson)}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && tab === 'smtp' && (
+          <Card id="admin-panel-smtp" role="tabpanel" aria-labelledby="admin-tab-smtp">
+            <CardHeader>
+              <CardTitle>SMTP settings</CardTitle>
+              <CardDescription>
+                Configure password reset delivery. Secrets are encrypted at rest.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="smtp-host">SMTP host</Label>
+                  <Input
+                    id="smtp-host"
+                    value={smtp.host}
+                    onChange={(e) => setSmtp((s) => ({ ...s, host: e.target.value }))}
+                    placeholder="smtp.gmail.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="smtp-port">SMTP port</Label>
+                  <Input
+                    id="smtp-port"
+                    type="number"
+                    value={smtp.port}
+                    onChange={(e) =>
+                      setSmtp((s) => ({
+                        ...s,
+                        port: Number(e.target.value || 587),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="smtp-sender-email">Sender email</Label>
+                  <Input
+                    id="smtp-sender-email"
+                    type="email"
+                    value={smtp.sender_email}
+                    onChange={(e) =>
+                      setSmtp((s) => ({ ...s, sender_email: e.target.value }))
+                    }
+                    placeholder="noreply@company.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="smtp-sender-name">Sender name</Label>
+                  <Input
+                    id="smtp-sender-name"
+                    value={smtp.sender_name}
+                    onChange={(e) =>
+                      setSmtp((s) => ({ ...s, sender_name: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-app-password">App password</Label>
+                <Input
+                  id="smtp-app-password"
+                  type="password"
+                  value={smtp.app_password}
+                  onChange={(e) =>
+                    setSmtp((s) => ({ ...s, app_password: e.target.value }))
+                  }
+                  placeholder="App password / SMTP password"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  loading={saving}
+                  disabled={saving}
+                  onClick={async () => {
+                    try {
+                      await saveSmtpSettings(smtp);
+                      appToast.success('SMTP settings saved.');
+                    } catch (e) {
+                      appToast.error(e instanceof Error ? e.message : 'Failed to save SMTP settings');
+                    }
+                  }}
+                >
+                  Save SMTP
+                </Button>
+              </div>
+              <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_auto]">
+                <Input
+                  type="email"
+                  placeholder="test@yourdomain.com"
+                  value={smtpTestEmail}
+                  onChange={(e) => setSmtpTestEmail(e.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  disabled={smtpTesting || !smtpTestEmail}
+                  onClick={async () => {
+                    setSmtpTesting(true);
+                    try {
+                      await testSmtpSettings(smtpTestEmail);
+                      appToast.success('SMTP test email sent.');
+                    } catch (e) {
+                      appToast.error(e instanceof Error ? e.message : 'SMTP test failed');
+                    } finally {
+                      setSmtpTesting(false);
+                    }
+                  }}
+                >
+                  {smtpTesting ? 'Testing...' : 'Send test email'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {!loading && tab === 'uploads' && (
-          <Card>
+          <Card id="admin-panel-uploads" role="tabpanel" aria-labelledby="admin-tab-uploads">
             <CardHeader>
               <CardTitle>Recent uploads</CardTitle>
               <CardDescription>Latest documents across all tenants</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <Input
+                  placeholder="Search uploads..."
+                  value={uploadSearch}
+                  onChange={(e) => setUploadSearch(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Input
+                  placeholder="Status (processing/failed/completed)"
+                  value={uploadStatus}
+                  onChange={(e) => setUploadStatus(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button variant="outline" onClick={() => void loadUploadList()}>
+                  Refresh
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={selectedUploads.length === 0}
+                  onClick={async () => {
+                    await batchDeleteUploads(selectedUploads);
+                    setSelectedUploads([]);
+                    await loadUploadList();
+                    appToast.success('Selected uploads deleted.');
+                  }}
+                >
+                  Delete selected
+                </Button>
+              </div>
               <ul className="divide-y text-sm">
                 {uploads.map((u) => (
                   <li key={u.id} className="flex flex-wrap justify-between gap-2 py-2">
-                    <span>
+                    <span className="flex items-center gap-2">
+                      <input
+                        aria-label={`Select upload ${u.name}`}
+                        type="checkbox"
+                        checked={selectedUploads.includes(u.id)}
+                        onChange={(e) =>
+                          setSelectedUploads((prev) =>
+                            e.target.checked
+                              ? [...prev, u.id]
+                              : prev.filter((id) => id !== u.id)
+                          )
+                        }
+                      />
                       {u.name} — {u.status}
                     </span>
-                    <span className="text-muted-foreground">
-                      {u.owner_email} · {u.tenant_name} · {new Date(u.created_at).toLocaleString()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">
+                        {u.owner_email} · {u.tenant_name} · {new Date(u.created_at).toLocaleString()}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          await deleteUpload(u.id);
+                          await loadUploadList();
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </li>
                 ))}
                 {uploads.length === 0 && <li className="text-muted-foreground">No uploads</li>}
@@ -286,11 +870,73 @@ export default function AdminDashboardPage() {
           </Card>
         )}
 
-        {settings && tab === 'overview' && (
-          <p className="text-xs text-muted-foreground">
-            Platform settings loaded. Use tabs to edit pricing, AI, landing, and demo limits.
-          </p>
+        {!loading && tab === 'analytics' && (
+          <Card id="admin-panel-analytics" role="tabpanel" aria-labelledby="admin-tab-analytics">
+            <CardHeader>
+              <CardTitle>User analytics search</CardTitle>
+              <CardDescription>
+                Search any user and view uploads, tenders, proposals, payments, activity counts.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-3">
+                <Card>
+                  <CardContent className="pt-4 text-sm">
+                    <p className="text-muted-foreground">Uploads</p>
+                    <p className="text-xl font-semibold">{usage?.uploads_total ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-sm">
+                    <p className="text-muted-foreground">Users (active/total)</p>
+                    <p className="text-xl font-semibold">
+                      {usage?.active_users ?? 0}/{usage?.total_users ?? 0}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-sm">
+                    <p className="text-muted-foreground">Revenue</p>
+                    <p className="text-xl font-semibold">₹{Number(usage?.revenue ?? 0).toLocaleString('en-IN')}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-sm">
+                    <p className="text-muted-foreground">AI jobs</p>
+                    <p className="text-xl font-semibold">{usage?.ai_jobs_total ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-sm">
+                    <p className="text-muted-foreground">Failed AI jobs</p>
+                    <p className="text-xl font-semibold">{usage?.failed_ai_jobs ?? 0}</p>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Search by email or name"
+                  value={analyticsQuery}
+                  onChange={(e) => setAnalyticsQuery(e.target.value)}
+                />
+                <Button
+                  onClick={async () => {
+                    const res = (await searchAnalyticsUser(analyticsQuery)) as {
+                      data?: Record<string, unknown>[];
+                    };
+                    setAnalyticsRows(res.data ?? []);
+                  }}
+                >
+                  Search
+                </Button>
+              </div>
+              <pre className="max-h-[320px] overflow-auto rounded-md border p-3 text-xs scroll-premium">
+                {JSON.stringify(analyticsRows, null, 2)}
+              </pre>
+            </CardContent>
+          </Card>
         )}
+
       </div>
     </AdminRouteGuard>
   );

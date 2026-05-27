@@ -34,7 +34,7 @@ def apply_user_scope(
     model: type,
     auth: AuthContext,
     *,
-    include_tenant_fallback: bool = True,
+    include_tenant_fallback: bool = False,
 ) -> Select:
     """Restrict query to the current user's data (super_admin sees all)."""
     if auth.is_super_admin():

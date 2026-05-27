@@ -33,17 +33,20 @@ const PaginationItem = React.forwardRef<HTMLLIElement, React.HTMLAttributes<HTML
 );
 PaginationItem.displayName = 'PaginationItem';
 
-const PaginationLink = React.forwardRef<HTMLButtonElement, React.ComponentProps<'button'>>(
-  ({ className, isActive, ...props }, ref) => (
+const PaginationLink = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<'button'> & { isActive?: boolean }
+>(({ className, isActive, ...props }, ref) => (
     <button
       ref={ref}
       className={cn(
-        'flex h-10 w-10 items-center justify-center rounded-md border text-sm font-medium transition-colors hover:bg-muted',
+        'inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:h-10 sm:min-w-10',
         isActive
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-muted bg-background hover:bg-muted hover:text-foreground',
         className
       )}
+      aria-current={isActive ? 'page' : undefined}
       {...props}
     />
   )
@@ -56,7 +59,7 @@ const PaginationPrevious = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <PaginationLink
     ref={ref}
-    className={cn('gap-1 pl-2.5', className)}
+    className={cn('w-auto gap-1 px-2.5 sm:px-3.5', className)}
     {...props}
   >
     <span>Previous</span>
@@ -70,7 +73,7 @@ const PaginationNext = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <PaginationLink
     ref={ref}
-    className={cn('gap-1 pr-2.5', className)}
+    className={cn('w-auto gap-1 px-2.5 sm:px-3.5', className)}
     {...props}
   >
     <span>Next</span>

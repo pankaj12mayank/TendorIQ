@@ -15,6 +15,27 @@ logger = get_logger('file_service')
 
 class FileService:
     @staticmethod
+    async def find_duplicate_document(
+        db: AsyncSession,
+        *,
+        tenant_id: UUID,
+        checksum: str,
+        file_name: Optional[str] = None,
+        exclude_document_id: Optional[UUID] = None,
+    ) -> Optional[Document]:
+        q = select(Document).where(
+            Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
+            Document.checksum == checksum,
+        )
+        if file_name:
+            q = q.where(Document.file_name == file_name)
+        if exclude_document_id:
+            q = q.where(Document.id != exclude_document_id)
+        q = q.order_by(Document.created_at.desc()).limit(1)
+        return (await db.execute(q)).scalar_one_or_none()
+
+    @staticmethod
     async def create_document(
         db: AsyncSession,
         tenant_id: UUID,

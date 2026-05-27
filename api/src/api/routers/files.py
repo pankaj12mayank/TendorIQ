@@ -1,6 +1,7 @@
 """File Storage API Router"""
 
 import re
+import hashlib
 from typing import Optional
 from uuid import UUID
 
@@ -82,6 +83,20 @@ router = APIRouter(
     dependencies=[Depends(require_tenant_member)],
 )
 logger = get_logger('files_api')
+
+PDF_MAGIC = b'%PDF-'
+ZIP_MAGIC = b'PK\x03\x04'
+OLE_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+
+
+def _assert_magic_bytes(filename: str, content: bytes) -> None:
+    ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    if ext == 'pdf' and not content.startswith(PDF_MAGIC):
+        raise HTTPException(status_code=400, detail='Corrupted or invalid PDF file')
+    if ext == 'docx' and not content.startswith(ZIP_MAGIC):
+        raise HTTPException(status_code=400, detail='Corrupted or invalid DOCX file')
+    if ext == 'doc' and not content.startswith(OLE_MAGIC):
+        raise HTTPException(status_code=400, detail='Corrupted or invalid DOC file')
 
 
 @router.get('/upload/config')
@@ -256,6 +271,33 @@ async def complete_upload(
 
     from ...core.processing.tasks import schedule_document_analysis
 
+    file_bytes = b''
+    content_hash = None
+    if read_result.get('success') and read_result.get('content'):
+        file_bytes = read_result['content']
+        _assert_magic_bytes(doc.file_name, file_bytes)
+        content_hash = hashlib.sha256(file_bytes).hexdigest()
+    if content_hash:
+        dup = await file_service.find_duplicate_document(
+            db,
+            tenant_id=UUID(current_user.tenant_id),
+            checksum=content_hash,
+            file_name=doc.file_name,
+            exclude_document_id=UUID(document_id),
+        )
+        if dup:
+            await file_service.permanent_delete_document(db, UUID(document_id))
+            await storage_service.delete_file(doc.storage_key)
+            raise HTTPException(
+                status_code=409,
+                detail=f'Duplicate file already uploaded (document_id={dup.id})',
+            )
+        await file_service.update_document(
+            db,
+            UUID(document_id),
+            checksum=content_hash,
+        )
+
     await schedule_document_analysis(
         document_id=document_id,
         tenant_id=current_user.tenant_id,
@@ -298,6 +340,7 @@ async def direct_upload(
     from ...core.security.upload_scan import assert_upload_clean
 
     await assert_upload_clean(contents, file.filename or 'upload')
+    _assert_magic_bytes(file.filename or 'upload', contents)
 
     is_valid, error_msg = storage_service.validate_file(
         filename=file.filename or 'unknown',
@@ -306,6 +349,19 @@ async def direct_upload(
     )
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_msg)
+
+    checksum = hashlib.sha256(contents).hexdigest()
+    dup = await file_service.find_duplicate_document(
+        db,
+        tenant_id=UUID(current_user.tenant_id),
+        checksum=checksum,
+        file_name=file.filename or None,
+    )
+    if dup:
+        raise HTTPException(
+            status_code=409,
+            detail=f'Duplicate file already uploaded (document_id={dup.id})',
+        )
 
     from ...core.billing.lite_usage import enforce_quota, track_usage
 
@@ -342,7 +398,7 @@ async def direct_upload(
         storage_key=storage_key,
         storage_provider=settings.STORAGE_PROVIDER,
         mime_type=file.content_type,
-        checksum=result.get('checksum'),
+        checksum=checksum,
         tender_id=UUID(tender_id) if tender_id else None,
         owner_id=UUID(current_user.user_id),
     )

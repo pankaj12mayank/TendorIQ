@@ -14,7 +14,7 @@ import {
 import { type QueryParams, type PaginatedResponse } from '@/lib/query-client';
 import { getQueryErrorMessage } from '@/lib/query-error-message';
 import { hasTenantWorkspace, TENANT_WORKSPACE_REQUIRED } from '@/lib/tenant-workspace';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 import { useCurrentUser } from '@/hooks/use-auth';
 
 export { getQueryErrorMessage } from '@/lib/query-error-message';
@@ -59,7 +59,7 @@ export function useApiMutation<TData, TVariables>(
       options?.onSuccess?.(data);
     },
     onError: (error: Error) => {
-      toast.error(`Operation failed: ${error.message}`);
+      appToast.error(`Operation failed: ${error.message}`);
       options?.onError?.(error);
     },
   });

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { FileDown, FileText, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 import { AnalysisContent } from '@/components/analysis';
 import { PageHeader } from '@/components/design-system/page-header';
 import { Button } from '@/components/ui/button';
@@ -38,9 +38,9 @@ export default function AnalysisPage() {
                   setExporting(true);
                   try {
                     await exportAnalysis();
-                    toast.success('Analysis PDF downloaded');
+                    appToast.success('Analysis PDF downloaded.');
                   } catch (err) {
-                    toast.error(err instanceof Error ? err.message : 'Export failed');
+                    appToast.error(err instanceof Error ? err.message : 'Export failed');
                   } finally {
                     setExporting(false);
                   }

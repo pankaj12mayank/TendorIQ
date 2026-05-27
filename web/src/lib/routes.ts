@@ -14,6 +14,8 @@ export const ROUTES = {
 
   forgotPassword: '/forgot-password',
 
+  resetPassword: '/reset-password',
+
   dashboard: '/dashboard',
 
   upload: '/dashboard/upload',
@@ -47,6 +49,8 @@ export const PUBLIC_ROUTE_PREFIXES = [
   ROUTES.signUp,
 
   ROUTES.forgotPassword,
+
+  ROUTES.resetPassword,
 
 ] as const;
 

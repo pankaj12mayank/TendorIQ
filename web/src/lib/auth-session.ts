@@ -7,9 +7,10 @@ const TOKEN_KEY = 'tenderiq_auth_token';
 const REFRESH_KEY = 'tenderiq_auth_refresh';
 const USER_KEY = 'tenderiq_auth_user';
 const EXPIRES_KEY = 'tenderiq_auth_expires_at';
+const LAST_ACTIVE_KEY = 'tenderiq_auth_last_active';
 
-/** Default session lifetime when API omits expires_in (30 min JWT default). */
-export const SESSION_MAX_AGE_MS = 30 * 60 * 1000;
+/** One-day session lifecycle (Layer 1 security baseline). */
+export const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export interface StoredAuthSession {
   token: string;
@@ -67,7 +68,9 @@ export function setStoredSession(
   if (options?.refreshToken) {
     localStorage.setItem(REFRESH_KEY, options.refreshToken);
   }
-  document.cookie = `__session=${token}; path=/; max-age=${maxAgeSec}; SameSite=Lax`;
+  localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `__session=${token}; path=/; max-age=${maxAgeSec}; SameSite=Strict${secure}`;
 }
 
 export function clearStoredSession(): void {
@@ -75,6 +78,7 @@ export function clearStoredSession(): void {
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(EXPIRES_KEY);
+  localStorage.removeItem(LAST_ACTIVE_KEY);
   document.cookie = '__session=; path=/; max-age=0';
 }
 
@@ -82,4 +86,15 @@ export function getSessionTimeRemainingMs(): number {
   const session = getStoredSession();
   if (!session) return 0;
   return Math.max(0, session.expiresAt - Date.now());
+}
+
+export function markSessionActivity(): void {
+  if (typeof window === 'undefined') return;
+  if (!localStorage.getItem(TOKEN_KEY)) return;
+  localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now()));
+}
+
+export function getSessionLastActivityMs(): number {
+  if (typeof window === 'undefined') return 0;
+  return Number(localStorage.getItem(LAST_ACTIVE_KEY) || 0);
 }

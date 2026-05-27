@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import BaseService
@@ -54,10 +55,27 @@ class TenderService(BaseService):
     ) -> tuple[list[dict], int]:
         skip = (page - 1) * limit
         merged = self._list_filters(filters)
-
-        items = await self.get_all(skip=skip, limit=limit, filters=merged)
-        total = await self.count(merged)
-
+        search = str(merged.pop('search', '') or '').strip().lower()
+        q = select(Tender).where(Tender.deleted_at.is_(None))
+        if merged.get('owner_id'):
+            q = q.where(Tender.owner_id == UUID(str(merged['owner_id'])))
+        elif merged.get('tenant_id'):
+            q = q.where(Tender.tenant_id == UUID(str(merged['tenant_id'])))
+        if merged.get('status'):
+            q = q.where(Tender.status == str(merged['status']))
+        if search:
+            term = f'%{search}%'
+            q = q.where(
+                func.lower(Tender.title).like(term)
+                | func.lower(func.coalesce(Tender.description, '')).like(term)
+            )
+        total = await self.db.scalar(select(func.count()).select_from(q.subquery())) or 0
+        rows = (
+            await self.db.execute(
+                q.order_by(Tender.created_at.desc()).offset(skip).limit(limit)
+            )
+        ).scalars().all()
+        items = list(rows)
         return [self._tender_to_dict(t) for t in items], total
 
     async def get_tender(self, tender_id: str) -> Optional[dict]:

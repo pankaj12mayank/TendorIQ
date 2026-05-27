@@ -25,10 +25,6 @@ def upgrade() -> None:
         return
 
     add_column_if_missing(
-        'users',
-        sa.Column('supabase_id', sa.String(255), nullable=True),
-    )
-    add_column_if_missing(
         'tenants',
         sa.Column('owner_id', sa.String(36), nullable=True),
     )

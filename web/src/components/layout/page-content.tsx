@@ -14,7 +14,7 @@ export function PageContent({
   return (
     <div
       className={cn(
-        'page-content mx-auto w-full animate-fade-in',
+        'page-content app-page mx-auto w-full animate-fade-in',
         size === 'wide' && 'max-w-[90rem]',
         size === 'narrow' && 'max-w-3xl',
         size === 'default' && 'max-w-7xl',

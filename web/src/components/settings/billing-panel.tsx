@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Check, CreditCard, Loader2, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { appToast } from '@/lib/app-toast';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBillingApi } from '@/hooks/use-billing';
-import { useDemoStatus } from '@/hooks/use-demo-quota';
 import { useSubscriptionAccess } from '@/hooks/use-subscription-access';
 import { useCurrentUser } from '@/hooks/use-auth';
 import {
@@ -17,7 +16,7 @@ import {
   openRazorpayCheckout,
 } from '@/lib/razorpay-checkout';
 
-type BillingInterval = 'monthly' | 'yearly';
+type BillingInterval = 'yearly';
 
 interface PlanCard {
   id: string;
@@ -33,13 +32,23 @@ interface PlanCard {
 export function BillingPanel() {
   const user = useCurrentUser();
   const searchParams = useSearchParams();
-  const { plans, currentSubscription, initialize, isLoading, fetchSubscription, fetchQuotaStatus } =
-    useBillingApi();
-  const { data: demoStatus, refetch: refetchDemo } = useDemoStatus();
+  const {
+    plans,
+    currentSubscription,
+    initialize,
+    isLoading,
+    fetchSubscription,
+    fetchQuotaStatus,
+    fetchPaymentHistory,
+  } = useBillingApi();
   const { data: access, refetch: refetchAccess } = useSubscriptionAccess();
-  const [interval, setInterval] = useState<BillingInterval>('monthly');
+  const [interval] = useState<BillingInterval>('yearly');
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
   const [razorpayReady, setRazorpayReady] = useState<boolean | null>(null);
+  const [payments, setPayments] = useState<Array<any>>([]);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [paymentStatus, setPaymentStatus] = useState('all');
+  const [paymentPagination, setPaymentPagination] = useState({ page: 1, limit: 8, total: 0, pages: 0 });
 
   useEffect(() => {
     void initialize();
@@ -47,22 +56,34 @@ export function BillingPanel() {
   }, [initialize]);
 
   useEffect(() => {
+    (async () => {
+      const res = await fetchPaymentHistory({
+        page: paymentsPage,
+        limit: 8,
+        status: paymentStatus === 'all' ? undefined : paymentStatus,
+      });
+      setPayments(res.items);
+      setPaymentPagination(res.pagination);
+    })();
+  }, [fetchPaymentHistory, paymentsPage, paymentStatus]);
+
+  useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      toast.success('Payment successful');
+      appToast.success('Payment successful.');
     }
   }, [searchParams]);
 
   const handleUpgrade = useCallback(
     async (plan: PlanCard) => {
       if (plan.isDemo) {
-        toast.message('You are on the free demo plan');
+        appToast.info('You are on the free demo plan.');
         return;
       }
       setPayingPlanId(plan.id);
       try {
         const config = await fetchPaymentConfig();
         if (!config.razorpay_enabled) {
-          toast.error('Razorpay not configured. Add keys to .env and restart API.');
+          appToast.error('Razorpay not configured. Add keys to .env and restart API.');
           return;
         }
         const order = await createRazorpayOrder(plan.id, interval);
@@ -70,20 +91,19 @@ export function BillingPanel() {
           name: user?.name,
           email: user?.email,
           onSuccess: async () => {
-            toast.success('Plan upgraded!');
+            appToast.success('Plan upgraded.');
             await fetchSubscription();
             await fetchQuotaStatus();
-            await refetchDemo();
             await refetchAccess();
           },
         });
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Payment failed');
+        appToast.error(err instanceof Error ? err.message : 'Payment failed');
       } finally {
         setPayingPlanId(null);
       }
     },
-    [interval, user, fetchSubscription, fetchQuotaStatus, refetchDemo, refetchAccess]
+    [interval, user, fetchSubscription, fetchQuotaStatus, refetchAccess]
   );
 
   const planList = (plans as unknown as PlanCard[]) ?? [];
@@ -101,62 +121,46 @@ export function BillingPanel() {
         </Card>
       )}
 
-      {demoStatus && (
+      {currentSubscription && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="h-5 w-5" />
-              Demo usage — {demoStatus.plan} plan
-            </CardTitle>
-            <CardDescription>Resets monthly. Upgrade for higher limits.</CardDescription>
+            <CardTitle>Current subscription</CardTitle>
+            <CardDescription>Yearly plan with real-time usage status</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {demoStatus.usage.map((row) => (
-                <div
-                  key={row.featureKey}
-                  className={`rounded-lg border p-3 text-sm ${row.isExceeded ? 'border-destructive bg-destructive/5' : ''}`}
-                >
-                  <div className="font-medium capitalize">
-                    {row.featureKey.replace(/_/g, ' ')}
-                  </div>
-                  <div className="text-muted-foreground">
-                    {row.used} / {row.limit ?? '∞'} used
-                    {row.remaining != null && ` · ${row.remaining} left`}
-                  </div>
-                </div>
-              ))}
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Current plan</p>
+              <p className="font-semibold">{currentSubscription.plan?.displayName ?? currentSubscription.plan?.name}</p>
             </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              AI tokens: {demoStatus.ai_tokens.used}
-              {demoStatus.ai_tokens.limit != null && ` / ${demoStatus.ai_tokens.limit}`}
-            </p>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Expiry date</p>
+              <p className="font-semibold">
+                {currentSubscription.currentPeriodEnd
+                  ? new Date(currentSubscription.currentPeriodEnd).toLocaleDateString()
+                  : '—'}
+              </p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Status</p>
+              <p className="font-semibold capitalize">{currentSubscription.status}</p>
+            </div>
+            {(currentSubscription.limits?.documents || currentSubscription.limits?.tenders) && (
+              <div className="sm:col-span-3 rounded-lg border p-3 text-sm text-muted-foreground">
+                {(currentSubscription.limits?.documents?.current ?? 0)} /{' '}
+                {(currentSubscription.limits?.documents?.max ?? '∞')} documents used · remaining{' '}
+                {currentSubscription.limits?.documents?.max != null
+                  ? Math.max(
+                      0,
+                      (currentSubscription.limits.documents.max as number) -
+                        (currentSubscription.limits.documents.current as number)
+                    )
+                  : '∞'}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
-
-      {currentSubscription && (
-        <p className="text-sm">
-          Current plan: <strong>{currentSubscription.plan}</strong> ({currentSubscription.status})
-        </p>
-      )}
-
-      <div className="flex gap-2">
-        <Button
-          variant={interval === 'monthly' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setInterval('monthly')}
-        >
-          Monthly
-        </Button>
-        <Button
-          variant={interval === 'yearly' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setInterval('yearly')}
-        >
-          Yearly
-        </Button>
-      </div>
+      <p className="text-xs text-muted-foreground">Yearly subscriptions only.</p>
 
       {razorpayReady === false && (
         <p className="text-sm text-amber-600">
@@ -171,6 +175,7 @@ export function BillingPanel() {
       ) : (
         <div className="grid gap-4 md:grid-cols-3">
           {planList.map((plan) => {
+            if (plan.isDemo) return null;
             const price =
               interval === 'yearly'
                 ? plan.priceAnnualInr ?? (plan.priceMonthlyInr ?? 0) * 10
@@ -184,10 +189,10 @@ export function BillingPanel() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-2xl font-bold">
-                    {plan.isDemo ? 'Free' : `₹${price.toLocaleString('en-IN')}`}
-                    {!plan.isDemo && (
+                    {`₹${price.toLocaleString('en-IN')}`}
+                    {(
                       <span className="text-sm font-normal text-muted-foreground">
-                        /{interval === 'yearly' ? 'yr' : 'mo'}
+                        /yr
                       </span>
                     )}
                   </p>
@@ -201,14 +206,12 @@ export function BillingPanel() {
                   </ul>
                   <Button
                     className="w-full"
-                    variant={plan.isDemo ? 'outline' : 'default'}
+                    variant="default"
                     disabled={isCurrent || payingPlanId === plan.id}
                     onClick={() => void handleUpgrade(plan)}
                   >
                     {payingPlanId === plan.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : plan.isDemo ? (
-                      'Current demo'
                     ) : isCurrent ? (
                       'Current plan'
                     ) : (
@@ -224,6 +227,42 @@ export function BillingPanel() {
           })}
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment history</CardTitle>
+          <CardDescription>Your own payments only</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Button size="sm" variant={paymentStatus === 'all' ? 'default' : 'outline'} onClick={() => setPaymentStatus('all')}>All</Button>
+            <Button size="sm" variant={paymentStatus === 'paid' ? 'default' : 'outline'} onClick={() => setPaymentStatus('paid')}>Paid</Button>
+            <Button size="sm" variant={paymentStatus === 'failed' ? 'default' : 'outline'} onClick={() => setPaymentStatus('failed')}>Failed</Button>
+          </div>
+          <div className="space-y-2">
+            {payments.map((p) => (
+              <div key={p.id} className="rounded-lg border p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{p.plan ?? 'Plan'}</span>
+                  <span className="capitalize">{p.status}</span>
+                </div>
+                <p className="text-muted-foreground">
+                  {p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'} · {p.provider} · {p.invoice}
+                </p>
+                <p>₹{Number(p.amount || 0).toLocaleString('en-IN')} {p.currency}</p>
+              </div>
+            ))}
+            {payments.length === 0 && <p className="text-sm text-muted-foreground">No payments found.</p>}
+          </div>
+          {paymentPagination.pages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" disabled={paymentsPage <= 1} onClick={() => setPaymentsPage((p) => p - 1)}>Prev</Button>
+              <span className="text-xs text-muted-foreground">{paymentsPage}/{paymentPagination.pages}</span>
+              <Button size="sm" variant="outline" disabled={paymentsPage >= paymentPagination.pages} onClick={() => setPaymentsPage((p) => p + 1)}>Next</Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

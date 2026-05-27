@@ -37,9 +37,8 @@ def _tenant_settings(tenant: Tenant) -> dict[str, Any]:
 
 
 def subscription_expiry_enforced() -> bool:
-    from ..config import get_settings
-
-    return get_settings().billing_enforce_subscription_expiry
+    # Lite SaaS monetization always enforces subscription expiry for paid plans.
+    return True
 
 
 def period_end_from_tenant(tenant: Tenant) -> Optional[datetime]:

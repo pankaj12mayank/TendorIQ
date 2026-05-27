@@ -7,7 +7,6 @@ import { useTheme } from 'next-themes';
 import { useState, useCallback, useMemo } from 'react';
 
 import { useCurrentUser, useSignOut } from '@/hooks/use-auth';
-import { isSuperAdmin } from '@/lib/permissions';
 import { getPageTitle } from '@/lib/page-titles';
 import { SignOutDialog } from '@/components/auth/sign-out-dialog';
 import {
@@ -19,7 +18,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ROUTES } from '@/lib/routes';
 
 export function Header() {
   const pathname = usePathname();
@@ -38,8 +36,6 @@ export function Header() {
       .toUpperCase()
       .slice(0, 2);
   }, [user?.name]);
-
-  const settingsHref = isSuperAdmin(user?.role) ? ROUTES.admin : ROUTES.settings;
 
   const handleConfirmSignOut = useCallback(async () => {
     await signOut();
@@ -60,7 +56,7 @@ export function Header() {
         </h2>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -74,14 +70,14 @@ export function Header() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-9 gap-2 rounded-full pl-1 pr-2">
+            <Button variant="ghost" className="relative h-10 gap-2 rounded-full pl-1 pr-2">
               <Avatar className="h-8 w-8 ring-2 ring-border/80">
                 <AvatarImage src={user?.imageUrl} alt={user?.name ?? 'User'} />
                 <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <span className="hidden max-w-[8rem] truncate text-sm font-medium md:inline">
+              <span className="hidden max-w-[8rem] truncate text-sm font-medium lg:inline">
                 {user?.name?.split(' ')[0]}
               </span>
             </Button>
@@ -91,13 +87,6 @@ export function Header() {
               <p className="text-sm font-medium">{user?.name}</p>
               <p className="text-xs text-muted-foreground">{user?.email}</p>
             </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href={settingsHref}>Settings</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`${ROUTES.settings}/profile`}>Profile</Link>
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => setSignOutOpen(true)}

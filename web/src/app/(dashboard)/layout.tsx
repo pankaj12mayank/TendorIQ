@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useCurrentUser } from '@/hooks/use-auth';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
@@ -13,6 +13,7 @@ import { ROUTES } from '@/lib/routes';
 import { SubscriptionExpiredBanner } from '@/components/billing/subscription-gate';
 import { CinematicBackground } from '@/components/cinematic/cinematic-background';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { canAccessAdminConsole } from '@/lib/permissions';
 
 function ExpiredPlanBanner() {
   const pathname = usePathname();
@@ -29,7 +30,10 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const { isLoaded, userId } = useAuth();
+  const user = useCurrentUser();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -41,6 +45,24 @@ export default function DashboardLayout({
       router.push(ROUTES.signIn);
     }
   }, [isLoaded, userId, router]);
+
+  useEffect(() => {
+    if (!isLoaded || !userId) return;
+    const isOwner = canAccessAdminConsole(user?.role);
+    if (isOwner) return;
+    const blockedDashboardPaths = ['/dashboard/admin'];
+    if (blockedDashboardPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+      router.replace(ROUTES.dashboard);
+      return;
+    }
+    // Non-owner users can use settings pages except admin-only AI controls.
+    if (pathname === ROUTES.settings) {
+      const tab = searchParams.get('tab');
+      if (tab === 'ai') {
+        router.replace(ROUTES.dashboard);
+      }
+    }
+  }, [isLoaded, userId, user?.role, pathname, searchParams, router]);
 
   if (!mounted || !isLoaded) {
     return <DashboardBootLoading message="Loading workspace..." />;

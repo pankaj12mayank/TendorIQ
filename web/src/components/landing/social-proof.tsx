@@ -1,32 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import Image from 'next/image';
 
-const logos = [
-  { name: 'TechCorp', width: 120 },
-  { name: 'BuildRight', width: 130 },
-  { name: 'GlobalServices', width: 140 },
-  { name: 'SecureVault', width: 110 },
-  { name: 'DataFlow', width: 100 },
-  { name: 'CloudNet', width: 120 },
-];
+const logos: Array<{ name: string; width: number }> = [];
 
 type SocialProofContent = { tagline?: string; logos?: string[] };
+type TrustStats = { companies?: number; tenders_processed?: number; success_rate?: number };
 
-export function SocialProof({ content }: { content?: SocialProofContent }) {
+export function SocialProof({
+  content,
+  trustStats,
+}: {
+  content?: SocialProofContent;
+  trustStats?: TrustStats;
+}) {
   const tagline = content?.tagline ?? 'Trusted by industry leaders';
   const names =
     content?.logos && content.logos.length > 0
       ? content.logos.map((name) => ({ name, width: 120 }))
       : logos;
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
-
   return (
     <section className="py-20 bg-muted/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,42 +33,38 @@ export function SocialProof({ content }: { content?: SocialProofContent }) {
           </p>
         </motion.div>
 
-        <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
-          {names.map((logo, index) => (
-            <motion.div
-              key={logo.name}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
-              whileHover={{ scale: 1.1, opacity: 0.8 }}
-              className="grayscale hover:grayscale-0 opacity-60 hover:opacity-100 transition-all duration-300"
-            >
-              <div 
-                className="h-12 flex items-center justify-center"
-                style={{ width: logo.width }}
+        {names.length ? (
+          <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16">
+            {names.map((logo, index) => (
+              <motion.div
+                key={logo.name}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ scale: 1.03, opacity: 0.9 }}
+                className="opacity-75 transition-all duration-300"
               >
-                <span className="text-xl font-bold text-muted-foreground/60">
-                  {logo.name}
-                </span>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                <div className="flex h-12 items-center justify-center" style={{ width: logo.width }}>
+                  <span className="text-xl font-bold text-muted-foreground/60">{logo.name}</span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : null}
 
-        {/* Stats */}
+        {/* Dynamic trust stats from backend */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.5 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16 pt-16 border-t border-border"
+          className="grid grid-cols-1 gap-8 mt-16 pt-16 border-t border-border sm:grid-cols-3"
         >
           {[
-            { value: '500+', label: 'Enterprise Customers' },
-            { value: '$2B+', label: 'Tenders Processed' },
-            { value: '99.9%', label: 'Uptime SLA' },
-            { value: '24/7', label: 'Support Available' },
+            { value: String(trustStats?.companies ?? 0), label: 'Companies' },
+            { value: String(trustStats?.tenders_processed ?? 0), label: 'Tenders Processed' },
+            { value: `${trustStats?.success_rate ?? 0}%`, label: 'Success Rate' },
           ].map((stat, index) => (
             <motion.div
               key={stat.label}
