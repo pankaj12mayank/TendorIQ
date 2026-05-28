@@ -199,7 +199,7 @@ class Settings(BaseSettings):
     STORAGE_SIGNED_URL_EXPIRE_SECONDS: int = 3600
     STORAGE_TOKEN_CLOCK_SKEW_SECONDS: int = 120
     STORAGE_MAX_FILE_SIZE_MB: int = 25
-    STORAGE_ALLOWED_EXTENSIONS: str = '.pdf,.doc,.docx'
+    STORAGE_ALLOWED_EXTENSIONS: str = '.pdf,.docx'
 
     # ===========================================
     # RATE LIMITING

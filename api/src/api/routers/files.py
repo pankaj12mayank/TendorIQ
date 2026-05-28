@@ -304,6 +304,7 @@ async def complete_upload(
         owner_id=current_user.user_id,
         provider=ai_provider,
         model=ai_model,
+        force=True,
     )
 
     return {
@@ -430,6 +431,7 @@ async def direct_upload(
         owner_id=current_user.user_id,
         provider=ai_provider,
         model=ai_model,
+        force=True,
     )
     await db.commit()
 

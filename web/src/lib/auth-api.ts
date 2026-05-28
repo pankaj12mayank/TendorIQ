@@ -1,6 +1,7 @@
 import { apiUrl } from '@/lib/api-config';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
 import type { AuthUser } from '@/lib/auth-session';
+import { parseApiErrorMessage } from '@/lib/api-envelope';
 import { getRolePermissions } from '@/lib/permissions';
 
 export interface ApiSessionPayload {
@@ -132,8 +133,8 @@ export async function requestPasswordReset(email: string): Promise<void> {
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    throw new Error(err.error?.message ?? 'Failed to request password reset');
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(parseApiErrorMessage(err) || 'Failed to request password reset');
   }
 }
 
@@ -144,8 +145,8 @@ export async function validatePasswordResetToken(token: string): Promise<void> {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    throw new Error(err.error?.message ?? 'Invalid or expired reset token');
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(parseApiErrorMessage(err) || 'Invalid or expired reset token');
   }
 }
 
@@ -158,8 +159,8 @@ export async function resetPasswordWithToken(token: string, newPassword: string)
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-    throw new Error(err.error?.message ?? 'Failed to reset password');
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(parseApiErrorMessage(err) || 'Failed to reset password');
   }
 }
 

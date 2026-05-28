@@ -19,7 +19,7 @@ const PaginationContent = React.forwardRef<HTMLUListElement, React.HTMLAttribute
   ({ className, ...props }, ref) => (
     <ul
       ref={ref}
-      className={cn('flex flex-row items-center gap-1', className)}
+      className={cn('flex flex-row flex-wrap items-center gap-1', className)}
       {...props}
     />
   )
@@ -40,7 +40,7 @@ const PaginationLink = React.forwardRef<
     <button
       ref={ref}
       className={cn(
-        'inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:h-10 sm:min-w-10',
+        'inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition-all duration-200 hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:h-10 sm:min-w-10',
         isActive
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-muted bg-background hover:bg-muted hover:text-foreground',

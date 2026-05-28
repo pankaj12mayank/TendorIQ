@@ -118,8 +118,12 @@ export default function ProposalPage() {
     try {
       await downloadProposalPdf(proposal.id);
       appToast.success('PDF downloaded.');
-    } catch {
-      appToast.error('PDF export failed — complete company profile in Settings.');
+    } catch (err) {
+      appToast.error(
+        err instanceof Error
+          ? err.message
+          : 'PDF export failed — complete company profile in Settings.'
+      );
     } finally {
       setExporting(false);
     }

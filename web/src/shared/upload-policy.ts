@@ -1,8 +1,8 @@
 /** TenderIQ Lite upload policy — keep in sync with api/src/core/upload_policy.py */
 
 export const LITE_MAX_FILE_SIZE_MB = 25;
-export const LITE_ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx'] as const;
-export const LITE_ACCEPT_ATTR = '.pdf,.doc,.docx';
+export const LITE_ALLOWED_EXTENSIONS = ['.pdf', '.docx'] as const;
+export const LITE_ACCEPT_ATTR = '.pdf,.docx';
 
 export interface UploadConfig {
   provider: 'local' | 'r2' | 's3';

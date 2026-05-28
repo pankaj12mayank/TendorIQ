@@ -1,6 +1,6 @@
 import { authenticatedFetch } from './api-fetch';
 import { api } from './api-client';
-import { unwrapData } from './api-envelope';
+import { parseApiErrorMessage, unwrapData } from './api-envelope';
 
 /** TenderIQ Lite — PDF-only exports (Phase 6). */
 export const LITE_EXPORT_FORMAT = 'pdf' as const;
@@ -25,10 +25,8 @@ export async function fetchExportConfig(): Promise<ExportConfig> {
 export async function downloadTenderAnalysisPdf(tenderId: string): Promise<void> {
   const res = await authenticatedFetch(`/api/v1/exports/tender/${tenderId}/pdf`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const msg =
-      (err as { error?: { message?: string } })?.error?.message ??
-      'PDF export failed. Run analysis first.';
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const msg = parseApiErrorMessage(err) || 'PDF export failed. Run analysis first.';
     throw new Error(msg);
   }
   const blob = await res.blob();

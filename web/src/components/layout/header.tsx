@@ -42,7 +42,7 @@ export function Header() {
   }, [signOut]);
 
   return (
-    <header className="nav-glass sticky top-0 z-sticky flex h-[4.25rem] items-center justify-between gap-4 px-4 md:px-8">
+    <header className="nav-glass sticky top-0 z-sticky flex h-[4.25rem] items-center justify-between gap-3 px-4 md:px-6">
       <div className="flex min-w-0 items-center gap-2 text-sm">
         <Link
           href="/dashboard"
@@ -56,7 +56,7 @@ export function Header() {
         </h2>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         <Button
           variant="ghost"
           size="icon"

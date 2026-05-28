@@ -97,13 +97,24 @@ export default function AdminDashboardPage() {
   const [selectedUserDetail, setSelectedUserDetail] = useState<Record<string, unknown> | null>(null);
   const [userSearch, setUserSearch] = useState('');
   const [userStatusFilter, setUserStatusFilter] = useState<UserStatusFilter>('all');
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersMeta, setUsersMeta] = useState<{ page: number; pages: number; total: number; limit: number }>({
+    page: 1,
+    pages: 0,
+    total: 0,
+    limit: 25,
+  });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [uploads, setUploads] = useState<AdminUpload[]>([]);
   const [uploadSearch, setUploadSearch] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
+  const [uploadUserFilter, setUploadUserFilter] = useState('');
   const [selectedUploads, setSelectedUploads] = useState<string[]>([]);
   const [paymentSettings, setPaymentSettings] = useState<Record<string, unknown>>({});
   const [paymentHistory, setPaymentHistory] = useState<Record<string, unknown> | null>(null);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
+  const [paymentProviderFilter, setPaymentProviderFilter] = useState('all');
+  const [paymentPage, setPaymentPage] = useState(1);
   const [analyticsQuery, setAnalyticsQuery] = useState('');
   const [analyticsRows, setAnalyticsRows] = useState<Record<string, unknown>[]>([]);
   const [ownerProfile, setOwnerProfile] = useState<Record<string, unknown> | null>(null);
@@ -195,18 +206,58 @@ export default function AdminDashboardPage() {
       limit: 100,
       search: uploadSearch || undefined,
       status: uploadStatus || undefined,
+      user_filter: uploadUserFilter || undefined,
     });
     setUploads(rows);
-  }, [loadUploads, uploadSearch, uploadStatus]);
+  }, [loadUploads, uploadSearch, uploadStatus, uploadUserFilter]);
+
+  const fetchUsers = useCallback(async () => {
+    const params: Record<string, string | number | boolean> = {
+      search: userSearch,
+      page: usersPage,
+      limit: usersMeta.limit,
+      include_deleted: true,
+    };
+    if (userStatusFilter === 'active' || userStatusFilter === 'inactive') {
+      params.status = userStatusFilter;
+    }
+    const out = await loadUsers(params);
+    const pagination = (out.pagination ?? {}) as Record<string, unknown>;
+    setUsersMeta((prev) => ({
+      ...prev,
+      page: Number(pagination.page ?? usersPage),
+      pages: Number(pagination.pages ?? 0),
+      total: Number(pagination.total ?? 0),
+      limit: Number(pagination.limit ?? prev.limit),
+    }));
+    let rows = out.rows;
+    if (userStatusFilter === 'deleted') {
+      rows = rows.filter((u) => u.status === 'deleted');
+    } else if (userStatusFilter === 'all') {
+      rows = rows;
+    } else {
+      rows = rows.filter((u) => u.status === userStatusFilter);
+    }
+    setUsers(rows);
+  }, [loadUsers, userSearch, userStatusFilter, usersPage, usersMeta.limit]);
 
   useEffect(() => {
     if (tab === 'uploads') void loadUploadList();
   }, [tab, loadUploadList]);
 
   useEffect(() => {
+    setUsersPage(1);
+  }, [userSearch, userStatusFilter]);
+
+  useEffect(() => {
     if (loading || tab !== 'users') return;
     void fetchUsers();
   }, [loading, tab, fetchUsers]);
+
+  useEffect(() => {
+    if (loading || tab !== 'payments') return;
+    void loadPayments();
+  }, [loading, tab, loadPayments]);
 
   const saveJsonSection = async (
     section: keyof PlatformSettings,
@@ -220,6 +271,16 @@ export default function AdminDashboardPage() {
       appToast.error('Invalid JSON. Please fix formatting and try again.');
     }
   };
+
+  const loadPayments = useCallback(async () => {
+    const hist = (await loadPaymentHistory({
+      page: paymentPage,
+      limit: 25,
+      status: paymentStatusFilter === 'all' ? undefined : paymentStatusFilter,
+      provider: paymentProviderFilter === 'all' ? undefined : paymentProviderFilter,
+    })) as Record<string, unknown>;
+    setPaymentHistory(hist);
+  }, [loadPaymentHistory, paymentPage, paymentProviderFilter, paymentStatusFilter]);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -235,37 +296,19 @@ export default function AdminDashboardPage() {
     { id: 'analytics', label: 'Analytics' },
   ];
 
-  const fetchUsers = useCallback(async () => {
-    const params: Record<string, string | number | boolean> = {
-      search: userSearch,
-      page: 1,
-      limit: 25,
-      include_deleted: true,
-    };
-    if (userStatusFilter === 'active' || userStatusFilter === 'inactive') {
-      params.status = userStatusFilter;
-    }
-    const out = await loadUsers(params);
-    let rows = out.rows;
-    if (userStatusFilter === 'deleted') {
-      rows = rows.filter((u) => u.status === 'deleted');
-    } else if (userStatusFilter === 'all') {
-      rows = rows;
-    } else {
-      rows = rows.filter((u) => u.status === userStatusFilter);
-    }
-    setUsers(rows);
-  }, [loadUsers, userSearch, userStatusFilter]);
-
   return (
     <AdminRouteGuard>
-      <div className="space-y-8 app-section">
+      <div className="mx-auto w-full max-w-7xl space-y-6 app-section">
         <PageHeader
           title="Platform admin"
           description="Users, pricing, AI defaults, landing CMS, and uploads. Super admin only."
         />
 
-        <div className="tabs-pill-list max-w-full overflow-x-auto whitespace-nowrap scroll-premium" role="tablist" aria-label="Admin modules">
+        <div
+          className="tabs-pill-list flex flex-wrap gap-2 rounded-xl border border-border/60 bg-muted/20 p-2"
+          role="tablist"
+          aria-label="Admin modules"
+        >
           {tabs.map((t) => (
             <Button
               key={t.id}
@@ -411,11 +454,11 @@ export default function AdminDashboardPage() {
               </div>
               <ul className="divide-y text-sm">
                 {users.map((u) => (
-                  <li key={u.id} className="flex justify-between py-2">
-                    <span>
+                  <li key={u.id} className="flex flex-col gap-2 py-3 md:flex-row md:items-center md:justify-between">
+                    <span className="break-words">
                       {u.name} &lt;{u.email}&gt; — {u.role} · {u.plan ?? 'free'}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-muted-foreground">{u.organization}</span>
                       <Button
                         size="sm"
@@ -476,11 +519,91 @@ export default function AdminDashboardPage() {
                 ))}
                 {users.length === 0 && <li className="text-muted-foreground">No users</li>}
               </ul>
+              {usersMeta.pages > 1 && (
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={usersPage <= 1}
+                    onClick={() => setUsersPage((p) => Math.max(1, p - 1))}
+                  >
+                    Prev
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {usersPage}/{usersMeta.pages} · {usersMeta.total} users
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={usersPage >= usersMeta.pages}
+                    onClick={() => setUsersPage((p) => Math.min(usersMeta.pages, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
               {selectedUserId && selectedUserDetail && (
-                <div className="mt-4 table-wrap p-3 text-xs">
-                  <pre className="max-h-[340px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
-                    {JSON.stringify(selectedUserDetail, null, 2)}
-                  </pre>
+                <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Usage</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="max-h-[220px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                        {JSON.stringify((selectedUserDetail as any).usage ?? {}, null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Uploads</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="max-h-[220px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                        {JSON.stringify((selectedUserDetail as any).uploads ?? [], null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Analysis</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="max-h-[220px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                        {JSON.stringify((selectedUserDetail as any).analysis ?? [], null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Proposals</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="max-h-[220px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                        {JSON.stringify((selectedUserDetail as any).proposals ?? [], null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Payments</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="max-h-[220px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                        {JSON.stringify((selectedUserDetail as any).payments ?? [], null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Activity</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <pre className="max-h-[220px] whitespace-pre-wrap break-all overflow-auto scroll-premium">
+                        {JSON.stringify((selectedUserDetail as any).activity_timeline ?? [], null, 2)}
+                      </pre>
+                    </CardContent>
+                  </Card>
                 </div>
               )}
             </CardContent>
@@ -492,14 +615,14 @@ export default function AdminDashboardPage() {
             <CardHeader>
               <CardTitle>Pricing plans</CardTitle>
               <CardDescription>
-                JSON: plans with id, yearly_inr, upload_limit, expiry_period_days, features. Razorpay uses these
+                JSON: plans with id, monthly_inr, upload_limit, expiry_period_days, features. Payment gateways use these
                 amounts.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <JsonEditor
                 label="Pricing"
-                help="Use plans[] with unique id and yearly_inr. monthly_inr must be 0/empty."
+                help="Use plans[] with unique id and monthly_inr. Set active=true/false and upload_limit per plan."
                 value={pricingJson}
                 onChange={setPricingJson}
                 saving={saving}
@@ -522,12 +645,12 @@ export default function AdminDashboardPage() {
           <Card id="admin-panel-billing" role="tabpanel" aria-labelledby="admin-tab-billing">
             <CardHeader>
               <CardTitle>Billing management</CardTitle>
-              <CardDescription>Yearly plans only with upload limits and expiry periods.</CardDescription>
+              <CardDescription>Monthly plans only with upload limits and expiry periods.</CardDescription>
             </CardHeader>
             <CardContent>
               <JsonEditor
                 label="Billing pricing"
-                help="Use yearly_inr only. Set upload_limit and expiry_period_days per active plan."
+                help="Use monthly_inr only. Set upload_limit and expiry_period_days per active plan."
                 value={pricingJson}
                 onChange={setPricingJson}
                 onSave={async () => {
@@ -580,6 +703,13 @@ export default function AdminDashboardPage() {
                       setPaymentSettings((s) => ({ ...s, stripe_secret_key: e.target.value }))
                     }
                   />
+                  <Input
+                    placeholder="Stripe webhook secret"
+                    value={String(paymentSettings.stripe_webhook_secret ?? '')}
+                    onChange={(e) =>
+                      setPaymentSettings((s) => ({ ...s, stripe_webhook_secret: e.target.value }))
+                    }
+                  />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -606,21 +736,32 @@ export default function AdminDashboardPage() {
                 <CardTitle>Payment history</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    const hist = (await loadPaymentHistory({ page: 1, limit: 25 })) as Record<
-                      string,
-                      unknown
-                    >;
-                    setPaymentHistory(hist);
-                  }}
-                >
-                  Load payment history
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    placeholder="Status (paid/failed)"
+                    value={paymentStatusFilter}
+                    onChange={(e) => {
+                      setPaymentStatusFilter(e.target.value || 'all');
+                      setPaymentPage(1);
+                    }}
+                    className="max-w-xs"
+                  />
+                  <Input
+                    placeholder="Provider (razorpay/stripe)"
+                    value={paymentProviderFilter}
+                    onChange={(e) => {
+                      setPaymentProviderFilter(e.target.value || 'all');
+                      setPaymentPage(1);
+                    }}
+                    className="max-w-xs"
+                  />
+                  <Button variant="outline" onClick={() => void loadPayments()}>
+                    Apply filters
+                  </Button>
+                </div>
                 {paymentHistory && (
                   <div className="space-y-3">
-                    <div className="grid gap-3 md:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       <Card>
                         <CardContent className="pt-4 text-sm">
                           <p className="text-muted-foreground">Revenue</p>
@@ -652,6 +793,33 @@ export default function AdminDashboardPage() {
                         </li>
                       ))}
                     </ul>
+                    {Number((paymentHistory as any).pagination?.pages ?? 0) > 1 && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={paymentPage <= 1}
+                          onClick={() => setPaymentPage((p) => Math.max(1, p - 1))}
+                        >
+                          Prev
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          {paymentPage}/{Number((paymentHistory as any).pagination?.pages ?? 1)}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={paymentPage >= Number((paymentHistory as any).pagination?.pages ?? 1)}
+                          onClick={() =>
+                            setPaymentPage((p) =>
+                              Math.min(Number((paymentHistory as any).pagination?.pages ?? 1), p + 1)
+                            )
+                          }
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -813,6 +981,12 @@ export default function AdminDashboardPage() {
                   onChange={(e) => setUploadStatus(e.target.value)}
                   className="max-w-xs"
                 />
+                <Input
+                  placeholder="User email filter"
+                  value={uploadUserFilter}
+                  onChange={(e) => setUploadUserFilter(e.target.value)}
+                  className="max-w-xs"
+                />
                 <Button variant="outline" onClick={() => void loadUploadList()}>
                   Refresh
                 </Button>
@@ -831,7 +1005,7 @@ export default function AdminDashboardPage() {
               </div>
               <ul className="divide-y text-sm">
                 {uploads.map((u) => (
-                  <li key={u.id} className="flex flex-wrap justify-between gap-2 py-2">
+                  <li key={u.id} className="flex flex-col gap-2 py-3 md:flex-row md:items-center md:justify-between">
                     <span className="flex items-center gap-2">
                       <input
                         aria-label={`Select upload ${u.name}`}
@@ -847,8 +1021,8 @@ export default function AdminDashboardPage() {
                       />
                       {u.name} — {u.status}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="break-words text-muted-foreground">
                         {u.owner_email} · {u.tenant_name} · {new Date(u.created_at).toLocaleString()}
                       </span>
                       <Button
@@ -879,7 +1053,7 @@ export default function AdminDashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <Card>
                   <CardContent className="pt-4 text-sm">
                     <p className="text-muted-foreground">Uploads</p>
@@ -933,6 +1107,23 @@ export default function AdminDashboardPage() {
               <pre className="max-h-[320px] overflow-auto rounded-md border p-3 text-xs scroll-premium">
                 {JSON.stringify(analyticsRows, null, 2)}
               </pre>
+              {analyticsRows.length > 0 && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {analyticsRows.map((r, idx) => (
+                    <Card key={`${String(r.user_id ?? idx)}`}>
+                      <CardContent className="pt-4 text-xs space-y-1">
+                        <p className="font-medium">{String(r.name ?? '—')} · {String(r.email ?? '—')}</p>
+                        <p className="text-muted-foreground">
+                          Uploads: {Number(r.uploads ?? 0)} · Tenders: {Number(r.tenders ?? 0)} · Proposals: {Number(r.proposals ?? 0)}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Payments: {Number(r.payments ?? 0)} · Activity: {Number(r.activity ?? 0)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

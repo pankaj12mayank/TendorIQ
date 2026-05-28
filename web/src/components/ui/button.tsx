@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors duration-200 ease-premium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:h-4 [&_svg]:w-4',
+  'inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 ease-premium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -24,7 +24,7 @@ const buttonVariants = cva(
       },
       size: {
         default: 'h-10 min-w-10 px-4',
-        sm: 'h-9 min-w-9 rounded-md px-3 text-xs',
+        sm: 'h-8 min-w-8 rounded-md px-2.5 text-xs',
         lg: 'h-11 min-w-11 rounded-lg px-6 text-sm',
         icon: 'h-10 w-10 p-0',
       },
@@ -61,6 +61,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         disabled={disabled || loading}
+        aria-busy={loading || undefined}
         {...props}
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}

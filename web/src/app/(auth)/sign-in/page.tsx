@@ -26,10 +26,19 @@ export default function SignInPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Email is required');
+      return;
+    }
+    if (!password || password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
-      await loginWithCredentials(email, password);
+      await loginWithCredentials(normalizedEmail, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -96,12 +105,6 @@ export default function SignInPage() {
           <div className="glass-panel-strong w-full max-w-md p-8 md:p-10">
             <h2 className="font-display text-2xl font-semibold tracking-tight">Welcome back</h2>
             <p className="mt-2 text-sm text-muted-foreground">Sign in to your workspace.</p>
-
-            <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-              First time? Run <strong className="text-foreground">run.bat</strong>, then{' '}
-              <strong className="text-foreground">admin@tendoriq.com</strong> + password from{' '}
-              <strong className="text-foreground">.tenderiq/owner-account.txt</strong>
-            </div>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-5">
               <div className="space-y-2">

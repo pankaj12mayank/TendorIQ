@@ -70,6 +70,7 @@ export function CmsControlPanel() {
   const [logoUrl, setLogoUrl] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [heroImageUrl, setHeroImageUrl] = useState('');
+  const [brandName, setBrandName] = useState('');
   const [authTagline, setAuthTagline] = useState('');
   const [workflowTitle, setWorkflowTitle] = useState('');
   const [workflowSubtitle, setWorkflowSubtitle] = useState('');
@@ -102,6 +103,7 @@ export function CmsControlPanel() {
     setLogoUrl(String(images.logo_url ?? ''));
     setFaviconUrl(String(images.favicon_url ?? ''));
     setHeroImageUrl(String(images.hero_image_url ?? ''));
+    setBrandName(String(images.brand_name ?? 'TenderIQ'));
     setAuthTagline(String(images.auth_tagline ?? ''));
     setWorkflowTitle(String(workflow.title ?? ''));
     setWorkflowSubtitle(String(workflow.subtitle ?? ''));
@@ -232,6 +234,7 @@ export function CmsControlPanel() {
             logo_url: logoUrl,
             favicon_url: faviconUrl,
             hero_image_url: heroImageUrl,
+            brand_name: brandName,
             auth_tagline: authTagline,
           },
           workflow_tutorial: {
@@ -454,14 +457,66 @@ export function CmsControlPanel() {
           <div className="space-y-2">
             <Label>Logo URL</Label>
             <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="https://...logo.png" />
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const out = await uploadCmsAsset(file);
+                  const url = String((out as any).url ?? '');
+                  if (url) setLogoUrl(url);
+                  appToast.success('Logo uploaded.');
+                } catch (err) {
+                  appToast.error(err instanceof Error ? err.message : 'Logo upload failed');
+                }
+              }}
+            />
           </div>
           <div className="space-y-2">
             <Label>Favicon URL</Label>
             <Input value={faviconUrl} onChange={(e) => setFaviconUrl(e.target.value)} placeholder="https://...favicon.ico" />
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const out = await uploadCmsAsset(file);
+                  const url = String((out as any).url ?? '');
+                  if (url) setFaviconUrl(url);
+                  appToast.success('Favicon uploaded.');
+                } catch (err) {
+                  appToast.error(err instanceof Error ? err.message : 'Favicon upload failed');
+                }
+              }}
+            />
           </div>
           <div className="space-y-2">
             <Label>Hero image URL</Label>
             <Input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} placeholder="https://...hero.webp" />
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const out = await uploadCmsAsset(file);
+                  const url = String((out as any).url ?? '');
+                  if (url) setHeroImageUrl(url);
+                  appToast.success('Hero image uploaded.');
+                } catch (err) {
+                  appToast.error(err instanceof Error ? err.message : 'Hero image upload failed');
+                }
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Brand name</Label>
+            <Input value={brandName} onChange={(e) => setBrandName(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>Auth tagline</Label>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { authenticatedFetch } from '@/lib/api-fetch';
-import { unwrapData } from '@/lib/api-envelope';
+import { parseApiErrorMessage, unwrapData } from '@/lib/api-envelope';
 
 export interface ProcessingStatus {
   document_id: string;
@@ -26,7 +26,10 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
   const fetchStatus = useCallback(async () => {
     if (!documentId) return null;
     const res = await authenticatedFetch(`/api/v1/processing/documents/${documentId}`);
-    if (!res.ok) throw new Error('Failed to fetch processing status');
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      throw new Error(parseApiErrorMessage(err) || 'Failed to fetch processing status');
+    }
     const data = unwrapData(await res.json()) as ProcessingStatus;
     setStatus(data);
     return data;
@@ -50,10 +53,8 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
           }
         );
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(
-            (err as { error?: { message?: string } })?.error?.message ?? 'Analysis failed to start'
-          );
+          const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          throw new Error(parseApiErrorMessage(err) || 'Analysis failed to start');
         }
         await fetchStatus();
         return unwrapData(await res.json());
@@ -75,7 +76,10 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
         `/api/v1/processing/documents/${documentId}/retry${q}`,
         { method: 'POST' }
       );
-      if (!res.ok) throw new Error('Retry failed');
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        throw new Error(parseApiErrorMessage(err) || 'Retry failed');
+      }
       await fetchStatus();
       return unwrapData(await res.json());
     },

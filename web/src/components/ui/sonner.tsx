@@ -20,6 +20,10 @@ const Toaster = ({ theme, ...props }: ToasterProps) => {
           description: 'group-[.toast]:text-xs group-[.toast]:text-muted-foreground',
           actionButton: 'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
           cancelButton: 'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground',
+          success: 'group-[.toaster]:border-success/30',
+          error: 'group-[.toaster]:border-destructive/40',
+          warning: 'group-[.toaster]:border-warning/40',
+          info: 'group-[.toaster]:border-info/35',
         },
       }}
       {...props}

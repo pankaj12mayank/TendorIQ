@@ -17,7 +17,7 @@ export function usePublicBranding() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const fetchBranding = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/v1/public/site`, { cache: 'no-store' });
         if (!res.ok) return;
@@ -39,9 +39,14 @@ export function usePublicBranding() {
       } catch {
         /* noop */
       }
-    })();
+    };
+    void fetchBranding();
+    const timer = window.setInterval(() => {
+      void fetchBranding();
+    }, 10000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 

@@ -6,7 +6,7 @@ import os
 from typing import Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 
 from ..config import settings
@@ -21,7 +21,7 @@ class SecretEncryptor:
     
     def _generate_fernet(self, key: str) -> Fernet:
         """Generate Fernet cipher from string key"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=b'tenderiq_salt_v1',

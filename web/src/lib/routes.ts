@@ -82,7 +82,7 @@ export const LEGACY_DASHBOARD_REDIRECTS: Record<string, string> = {
 
   '/dashboard/billing': `${ROUTES.settings}?tab=billing`,
 
-  '/dashboard/settings/profile': `${ROUTES.settings}?tab=profile`,
+  '/dashboard/settings/profile': `${ROUTES.settings}?tab=ai`,
 
   '/dashboard/settings/ai': `${ROUTES.settings}?tab=ai`,
 
@@ -184,9 +184,9 @@ export function isDeadDashboardPath(pathname: string): boolean {
 
 
 
-export type SettingsTab = 'profile' | 'ai' | 'billing';
+export type SettingsTab = 'ai' | 'billing';
 
-export const SETTINGS_TABS: SettingsTab[] = ['profile', 'ai', 'billing'];
+export const SETTINGS_TABS: SettingsTab[] = ['ai', 'billing'];
 
 
 

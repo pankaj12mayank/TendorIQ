@@ -134,6 +134,7 @@ async def analyze_document(
             owner_id=current_user.user_id,
             provider=body.provider,
             model=body.model,
+            force=True,
         )
         return create_response(
             {
@@ -185,6 +186,7 @@ async def retry_document_analysis(
         owner_id=current_user.user_id,
         provider=provider,
         model=model,
+        force=True,
     )
     return create_response(
         {

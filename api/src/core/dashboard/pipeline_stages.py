@@ -8,10 +8,11 @@ PipelineStepStatus = Literal['pending', 'active', 'completed', 'failed']
 
 STAGE_LABELS: dict[str, str] = {
     'upload': 'Upload',
-    'extracting': 'Text extraction',
-    'processing': 'AI processing',
-    'risk_detection': 'Risk detection',
-    'proposal_generation': 'Proposal generation',
+    'extracting': 'Extract',
+    'processing': 'Analyze',
+    'risk_detection': 'Risk detect',
+    'proposal_generation': 'Proposal generate',
+    'complete': 'Complete',
 }
 
 STAGE_ORDER = (
@@ -20,6 +21,7 @@ STAGE_ORDER = (
     'processing',
     'risk_detection',
     'proposal_generation',
+    'complete',
 )
 
 
@@ -80,12 +82,14 @@ def derive_pipeline_stages(
         steps['processing'] = 'completed'
         steps['risk_detection'] = 'completed' if has_analysis_result else 'pending'
         steps['proposal_generation'] = 'completed' if has_proposal else 'pending'
+        steps['complete'] = 'completed' if has_proposal else 'pending'
 
     elif status == 'needs_review':
         steps['upload'] = 'completed'
         steps['extracting'] = 'completed'
         steps['processing'] = 'completed'
         steps['risk_detection'] = 'completed' if has_analysis_result else 'active'
+        steps['complete'] = 'pending'
 
     elif status == 'failed':
         steps['upload'] = 'completed'
@@ -104,6 +108,7 @@ def derive_pipeline_stages(
             idx = STAGE_ORDER.index(failed_at)
             if STAGE_ORDER.index(sid) > idx:
                 steps[sid] = 'pending'
+        steps['complete'] = 'pending'
 
     current = next(
         (sid for sid in STAGE_ORDER if steps[sid] in ('active', 'failed')),
@@ -112,6 +117,8 @@ def derive_pipeline_stages(
     if not current:
         if status == 'completed' and not has_proposal:
             current = 'proposal_generation'
+        elif status == 'completed' and has_proposal:
+            current = 'complete'
         elif status in ('completed', 'needs_review'):
             current = 'proposal_generation' if not has_proposal else None
         elif steps.get('proposal_generation') == 'pending' and steps.get('risk_detection') == 'completed':

@@ -23,9 +23,10 @@ async def schedule_document_analysis(
     owner_id: str,
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    force: bool = False,
 ) -> None:
     """Queue analysis unless already running for this document."""
-    if not settings.AI_AUTO_ANALYZE_ON_UPLOAD:
+    if not settings.AI_AUTO_ANALYZE_ON_UPLOAD and not force:
         return
     if document_id in _running:
         return

@@ -22,6 +22,7 @@ from ...core.models import (
     Membership,
     PaymentTransaction,
     Proposal,
+    Tender,
     Tenant,
     UsageLog,
     User,
@@ -391,6 +392,18 @@ async def user_detail(user_id: str, _admin: SuperAdmin, db=Depends(get_db)):
         .scalars()
         .all()
     )
+    tenders = (
+        (
+            await db.execute(
+                select(Tender)
+                .where(Tender.owner_id == user.id)
+                .order_by(Tender.created_at.desc())
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
     payments = (
         (
             await db.execute(
@@ -424,10 +437,12 @@ async def user_detail(user_id: str, _admin: SuperAdmin, db=Depends(get_db)):
             'uploads': [{'id': str(d.id), 'name': d.file_name, 'status': d.processing_status, 'created_at': d.created_at.isoformat() if d.created_at else None} for d in uploads],
             'analysis': [{'id': str(a.id), 'type': a.analysis_type, 'score': a.score, 'created_at': a.created_at.isoformat() if a.created_at else None} for a in analyses],
             'proposals': [{'id': str(p.id), 'title': p.title, 'status': p.status, 'created_at': p.created_at.isoformat() if p.created_at else None} for p in proposals],
+            'tenders': [{'id': str(t.id), 'title': t.title, 'status': t.status, 'created_at': t.created_at.isoformat() if t.created_at else None} for t in tenders],
             'payments': [{'id': str(p.id), 'provider': p.provider, 'amount': p.amount, 'currency': p.currency, 'status': p.status, 'created_at': p.created_at.isoformat() if p.created_at else None} for p in payments],
             'activity_timeline': [{'id': str(t.id), 'action': t.action, 'resource_type': t.resource_type, 'created_at': t.created_at.isoformat() if t.created_at else None} for t in timeline],
             'usage': {
                 'uploads': len(uploads),
+                'tenders': len(tenders),
                 'analysis': len(analyses),
                 'proposals': len(proposals),
                 'payments': len(payments),
@@ -819,6 +834,7 @@ async def list_platform_uploads(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
+    user_filter: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     page: int = Query(1, ge=1),
     db=Depends(get_db),
@@ -850,6 +866,9 @@ async def list_platform_uploads(
         q = q.where(Document.processing_status == status)
     if user_id:
         q = q.where(Document.owner_id == user_id)
+    if user_filter:
+        term = f'%{user_filter.strip().lower()}%'
+        q = q.where(func.lower(func.coalesce(User.email, '')).like(term))
     total = await db.scalar(select(func.count()).select_from(q.subquery())) or 0
     result = await db.execute(q.order_by(Document.created_at.desc()).offset((page - 1) * limit).limit(limit))
     rows: list[dict] = []
@@ -997,7 +1016,7 @@ async def patch_billing_pricing(
     if not isinstance(plans, list) or not plans:
         raise HTTPException(status_code=400, detail='plans must be a non-empty array')
     seen_ids = set()
-    active_yearly_prices = set()
+    active_monthly_prices = set()
     for p in plans:
         if not isinstance(p, dict):
             raise HTTPException(status_code=400, detail='Invalid plan payload')
@@ -1008,14 +1027,15 @@ async def patch_billing_pricing(
         is_active = bool(p.get('active', True))
         monthly = p.get('monthly_inr')
         yearly = p.get('yearly_inr')
-        if monthly not in (None, 0):
-            raise HTTPException(status_code=400, detail='TenderIQ Lite supports yearly billing only')
-        if is_active and yearly in (None, 0):
-            raise HTTPException(status_code=400, detail='Active plans require yearly_inr')
-        if is_active and yearly is not None:
-            if yearly in active_yearly_prices:
-                raise HTTPException(status_code=400, detail='Pricing conflict: duplicate yearly_inr')
-            active_yearly_prices.add(yearly)
+        if is_active and monthly in (None, 0):
+            raise HTTPException(status_code=400, detail='Active plans require monthly_inr')
+        if is_active and monthly is not None:
+            if monthly in active_monthly_prices:
+                raise HTTPException(status_code=400, detail='Pricing conflict: duplicate monthly_inr')
+            active_monthly_prices.add(monthly)
+        # Admin layer uses monthly-only pricing; yearly is ignored for compatibility.
+        if yearly not in (None, 0):
+            raise HTTPException(status_code=400, detail='Admin billing management is monthly-only')
         if p.get('upload_limit') is not None and int(p.get('upload_limit') or 0) < 1:
             raise HTTPException(status_code=400, detail='upload_limit must be >= 1')
         if p.get('expiry_period_days') is not None and int(p.get('expiry_period_days') or 0) < 30:
@@ -1053,6 +1073,7 @@ async def analytics_user_search(
     upload_counts: dict[str, int] = {}
     analysis_counts: dict[str, int] = {}
     proposal_counts: dict[str, int] = {}
+    tender_counts: dict[str, int] = {}
     payment_counts: dict[str, int] = {}
     activity_counts: dict[str, int] = {}
 
@@ -1084,6 +1105,15 @@ async def analytics_user_search(
         ).all()
         proposal_counts = {str(uid): int(cnt or 0) for uid, cnt in proposal_rows if uid}
 
+        tender_rows = (
+            await db.execute(
+                select(Tender.owner_id, func.count(Tender.id))
+                .where(Tender.owner_id.in_(user_ids))
+                .group_by(Tender.owner_id)
+            )
+        ).all()
+        tender_counts = {str(uid): int(cnt or 0) for uid, cnt in tender_rows if uid}
+
         payment_rows = (
             await db.execute(
                 select(PaymentTransaction.user_id, func.count(PaymentTransaction.id))
@@ -1111,6 +1141,7 @@ async def analytics_user_search(
                 'email': u.email,
                 'name': u.name,
                 'uploads': upload_counts.get(key, 0),
+                'tenders': tender_counts.get(key, 0),
                 'analysis': analysis_counts.get(key, 0),
                 'proposals': proposal_counts.get(key, 0),
                 'payments': payment_counts.get(key, 0),

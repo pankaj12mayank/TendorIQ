@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { authenticatedFetch } from '@/lib/api-fetch';
-import { unwrapData } from '@/lib/api-envelope';
+import { parseApiErrorMessage, unwrapData } from '@/lib/api-envelope';
 
 export interface ProposalSection {
   section_id: string;
@@ -50,10 +50,8 @@ export function useGenerateProposal(tenderId?: string) {
         body: JSON.stringify(opts ?? {}),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(
-          (err as { error?: { message?: string } })?.error?.message ?? 'Generation failed'
-        );
+        const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        throw new Error(parseApiErrorMessage(err) || 'Generation failed');
       }
       return unwrapData(await res.json()) as TenderProposal;
     },
@@ -67,7 +65,10 @@ export async function downloadProposalPdf(proposalId: string): Promise<void> {
   const res = await authenticatedFetch(`/api/v1/proposals/${proposalId}/export/pdf`, {
     method: 'POST',
   });
-  if (!res.ok) throw new Error('PDF export failed');
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(parseApiErrorMessage(err) || 'PDF export failed');
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -86,5 +87,8 @@ export async function autosaveProposal(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error('Autosave failed');
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    throw new Error(parseApiErrorMessage(err) || 'Autosave failed');
+  }
 }

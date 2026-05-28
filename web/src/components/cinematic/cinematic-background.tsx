@@ -50,7 +50,7 @@ export function CinematicBackground({
         animate={
           interactive
             ? { x: mouse.x * 2, y: mouse.y * 1.5 }
-            : { x: [0, 30, 0], y: [0, 20, 0] }
+            : { x: [0, 30], y: [0, 20] }
         }
         transition={{ type: 'spring', damping: 30, stiffness: 50 }}
       />
@@ -65,7 +65,7 @@ export function CinematicBackground({
         animate={
           interactive
             ? { x: -mouse.x * 1.5, y: -mouse.y * 2 }
-            : { x: [0, -25, 0], y: [0, -15, 0] }
+            : { x: [0, -25], y: [0, -15] }
         }
         transition={{ type: 'spring', damping: 30, stiffness: 50 }}
       />

@@ -220,3 +220,7 @@ class SecureFileHandler:
 
 
 secure_file_handler = SecureFileHandler()
+
+
+def get_secure_file_handler() -> SecureFileHandler:
+    return secure_file_handler

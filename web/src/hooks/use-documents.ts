@@ -113,7 +113,11 @@ export function useDocumentsApi() {
       );
 
       for (const id of documentIds) {
-        store.updateDocument(id, { processing_status: 'retrying', retry_count: 0 });
+        const row = store.documents.find((d) => d.id === id);
+        store.updateDocument(id, {
+          processing_status: 'retrying',
+          retry_count: (row?.retry_count ?? 0) + 1,
+        });
       }
 
       return res;

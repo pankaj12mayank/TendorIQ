@@ -52,7 +52,9 @@ export function BillingPanel() {
 
   useEffect(() => {
     void initialize();
-    void fetchPaymentConfig().then((c) => setRazorpayReady(c.razorpay_enabled));
+    void fetchPaymentConfig()
+      .then((c) => setRazorpayReady(c.razorpay_enabled))
+      .catch(() => setRazorpayReady(false));
   }, [initialize]);
 
   useEffect(() => {

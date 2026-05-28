@@ -43,11 +43,16 @@ class ApiClient {
   }
 
   private buildUrl(endpoint: string, params?: Record<string, string | number | boolean>): string {
-    const url = new URL(`${this.baseUrl}${endpoint}`);
+    const raw = `${this.baseUrl}${endpoint}`;
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const url = new URL(raw, base);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         url.searchParams.append(key, String(value));
       });
+    }
+    if (!this.baseUrl) {
+      return `${url.pathname}${url.search}`;
     }
     return url.toString();
   }

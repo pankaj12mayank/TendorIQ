@@ -98,8 +98,9 @@ export function AppSidebar() {
                 const isActive = moduleParam
                   ? pathname.startsWith('/dashboard/admin') &&
                     searchParams.get('module') === moduleParam
-                  : pathname === baseHref ||
-                    (baseHref !== '/dashboard' && pathname.startsWith(`${baseHref}/`));
+                  : baseHref === '/dashboard'
+                    ? pathname === '/dashboard'
+                    : pathname === baseHref || pathname.startsWith(`${baseHref}/`);
                 const Icon = item.icon;
                 return (
                   <li key={item.href}>

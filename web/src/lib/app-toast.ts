@@ -3,7 +3,15 @@ import { toast } from 'sonner';
 const DEFAULT_DURATION_MS = 4200;
 
 function normalizeMessage(message: string): string {
-  return message.trim().replace(/\s+/g, ' ');
+  const clean = message.trim().replace(/\s+/g, ' ');
+  if (!clean) return 'Something went wrong. Please try again.';
+  if (/Failed to construct 'URL'|Invalid URL/i.test(clean)) {
+    return 'Could not connect to the server. Please refresh and try again.';
+  }
+  if (/NetworkError|fetch failed|Cannot reach API|connection/i.test(clean)) {
+    return 'Unable to reach the server right now. Please try again in a moment.';
+  }
+  return clean;
 }
 
 export const appToast = {

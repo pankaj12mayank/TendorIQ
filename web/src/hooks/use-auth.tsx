@@ -267,10 +267,6 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         let message = parseApiErrorMessage(err) || 'Login failed';
-        if (res.status === 401) {
-          message +=
-            ' — Dev accounts: see .tenderiq/owner-account.txt (run run.bat once if missing).';
-        }
         if (res.status === 503 || res.status === 502) {
           message = 'API is not running. Start with run.bat, then try again.';
         }

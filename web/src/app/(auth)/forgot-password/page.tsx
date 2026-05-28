@@ -14,14 +14,22 @@ import { requestPasswordReset } from '@/lib/auth-api';
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
 
   async function handleReset(e: React.FormEvent) {
     e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      appToast.error('Email is required');
+      return;
+    }
     setSubmitting(true);
     try {
-      await requestPasswordReset(email);
+      await requestPasswordReset(normalizedEmail);
+      setSent(true);
       appToast.success('If this account exists, reset email has been sent.');
     } catch (err) {
+      setSent(false);
       appToast.error(err instanceof Error ? err.message : 'Failed to request reset');
     } finally {
       setSubmitting(false);
@@ -52,6 +60,11 @@ export default function ForgotPasswordPage() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? 'Sending...' : 'Send reset link'}
             </Button>
+            {sent && (
+              <p className="text-xs text-muted-foreground">
+                Reset link sent (if account exists). Check inbox/spam.
+              </p>
+            )}
           </form>
           <Button asChild variant="outline" className="w-full">
             <Link href="/sign-in">

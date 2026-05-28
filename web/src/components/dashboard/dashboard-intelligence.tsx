@@ -16,7 +16,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-import { PageHeader, Breadcrumbs } from '@/components/design-system/page-header';
 import { KpiCard } from '@/components/design-system/kpi-card';
 import { AiProcessingPipeline } from '@/components/design-system/ai-pipeline';
 import {
@@ -186,20 +185,10 @@ export function DashboardIntelligence() {
     );
 
   return (
-    <div className="space-y-8 app-page">
-      <PageHeader
-        title="Operations"
-        description="Live pipeline state, users, and platform metrics from the database."
-        breadcrumbs={
-          <Breadcrumbs
-            items={[
-              { label: 'Home', href: ROUTES.dashboard },
-              { label: 'Operations' },
-            ]}
-          />
-        }
-        actions={<DashboardQuickActions />}
-      />
+    <div className="space-y-5 app-page">
+      <div className="flex items-center justify-end">
+        <DashboardQuickActions />
+      </div>
 
       {/* Admin overview */}
       {overview.isLoading ? (
