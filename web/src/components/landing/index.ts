@@ -5,7 +5,6 @@ export { HeroSection } from './hero-section';
 export { SocialProof } from './social-proof';
 export { FeaturesSection } from './features-section';
 export { AIWorkflowSection } from './ai-workflow-section';
-export { DemoPreviewSection } from './demo-preview-section';
 export { WorkflowTutorialSection } from './workflow-tutorial-section';
 export { PricingSection } from './pricing-section';
 export { TestimonialsSection } from './testimonials-section';

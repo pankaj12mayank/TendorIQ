@@ -44,15 +44,14 @@ type Tab =
   | 'overview'
   | 'owner'
   | 'users'
-  | 'billing'
   | 'payments'
   | 'pricing'
-  | 'cms'
   | 'ai'
+  | 'cms'
   | 'smtp'
   | 'uploads'
   | 'analytics';
-type UserStatusFilter = 'all' | 'active' | 'inactive' | 'deleted';
+type UserStatusFilter = 'all' | 'active' | 'inactive';
 
 function JsonEditor({
   label,
@@ -132,7 +131,6 @@ export default function AdminDashboardPage() {
     loadUserDetail,
     updateUserStatus,
     deleteUser,
-    restoreUser,
     loadOwnerProfile,
     saveOwnerProfile,
     uploadOwnerAsset,
@@ -151,7 +149,6 @@ export default function AdminDashboardPage() {
 
   const [pricingJson, setPricingJson] = useState('');
   const [aiJson, setAiJson] = useState('');
-  const [demoJson, setDemoJson] = useState('');
   const [smtp, setSmtp] = useState({
     host: '',
     port: 587,
@@ -198,7 +195,6 @@ export default function AdminDashboardPage() {
     if (!s) return;
     setPricingJson(JSON.stringify(s.pricing ?? {}, null, 2));
     setAiJson(JSON.stringify(s.ai_defaults ?? {}, null, 2));
-    setDemoJson(JSON.stringify(s.demo_limits ?? {}, null, 2));
   };
 
   const loadUploadList = useCallback(async () => {
@@ -231,9 +227,7 @@ export default function AdminDashboardPage() {
       limit: Number(pagination.limit ?? prev.limit),
     }));
     let rows = out.rows;
-    if (userStatusFilter === 'deleted') {
-      rows = rows.filter((u) => u.status === 'deleted');
-    } else if (userStatusFilter === 'all') {
+    if (userStatusFilter === 'all') {
       rows = rows;
     } else {
       rows = rows.filter((u) => u.status === userStatusFilter);
@@ -249,29 +243,6 @@ export default function AdminDashboardPage() {
     setUsersPage(1);
   }, [userSearch, userStatusFilter]);
 
-  useEffect(() => {
-    if (loading || tab !== 'users') return;
-    void fetchUsers();
-  }, [loading, tab, fetchUsers]);
-
-  useEffect(() => {
-    if (loading || tab !== 'payments') return;
-    void loadPayments();
-  }, [loading, tab, loadPayments]);
-
-  const saveJsonSection = async (
-    section: keyof PlatformSettings,
-    raw: string
-  ) => {
-    try {
-      const data = JSON.parse(raw) as Record<string, unknown>;
-      await saveSection(section, data);
-      appToast.success(`${section} settings saved.`);
-    } catch {
-      appToast.error('Invalid JSON. Please fix formatting and try again.');
-    }
-  };
-
   const loadPayments = useCallback(async () => {
     const hist = (await loadPaymentHistory({
       page: paymentPage,
@@ -282,15 +253,24 @@ export default function AdminDashboardPage() {
     setPaymentHistory(hist);
   }, [loadPaymentHistory, paymentPage, paymentProviderFilter, paymentStatusFilter]);
 
+  useEffect(() => {
+    if (loading || tab !== 'users') return;
+    void fetchUsers();
+  }, [loading, tab, fetchUsers]);
+
+  useEffect(() => {
+    if (loading || tab !== 'payments') return;
+    void loadPayments();
+  }, [loading, tab, loadPayments]);
+
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'owner', label: 'Owner' },
     { id: 'users', label: 'Users' },
-    { id: 'billing', label: 'Billing' },
     { id: 'payments', label: 'Payments' },
     { id: 'pricing', label: 'Pricing' },
+    { id: 'ai', label: 'AI Settings' },
     { id: 'cms', label: 'CMS Control' },
-    { id: 'ai', label: 'AI defaults' },
     { id: 'smtp', label: 'SMTP' },
     { id: 'uploads', label: 'Uploads' },
     { id: 'analytics', label: 'Analytics' },
@@ -301,7 +281,7 @@ export default function AdminDashboardPage() {
       <div className="mx-auto w-full max-w-7xl space-y-6 app-section">
         <PageHeader
           title="Platform admin"
-          description="Users, pricing, AI defaults, landing CMS, and uploads. Super admin only."
+          description="Manage users, pricing, landing content, payments, and platform operations."
         />
 
         <div
@@ -433,7 +413,7 @@ export default function AdminDashboardPage() {
                 </Button>
               </div>
               <div className="mb-3 flex flex-wrap gap-2">
-                {(['all', 'active', 'inactive', 'deleted'] as UserStatusFilter[]).map((chip) => (
+                {(['all', 'active', 'inactive'] as UserStatusFilter[]).map((chip) => (
                   <Button
                     key={chip}
                     size="sm"
@@ -446,9 +426,7 @@ export default function AdminDashboardPage() {
                       ? 'All'
                       : chip === 'active'
                         ? 'Active'
-                        : chip === 'inactive'
-                          ? 'Inactive'
-                          : 'Deleted'}
+                          : 'Inactive'}
                   </Button>
                 ))}
               </div>
@@ -463,7 +441,6 @@ export default function AdminDashboardPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={u.status === 'deleted'}
                         onClick={async () => {
                           const next = u.status === 'active' ? 'inactive' : 'active';
                           await updateUserStatus(u.id, next);
@@ -473,36 +450,22 @@ export default function AdminDashboardPage() {
                       >
                         {u.status === 'active' ? 'Suspend' : 'Activate'}
                       </Button>
-                      {u.status === 'deleted' ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            await restoreUser(u.id);
-                            await fetchUsers();
-                            appToast.success('User restored.');
-                          }}
-                        >
-                          Restore
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={async () => {
-                            if (!confirm(`Delete user ${u.email}? You can restore later.`)) return;
-                            await deleteUser(u.id);
-                            await fetchUsers();
-                            if (selectedUserId === u.id) {
-                              setSelectedUserId(null);
-                              setSelectedUserDetail(null);
-                            }
-                            appToast.success('User soft deleted.');
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={async () => {
+                          if (!confirm(`Permanently delete user ${u.email}? This cannot be undone.`)) return;
+                          await deleteUser(u.id);
+                          await fetchUsers();
+                          if (selectedUserId === u.id) {
+                            setSelectedUserId(null);
+                            setSelectedUserDetail(null);
+                          }
+                          appToast.success('User permanently deleted.');
+                        }}
+                      >
+                        Delete
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -613,53 +576,56 @@ export default function AdminDashboardPage() {
         {!loading && tab === 'pricing' && (
           <Card id="admin-panel-pricing" role="tabpanel" aria-labelledby="admin-tab-pricing">
             <CardHeader>
-              <CardTitle>Pricing plans</CardTitle>
+              <CardTitle>Pricing</CardTitle>
               <CardDescription>
-                JSON: plans with id, monthly_inr, upload_limit, expiry_period_days, features. Payment gateways use these
-                amounts.
+                Keep one active plan. Amounts use USD only.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <JsonEditor
                 label="Pricing"
-                help="Use plans[] with unique id and monthly_inr. Set active=true/false and upload_limit per plan."
+                help="Use plans[] with one active plan. Set monthly_usd, upload_limit, and expiry_period_days."
                 value={pricingJson}
                 onChange={setPricingJson}
                 saving={saving}
                 minHeight="min-h-[300px]"
-                onSave={() => saveJsonSection('pricing', pricingJson)}
-              />
-              <JsonEditor
-                label="Demo limits"
-                help="Fallback quotas for platform demo/testing buckets."
-                value={demoJson}
-                onChange={setDemoJson}
-                saving={saving}
-                onSave={() => saveJsonSection('demo_limits', demoJson)}
+                onSave={async () => {
+                  try {
+                    const parsed = JSON.parse(pricingJson) as Record<string, unknown>;
+                    await saveBillingPricing(parsed);
+                    appToast.success('Pricing updated.');
+                  } catch (e) {
+                    appToast.error(e instanceof Error ? e.message : 'Pricing update failed');
+                  }
+                }}
               />
             </CardContent>
           </Card>
         )}
 
-        {!loading && tab === 'billing' && (
-          <Card id="admin-panel-billing" role="tabpanel" aria-labelledby="admin-tab-billing">
+        {!loading && tab === 'ai' && (
+          <Card id="admin-panel-ai" role="tabpanel" aria-labelledby="admin-tab-ai">
             <CardHeader>
-              <CardTitle>Billing management</CardTitle>
-              <CardDescription>Monthly plans only with upload limits and expiry periods.</CardDescription>
+              <CardTitle>AI settings</CardTitle>
+              <CardDescription>
+                Manage default provider/model values for platform-wide AI operations.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-5">
               <JsonEditor
-                label="Billing pricing"
-                help="Use monthly_inr only. Set upload_limit and expiry_period_days per active plan."
-                value={pricingJson}
-                onChange={setPricingJson}
+                label="AI settings"
+                help="Edit ai_defaults JSON and save."
+                value={aiJson}
+                onChange={setAiJson}
+                saving={saving}
+                minHeight="min-h-[260px]"
                 onSave={async () => {
                   try {
-                    const parsed = JSON.parse(pricingJson) as Record<string, unknown>;
-                    await saveBillingPricing(parsed);
-                    appToast.success('Billing pricing updated.');
+                    const parsed = JSON.parse(aiJson) as Record<string, unknown>;
+                    await saveSection('ai_defaults', parsed);
+                    appToast.success('AI settings updated.');
                   } catch (e) {
-                    appToast.error(e instanceof Error ? e.message : 'Billing update failed');
+                    appToast.error(e instanceof Error ? e.message : 'AI settings update failed');
                   }
                 }}
               />
@@ -766,7 +732,7 @@ export default function AdminDashboardPage() {
                         <CardContent className="pt-4 text-sm">
                           <p className="text-muted-foreground">Revenue</p>
                           <p className="text-xl font-semibold">
-                            ₹{Number((paymentHistory as any).cards?.total_revenue ?? 0).toLocaleString('en-IN')}
+                            ${Number((paymentHistory as any).cards?.total_revenue ?? 0).toLocaleString('en-US')}
                           </p>
                         </CardContent>
                       </Card>
@@ -787,7 +753,7 @@ export default function AdminDashboardPage() {
                       {(((paymentHistory as any).data ?? []) as Array<any>).map((p) => (
                         <li key={String(p.id)} className="flex items-center justify-between gap-2 p-2">
                           <span>
-                            {p.provider} · {p.plan || '—'} · ₹{Number(p.amount || 0).toLocaleString('en-IN')}
+                            {p.provider} · {p.plan || '—'} · ${Number(p.amount || 0).toLocaleString('en-US')}
                           </span>
                           <span className="text-muted-foreground">{p.status}</span>
                         </li>
@@ -827,24 +793,6 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {!loading && tab === 'ai' && (
-          <Card id="admin-panel-ai" role="tabpanel" aria-labelledby="admin-tab-ai">
-            <CardHeader>
-              <CardTitle>AI defaults</CardTitle>
-              <CardDescription>Platform-wide hints: default_provider, default_model, etc.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <JsonEditor
-                label="AI defaults"
-                help="Set fallback provider/model/style/tone used when user-level preferences are missing."
-                value={aiJson}
-                onChange={setAiJson}
-                saving={saving}
-                onSave={() => saveJsonSection('ai_defaults', aiJson)}
-              />
-            </CardContent>
-          </Card>
-        )}
 
         {!loading && tab === 'smtp' && (
           <Card id="admin-panel-smtp" role="tabpanel" aria-labelledby="admin-tab-smtp">
@@ -1071,7 +1019,7 @@ export default function AdminDashboardPage() {
                 <Card>
                   <CardContent className="pt-4 text-sm">
                     <p className="text-muted-foreground">Revenue</p>
-                    <p className="text-xl font-semibold">₹{Number(usage?.revenue ?? 0).toLocaleString('en-IN')}</p>
+                    <p className="text-xl font-semibold">${Number(usage?.revenue ?? 0).toLocaleString('en-US')}</p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -1095,6 +1043,11 @@ export default function AdminDashboardPage() {
                 />
                 <Button
                   onClick={async () => {
+                    if (!analyticsQuery.trim()) {
+                      setAnalyticsRows([]);
+                      appToast.error('Enter a user name or email to search.');
+                      return;
+                    }
                     const res = (await searchAnalyticsUser(analyticsQuery)) as {
                       data?: Record<string, unknown>[];
                     };

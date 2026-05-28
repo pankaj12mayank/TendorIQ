@@ -180,16 +180,14 @@ def _map_db_user(
     membership_role: Optional[str] = None,
 ) -> dict:
     role = membership_role or (u.role if u.role in MEMBERSHIP_ROLES else 'member')
-    prefs = u.preferences if isinstance(u.preferences, dict) else {}
-    is_soft_deleted = bool(prefs.get('soft_deleted'))
-    status_value = 'deleted' if is_soft_deleted else 'active'
+    status_value = 'active'
     return {
         'id': str(u.id),
         'name': u.name or u.email.split('@')[0],
         'email': u.email,
         'role': role,
         'membership_role': role,
-        'status': status_value,
+        'status': status_value if u.last_login_at else 'inactive',
         'organization': tenant_name,
         'lastActive': (u.last_login_at or u.updated_at or datetime.now(timezone.utc)).isoformat(),
         'createdAt': (u.created_at or datetime.now(timezone.utc)).isoformat(),
@@ -254,18 +252,12 @@ async def list_users(
     )
     data: list[dict] = []
     for u, mem, tenant in rows:
-        prefs = u.preferences if isinstance(u.preferences, dict) else {}
-        is_soft_deleted = bool(prefs.get('soft_deleted'))
-        if is_soft_deleted and not include_deleted:
-            continue
         row = _map_db_user(
             u,
             tenant_name=(tenant.name if tenant else '—'),
             membership_role=(mem.role if mem else None),
         )
         row['plan'] = (tenant.plan if tenant else 'free')
-        if row['status'] != 'deleted':
-            row['status'] = 'active' if u.last_login_at else 'inactive'
         data.append(row)
     return {
         'success': True,
@@ -289,9 +281,6 @@ async def patch_user_status(
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail='User not found')
-    prefs = user.preferences if isinstance(user.preferences, dict) else {}
-    if bool(prefs.get('soft_deleted')):
-        raise HTTPException(status_code=400, detail='Restore deleted user before changing status')
     if body.status == 'inactive':
         user.last_login_at = None
     else:
@@ -1017,6 +1006,7 @@ async def patch_billing_pricing(
         raise HTTPException(status_code=400, detail='plans must be a non-empty array')
     seen_ids = set()
     active_monthly_prices = set()
+    active_count = 0
     for p in plans:
         if not isinstance(p, dict):
             raise HTTPException(status_code=400, detail='Invalid plan payload')
@@ -1025,21 +1015,29 @@ async def patch_billing_pricing(
             raise HTTPException(status_code=400, detail='Duplicate or missing plan id')
         seen_ids.add(pid)
         is_active = bool(p.get('active', True))
-        monthly = p.get('monthly_inr')
-        yearly = p.get('yearly_inr')
+        monthly = p.get('monthly_usd')
+        yearly = p.get('yearly_usd')
+        if monthly is None:
+            monthly = p.get('monthly_inr')
+        if yearly is None:
+            yearly = p.get('yearly_inr')
         if is_active and monthly in (None, 0):
-            raise HTTPException(status_code=400, detail='Active plans require monthly_inr')
+            raise HTTPException(status_code=400, detail='Active plans require monthly_usd')
         if is_active and monthly is not None:
+            active_count += 1
             if monthly in active_monthly_prices:
-                raise HTTPException(status_code=400, detail='Pricing conflict: duplicate monthly_inr')
+                raise HTTPException(status_code=400, detail='Pricing conflict: duplicate monthly_usd')
             active_monthly_prices.add(monthly)
-        # Admin layer uses monthly-only pricing; yearly is ignored for compatibility.
+        # Admin layer uses monthly-only pricing; yearly is blocked.
         if yearly not in (None, 0):
             raise HTTPException(status_code=400, detail='Admin billing management is monthly-only')
         if p.get('upload_limit') is not None and int(p.get('upload_limit') or 0) < 1:
             raise HTTPException(status_code=400, detail='upload_limit must be >= 1')
         if p.get('expiry_period_days') is not None and int(p.get('expiry_period_days') or 0) < 30:
             raise HTTPException(status_code=400, detail='expiry_period_days must be >= 30')
+    if active_count != 1:
+        raise HTTPException(status_code=400, detail='Exactly one active plan is required')
+    body['currency'] = 'USD'
     pricing = await patch_setting(db, 'pricing', body)
     return {'success': True, 'data': pricing}
 
@@ -1162,23 +1160,11 @@ async def delete_user(user_id: str, admin: SuperAdmin, db=Depends(get_db)):
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail='User not found')
-    prefs = user.preferences if isinstance(user.preferences, dict) else {}
-    prefs['soft_deleted'] = True
-    prefs['soft_deleted_at'] = datetime.now(timezone.utc).isoformat()
-    user.preferences = prefs
-    user.last_login_at = None
+    await db.delete(user)
     await db.commit()
-    return {'success': True, 'data': {'user_id': user_id, 'deleted': True, 'soft_deleted': True}}
+    return {'success': True, 'data': {'user_id': user_id, 'deleted': True, 'hard_deleted': True}}
 
 
 @router.post('/users/{user_id}/restore')
 async def restore_user(user_id: str, _admin: SuperAdmin, db=Depends(get_db)):
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail='User not found')
-    prefs = user.preferences if isinstance(user.preferences, dict) else {}
-    prefs.pop('soft_deleted', None)
-    prefs.pop('soft_deleted_at', None)
-    user.preferences = prefs
-    await db.commit()
-    return {'success': True, 'data': {'user_id': user_id, 'restored': True}}
+    raise HTTPException(status_code=410, detail='Restore not available for hard-deleted users')

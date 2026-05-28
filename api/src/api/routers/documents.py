@@ -249,6 +249,7 @@ async def list_documents(
     docs, total = await document_service.get_documents(
         db=db,
         tenant_id=UUID(current_user.tenant_id),
+        owner_id=None if current_user.is_super_admin() else UUID(current_user.user_id),
         search=search,
         statuses=statuses,
         file_types=file_types,
@@ -286,7 +287,9 @@ async def get_document_stats(
         raise HTTPException(status_code=400, detail='Tenant context required')
 
     stats = await document_service.get_document_stats(
-        db, UUID(current_user.tenant_id)
+        db,
+        UUID(current_user.tenant_id),
+        owner_id=None if current_user.is_super_admin() else UUID(current_user.user_id),
     )
 
     return DocumentStatsResponse(

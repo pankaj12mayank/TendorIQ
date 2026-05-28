@@ -32,7 +32,7 @@ router = APIRouter(
 
 class CreateRazorpayOrderBody(BaseModel):
     plan_id: str = Field(..., description='plan_free | plan_pro | starter | professional')
-    billing_interval: str = 'yearly'
+    billing_interval: str = 'monthly'
 
 
 class VerifyRazorpayBody(BaseModel):
@@ -40,7 +40,7 @@ class VerifyRazorpayBody(BaseModel):
     razorpay_payment_id: str
     razorpay_signature: str
     plan_id: Optional[str] = None
-    billing_interval: str = 'yearly'
+    billing_interval: str = 'monthly'
 
 
 @router.get('/config')
@@ -51,7 +51,7 @@ async def payments_config(_user: TenantUser):
         {
             'razorpay_enabled': razorpay_configured(),
             'razorpay_key_id': settings.RAZORPAY_KEY_ID if razorpay_configured() else None,
-            'currency': 'INR',
+            'currency': 'USD',
             'providers': ['razorpay'] if razorpay_configured() else [],
         }
     )
@@ -65,8 +65,8 @@ async def razorpay_create_order(
 ):
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Workspace context required')
-    if body.billing_interval != 'yearly':
-        raise HTTPException(status_code=400, detail='TenderIQ Lite supports yearly plans only')
+    if body.billing_interval != 'monthly':
+        raise HTTPException(status_code=400, detail='TenderIQ Lite supports monthly plans only')
     if not razorpay_configured():
         raise HTTPException(
             status_code=503,
@@ -108,23 +108,23 @@ async def razorpay_create_order(
 async def razorpay_plan_preview(
     plan_id: str,
     _user: TenantUser,
-    billing_interval: str = 'yearly',
+    billing_interval: str = 'monthly',
     db: AsyncSession = Depends(get_db),
 ):
     from ...core.platform.lite_settings import get_setting
 
     pricing = await get_setting(db, 'pricing')
     try:
-        if billing_interval != 'yearly':
-            raise ValueError('Yearly billing only')
+        if billing_interval != 'monthly':
+            raise ValueError('Monthly billing only')
         amount = plan_amount_paise(plan_id, billing_interval, pricing=pricing)
         return create_response(
             {
                 'plan_id': plan_id,
                 'billing_interval': billing_interval,
                 'amount_paise': amount,
-                'amount_display': f'₹{amount / 100:,.2f}',
-                'currency': 'INR',
+                'amount_display': f'${amount / 100:,.2f}',
+                'currency': 'USD',
             }
         )
     except ValueError as exc:
@@ -139,8 +139,8 @@ async def razorpay_verify_payment(
 ):
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Workspace context required')
-    if body.billing_interval != 'yearly':
-        raise HTTPException(status_code=400, detail='TenderIQ Lite supports yearly plans only')
+    if body.billing_interval != 'monthly':
+        raise HTTPException(status_code=400, detail='TenderIQ Lite supports monthly plans only')
     if not razorpay_configured():
         raise HTTPException(status_code=503, detail='Razorpay not configured')
 
@@ -210,7 +210,7 @@ async def razorpay_verify_payment(
                 order_id=body.razorpay_order_id,
                 payment_id=body.razorpay_payment_id,
                 amount=0,
-                currency='INR',
+                currency='USD',
                 plan=plan_id,
                 status='paid',
                 paid_at=datetime.now(timezone.utc),

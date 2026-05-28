@@ -239,7 +239,7 @@ async def dashboard_overview(_admin: SuperAdmin, db=Depends(get_db)):
                 'id': str(p.id),
                 'provider': p.provider,
                 'amount': float(p.amount or 0),
-                'currency': p.currency or 'INR',
+                'currency': p.currency or 'USD',
                 'plan': p.plan,
                 'status': p.status,
                 'user_email': user_email,

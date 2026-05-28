@@ -89,7 +89,7 @@ export function Navbar({
                   <Link href={ROUTES.signIn}>Log in</Link>
                 </Button>
                 <Button asChild className="btn-cinematic">
-                  <Link href={ROUTES.signUp}>Get started</Link>
+                  <Link href={ROUTES.signUp}>Start now</Link>
                 </Button>
               </>
             )}
@@ -138,7 +138,7 @@ export function Navbar({
                       <Link href={ROUTES.signIn}>Log in</Link>
                     </Button>
                     <Button asChild className="btn-cinematic w-full">
-                      <Link href={ROUTES.signUp}>Get started</Link>
+                      <Link href={ROUTES.signUp}>Start now</Link>
                     </Button>
                   </>
                 )}

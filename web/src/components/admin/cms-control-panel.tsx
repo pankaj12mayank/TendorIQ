@@ -71,7 +71,6 @@ export function CmsControlPanel() {
   const [faviconUrl, setFaviconUrl] = useState('');
   const [heroImageUrl, setHeroImageUrl] = useState('');
   const [brandName, setBrandName] = useState('');
-  const [authTagline, setAuthTagline] = useState('');
   const [workflowTitle, setWorkflowTitle] = useState('');
   const [workflowSubtitle, setWorkflowSubtitle] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
@@ -104,7 +103,6 @@ export function CmsControlPanel() {
     setFaviconUrl(String(images.favicon_url ?? ''));
     setHeroImageUrl(String(images.hero_image_url ?? ''));
     setBrandName(String(images.brand_name ?? 'TenderIQ'));
-    setAuthTagline(String(images.auth_tagline ?? ''));
     setWorkflowTitle(String(workflow.title ?? ''));
     setWorkflowSubtitle(String(workflow.subtitle ?? ''));
     setSupportEmail(String((draft.contact ?? {}).support_email ?? ''));
@@ -235,7 +233,6 @@ export function CmsControlPanel() {
             favicon_url: faviconUrl,
             hero_image_url: heroImageUrl,
             brand_name: brandName,
-            auth_tagline: authTagline,
           },
           workflow_tutorial: {
             title: workflowTitle,
@@ -296,7 +293,7 @@ export function CmsControlPanel() {
       <CardHeader>
         <CardTitle>CMS Control</CardTitle>
         <CardDescription>
-          Edit hero, features, FAQ, pricing copy, CTA, and branding images. Save draft then publish.
+          Edit only live landing modules. Save draft first, then publish.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -517,10 +514,6 @@ export function CmsControlPanel() {
           <div className="space-y-2">
             <Label>Brand name</Label>
             <Input value={brandName} onChange={(e) => setBrandName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Auth tagline</Label>
-            <Input value={authTagline} onChange={(e) => setAuthTagline(e.target.value)} />
           </div>
         </div>
 

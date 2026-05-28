@@ -69,7 +69,10 @@ if ($authCode -ne 0) {
 Write-Host '[6/7] Auth HTTP flow (if API running)...' -ForegroundColor Cyan
 Push-Location $ApiDir
 $env:DOTENV_PATH = $rootEnv
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & $VenvPython (Join-Path $ApiDir 'scripts\auth_flow_check.py') 2>$null
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0) {
     Write-Host '      Auth HTTP check skipped (start run.bat to test live API)' -ForegroundColor DarkGray
 }

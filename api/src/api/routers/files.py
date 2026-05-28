@@ -510,6 +510,7 @@ async def list_files(
     docs, total = await file_service.list_documents(
         db=db,
         tenant_id=UUID(current_user.tenant_id),
+        owner_id=None if current_user.is_super_admin() else UUID(current_user.user_id),
         tender_id=UUID(tender_id) if tender_id else None,
         file_type=file_type,
         is_archived=archived,

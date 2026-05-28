@@ -42,13 +42,13 @@ router = APIRouter(
 class PlanUpgradeRequest(BaseModel):
     plan: Optional[str] = None
     plan_id: Optional[str] = None
-    billing_cycle: str = 'yearly'
-    billing_interval: Optional[str] = 'yearly'
+    billing_cycle: str = 'monthly'
+    billing_interval: Optional[str] = 'monthly'
 
 
 class SubscriptionChangeRequest(BaseModel):
     plan_id: str
-    billing_interval: str = 'yearly'
+    billing_interval: str = 'monthly'
 
 
 class CancelSubscriptionRequest(BaseModel):

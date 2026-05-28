@@ -3,21 +3,16 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
-  ArrowRight,
   CloudUpload,
   FileText,
-  Loader2,
-  RefreshCw,
   Trash2,
   TrendingUp,
   Users,
   DollarSign,
   AlertTriangle,
-  Sparkles,
 } from 'lucide-react';
 
 import { KpiCard } from '@/components/design-system/kpi-card';
-import { AiProcessingPipeline } from '@/components/design-system/ai-pipeline';
 import {
   DataTableShell,
   DataTable,
@@ -48,16 +43,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { ROUTES } from '@/lib/routes';
 import { appToast } from '@/lib/app-toast';
 import {
   useDashboardOverview,
-  useDashboardPipeline,
   useDashboardRegisteredUsers,
   useDashboardTenders,
   useDashboardUserOptions,
   useDeleteDashboardTender,
-  type PipelineJob,
 } from '@/hooks/use-dashboard-intelligence';
 import type { StatusType } from '@/design-system/tokens';
 
@@ -68,35 +60,23 @@ function tenderStatusBadge(status: string): StatusType {
   return 'processing';
 }
 
-function docStatusBadge(status: string): StatusType {
-  const map: Record<string, StatusType> = {
-    uploaded: 'uploaded',
-    processing: 'processing',
-    retrying: 'retrying',
-    completed: 'completed',
-    failed: 'failed',
-    needs_review: 'needs_review',
-  };
-  return map[status] ?? 'processing';
-}
-
 function DashboardQuickActions() {
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <Button variant="outline" size="sm" asChild>
-        <Link href={ROUTES.analysis}>
+        <Link href="/dashboard/analysis">
           <FileText className="h-4 w-4" />
           Analysis
         </Link>
       </Button>
       <Button variant="outline" size="sm" asChild>
-        <Link href={ROUTES.proposal}>
+        <Link href="/dashboard/proposal">
           <TrendingUp className="h-4 w-4" />
           Proposals
         </Link>
       </Button>
       <Button size="sm" asChild>
-        <Link href={ROUTES.upload}>
+        <Link href="/dashboard/upload">
           <CloudUpload className="h-4 w-4" />
           Upload
         </Link>
@@ -105,53 +85,17 @@ function DashboardQuickActions() {
   );
 }
 
-function PipelineJobCard({ job }: { job: PipelineJob }) {
-  const p = job.pipeline;
-  return (
-    <div className="rounded-lg border border-border/60 p-4 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{job.document_name}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {job.owner_email}
-            {job.tender_title ? ` · ${job.tender_title}` : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {p.is_retrying && (
-            <StatusBadge status="retrying" label={`Retry ${p.retry_count}`} />
-          )}
-          <StatusBadge status={docStatusBadge(job.processing_status)} />
-        </div>
-      </div>
-      <AiProcessingPipeline
-        title=""
-        steps={p.stages}
-        animated={false}
-        className="!p-0 !bg-transparent border-0 shadow-none"
-      />
-      {p.is_failed && job.pipeline.stages.find((s) => s.status === 'failed')?.description && (
-        <p className="text-xs text-destructive">
-          {job.pipeline.stages.find((s) => s.status === 'failed')?.description}
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function DashboardIntelligence() {
   const [tenderPage, setTenderPage] = useState(1);
-  const [pipelinePage, setPipelinePage] = useState(1);
   const [tenderStatus, setTenderStatus] = useState<string>('all');
   const [tenderUserId, setTenderUserId] = useState<string>('all');
   const [userFilterSearch, setUserFilterSearch] = useState('');
   const [tenderSearch, setTenderSearch] = useState('');
   const [userStatus, setUserStatus] = useState<string>('all');
   const [userPlan, setUserPlan] = useState<string>('all');
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [overviewListTab, setOverviewListTab] = useState<'tenders' | 'users'>('tenders');
 
   const overview = useDashboardOverview();
-  const pipeline = useDashboardPipeline({ page: pipelinePage, limit: 8 });
   const userOptions = useDashboardUserOptions(userFilterSearch || undefined);
   const tenders = useDashboardTenders({
     page: tenderPage,
@@ -168,19 +112,13 @@ export function DashboardIntelligence() {
   });
   const deleteTender = useDeleteDashboardTender();
 
-  const jobs = pipeline.data?.jobs ?? [];
-  const activeJob =
-    jobs.find((j) => j.document_id === selectedJobId) ??
-    jobs.find((j) => !j.pipeline.is_terminal) ??
-    jobs[0];
-
   const planOptions = useMemo(() => {
     const plans = Object.keys(registered.data?.summary.by_plan ?? {});
     return plans.length ? plans : ['free'];
   }, [registered.data?.summary.by_plan]);
 
-  const formatMoney = (amount: number, currency = 'INR') =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
+  const formatMoney = (amount: number, currency = 'USD') =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
       amount
     );
 
@@ -252,7 +190,7 @@ export function DashboardIntelligence() {
                           {p.plan ?? '—'}
                         </DataTableCell>
                         <DataTableCell className="text-sm tabular-nums">
-                          {formatMoney(p.amount, p.currency || 'INR')}
+                          {formatMoney(p.amount, p.currency || 'USD')}
                         </DataTableCell>
                         <DataTableCell>
                           <StatusBadge
@@ -273,9 +211,24 @@ export function DashboardIntelligence() {
         </>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-3 space-y-6">
-          {/* Recent tenders */}
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant={overviewListTab === 'tenders' ? 'default' : 'outline'}
+            onClick={() => setOverviewListTab('tenders')}
+          >
+            Recent tenders
+          </Button>
+          <Button
+            size="sm"
+            variant={overviewListTab === 'users' ? 'default' : 'outline'}
+            onClick={() => setOverviewListTab('users')}
+          >
+            Registered users
+          </Button>
+        </div>
+        {overviewListTab === 'tenders' && (
           <DataTableShell
             title="Recent tenders"
             description="Paginated workspace tenders with filters"
@@ -429,8 +382,8 @@ export function DashboardIntelligence() {
               </>
             )}
           </DataTableShell>
-
-          {/* Registered users */}
+        )}
+        {overviewListTab === 'users' && (
           <Card>
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -528,105 +481,7 @@ export function DashboardIntelligence() {
               ) : null}
             </CardContent>
           </Card>
-        </div>
-
-        {/* Live AI pipeline */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="surface-card p-5">
-            <div className="flex items-center justify-between gap-2 mb-4">
-              <div className="flex items-center gap-2 text-primary">
-                <Sparkles className="h-4 w-4" />
-                <span className="text-sm font-semibold">Live AI pipeline</span>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Refresh pipeline"
-                onClick={() => void pipeline.refetch()}
-                disabled={pipeline.isFetching}
-              >
-                {pipeline.isFetching ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-            {pipeline.isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className="h-32 rounded-lg bg-muted/40 animate-pulse" />
-                ))}
-              </div>
-            ) : pipeline.isError ? (
-              <PremiumErrorState onRetry={() => void pipeline.refetch()} />
-            ) : jobs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent AI jobs.</p>
-            ) : (
-              <div className="space-y-4">
-                {activeJob && <PipelineJobCard job={activeJob} />}
-                {jobs.length > 1 && (
-                  <div className="space-y-1 border-t pt-3">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">All jobs</p>
-                    {jobs.map((job) => (
-                      <button
-                        key={job.document_id}
-                        type="button"
-                        onClick={() => setSelectedJobId(job.document_id)}
-                        className={`w-full flex items-center justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-muted/60 ${
-                          activeJob?.document_id === job.document_id ? 'bg-muted/80' : ''
-                        }`}
-                      >
-                        <span className="truncate flex-1">{job.document_name}</span>
-                        <StatusBadge status={docStatusBadge(job.processing_status)} showIcon={false} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {pipeline.data?.has_active && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Syncing every 8s while jobs are active
-                  </p>
-                )}
-                {(pipeline.data?.pagination.pages ?? 0) > 1 && (
-                  <Pagination className="justify-start">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          disabled={pipelinePage <= 1}
-                          onClick={() => setPipelinePage((p) => Math.max(1, p - 1))}
-                        />
-                      </PaginationItem>
-                      <PaginationItem>
-                        <PaginationLink isActive>
-                          {pipelinePage} / {pipeline.data?.pagination.pages ?? 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                      <PaginationItem>
-                        <PaginationNext
-                          disabled={pipelinePage >= (pipeline.data?.pagination.pages ?? 1)}
-                          onClick={() => setPipelinePage((p) => p + 1)}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="surface-card p-5">
-            <div className="flex items-center gap-2 text-primary mb-3">
-              <ArrowRight className="h-4 w-4" />
-              <span className="text-sm font-semibold">Platform</span>
-            </div>
-            <Button variant="outline" size="sm" className="w-full" asChild>
-              <Link href={ROUTES.admin}>Full admin console</Link>
-            </Button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-"""Razorpay checkout for Lite MVP (INR plans)."""
+"""Razorpay checkout for Lite MVP."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ except ImportError:
     razorpay = None  # type: ignore
     RAZORPAY_AVAILABLE = False
 
-# Amounts in paise (INR)
+# Amounts in minor units (USD cents).
 PLAN_AMOUNT_PAISE: dict[tuple[str, str], int] = {
     ('starter', 'monthly'): 99900,
     ('starter', 'yearly'): 999000,
@@ -74,7 +74,7 @@ def create_order(
     client = get_client()
     api_plan = normalize_plan_id(plan_id)
     amount = plan_amount_paise(plan_id, billing_interval, pricing=pricing)
-    currency = (getattr(settings, 'RAZORPAY_CURRENCY', None) or 'INR').upper()
+    currency = (getattr(settings, 'RAZORPAY_CURRENCY', None) or 'USD').upper()
     receipt = f'tiq_{tenant_id[:8]}_{api_plan}'[:40]
 
     order = client.order.create(

@@ -22,14 +22,14 @@ export function SubscriptionExpiredBanner() {
       <div className="flex gap-3">
         <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
         <div>
-          <p className="font-medium text-destructive">Plan expired — read-only access</p>
+          <p className="font-medium text-destructive">Your plan expired. Please renew to continue.</p>
           <p className="text-sm text-muted-foreground">
-            {access.reason || 'Renew or upgrade your plan to upload, analyze, and export again.'}
+            {access.reason || 'Renew your monthly subscription to upload, analyze, generate proposals, and export PDFs.'}
           </p>
         </div>
       </div>
       <Button asChild variant="destructive" size="sm" className="shrink-0">
-        <Link href={settingsTabHref('billing')}>Upgrade plan</Link>
+        <Link href={settingsTabHref('billing')}>Renew plan</Link>
       </Button>
     </div>
   );
@@ -51,12 +51,12 @@ export function SubscriptionGate({ children, allowWhenExpired = false }: Subscri
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8 text-center">
       <AlertTriangle className="h-10 w-10 text-destructive" />
-      <h2 className="text-lg font-semibold">Your plan has expired</h2>
+      <h2 className="text-lg font-semibold">Your plan expired. Please renew to continue.</h2>
       <p className="max-w-md text-sm text-muted-foreground">
-        {access.reason || 'You can still sign in, but product features are paused until you renew.'}
+        {access.reason || 'Analysis, uploads, proposal generation, and exports are paused until renewal.'}
       </p>
       <Button asChild>
-        <Link href={settingsTabHref('billing')}>Go to Billing</Link>
+        <Link href={settingsTabHref('billing')}>Renew monthly plan</Link>
       </Button>
     </div>
   );

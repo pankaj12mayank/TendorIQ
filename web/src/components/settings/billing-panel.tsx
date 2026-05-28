@@ -16,7 +16,7 @@ import {
   openRazorpayCheckout,
 } from '@/lib/razorpay-checkout';
 
-type BillingInterval = 'yearly';
+type BillingInterval = 'monthly';
 
 interface PlanCard {
   id: string;
@@ -24,6 +24,8 @@ interface PlanCard {
   description?: string;
   priceMonthlyInr?: number;
   priceAnnualInr?: number;
+  priceMonthlyUsd?: number;
+  priceAnnualUsd?: number;
   isDemo?: boolean;
   features?: Array<{ name: string; limit?: number | null }>;
   name?: string;
@@ -42,7 +44,7 @@ export function BillingPanel() {
     fetchPaymentHistory,
   } = useBillingApi();
   const { data: access, refetch: refetchAccess } = useSubscriptionAccess();
-  const [interval] = useState<BillingInterval>('yearly');
+  const [interval] = useState<BillingInterval>('monthly');
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
   const [razorpayReady, setRazorpayReady] = useState<boolean | null>(null);
   const [payments, setPayments] = useState<Array<any>>([]);
@@ -78,7 +80,7 @@ export function BillingPanel() {
   const handleUpgrade = useCallback(
     async (plan: PlanCard) => {
       if (plan.isDemo) {
-        appToast.info('You are on the free demo plan.');
+        appToast.info('This plan is not available.');
         return;
       }
       setPayingPlanId(plan.id);
@@ -111,7 +113,7 @@ export function BillingPanel() {
   const planList = (plans as unknown as PlanCard[]) ?? [];
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="w-full space-y-6">
       {access?.is_expired && (
         <Card className="border-destructive bg-destructive/5">
           <CardHeader>
@@ -127,7 +129,7 @@ export function BillingPanel() {
         <Card>
           <CardHeader>
             <CardTitle>Current subscription</CardTitle>
-            <CardDescription>Yearly plan with real-time usage status</CardDescription>
+            <CardDescription>Monthly plan with real-time usage status</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border p-3">
@@ -162,7 +164,7 @@ export function BillingPanel() {
           </CardContent>
         </Card>
       )}
-      <p className="text-xs text-muted-foreground">Yearly subscriptions only.</p>
+      <p className="text-xs text-muted-foreground">Monthly subscriptions only.</p>
 
       {razorpayReady === false && (
         <p className="text-sm text-amber-600">
@@ -175,13 +177,13 @@ export function BillingPanel() {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading plans…
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {planList.map((plan) => {
             if (plan.isDemo) return null;
             const price =
-              interval === 'yearly'
-                ? plan.priceAnnualInr ?? (plan.priceMonthlyInr ?? 0) * 10
-                : plan.priceMonthlyInr ?? 0;
+              interval === 'monthly'
+                ? plan.priceMonthlyUsd ?? plan.priceMonthlyInr ?? 0
+                : plan.priceMonthlyUsd ?? plan.priceMonthlyInr ?? 0;
             const isCurrent = currentSubscription?.plan === (plan.name ?? plan.displayName);
             return (
               <Card key={plan.id} className={plan.isDemo ? 'border-dashed' : ''}>
@@ -191,10 +193,10 @@ export function BillingPanel() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-2xl font-bold">
-                    {`₹${price.toLocaleString('en-IN')}`}
+                    {`$${price.toLocaleString('en-US')}`}
                     {(
                       <span className="text-sm font-normal text-muted-foreground">
-                        /yr
+                        /mo
                       </span>
                     )}
                   </p>
@@ -251,7 +253,10 @@ export function BillingPanel() {
                 <p className="text-muted-foreground">
                   {p.payment_date ? new Date(p.payment_date).toLocaleString() : '—'} · {p.provider} · {p.invoice}
                 </p>
-                <p>₹{Number(p.amount || 0).toLocaleString('en-IN')} {p.currency}</p>
+                <p>${Number(p.amount || 0).toLocaleString('en-US')} {p.currency}</p>
+                <p className="text-xs text-muted-foreground">
+                  Plan: {p.plan || '—'} · Expiry: {p.expiry ? new Date(p.expiry).toLocaleDateString() : '—'}
+                </p>
               </div>
             ))}
             {payments.length === 0 && <p className="text-sm text-muted-foreground">No payments found.</p>}

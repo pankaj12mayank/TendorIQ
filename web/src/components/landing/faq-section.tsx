@@ -33,7 +33,7 @@ const faqs = [
   {
     id: 6,
     question: 'Do you offer monthly plans?',
-    answer: 'TenderIQ Lite supports yearly subscriptions only for predictable procurement operations and renewal planning.',
+    answer: 'Yes. TenderIQ Lite supports monthly subscriptions.',
   },
 ];
 

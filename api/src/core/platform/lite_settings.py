@@ -27,44 +27,24 @@ SETTING_KEYS = (
 )
 
 DEFAULT_PRICING: dict[str, Any] = {
-    'currency': 'INR',
+    'currency': 'USD',
     'plans': [
-        {
-            'id': 'starter',
-            'name': 'Starter',
-            'description': 'Perfect for small teams getting started',
-            'monthly_inr': 999,
-            'yearly_inr': 9990,
-            'popular': False,
-            'features': [
-                '100 Documents/month',
-                '50 AI analyses/month',
-                'Email support',
-            ],
-        },
         {
             'id': 'professional',
             'name': 'Professional',
-            'description': 'For growing teams with advanced needs',
-            'monthly_inr': 2999,
-            'yearly_inr': 29990,
+            'description': 'Complete workflow for tender analysis and proposal generation',
+            'monthly_usd': 99,
+            'yearly_usd': None,
             'popular': True,
+            'active': True,
+            'upload_limit': 500,
+            'expiry_period_days': 30,
             'features': [
-                '500 Documents/month',
-                '200 AI analyses/month',
-                'Proposal generator',
+                '500 documents per cycle',
+                'AI analysis and risk detection',
+                'Proposal generator and PDF export',
                 'Priority support',
             ],
-        },
-        {
-            'id': 'enterprise',
-            'name': 'Enterprise',
-            'description': 'Custom limits and dedicated support',
-            'monthly_inr': None,
-            'yearly_inr': None,
-            'popular': False,
-            'contact_sales': True,
-            'features': ['Unlimited usage', 'SSO', 'Dedicated support'],
         },
     ],
 }
@@ -79,12 +59,12 @@ DEFAULT_AI_DEFAULTS: dict[str, Any] = {
 DEFAULT_LANDING: dict[str, Any] = {
     'meta': {
         'title': 'TenderIQ — AI Tender Analysis & Proposals',
-        'description': 'Upload RFPs, analyze risks with your AI key, and export proposal PDFs with yearly subscription plans.',
+        'description': 'Upload RFPs, analyze risks with your AI key, and export proposal PDFs with monthly subscription plans.',
     },
     'hero': {
-        'headline': 'Win More Tenders\nWith AI Intelligence',
+        'headline': 'AI Procurement Platform',
         'subheadline': 'Upload RFPs, extract risks and deadlines, and generate proposals in minutes.',
-        'cta_primary': 'Start Yearly Plan',
+        'cta_primary': 'Start Monthly Plan',
         'cta_secondary': 'See pricing',
     },
     'social_proof': {
@@ -105,8 +85,8 @@ DEFAULT_LANDING: dict[str, Any] = {
             'description': 'Draft sections from analysis, then export a branded PDF.',
         },
         {
-            'title': 'Yearly subscription',
-            'description': 'Use yearly plans with predictable limits and renewal.',
+            'title': 'Monthly subscription',
+            'description': 'Use monthly plans with predictable limits and renewal.',
         },
     ],
     'testimonials': [
@@ -130,12 +110,12 @@ DEFAULT_LANDING: dict[str, Any] = {
         },
         {
             'question': 'Do you offer monthly plans?',
-            'answer': 'No. TenderIQ Lite currently supports yearly subscriptions only.',
+            'answer': 'Yes. TenderIQ Lite supports monthly subscriptions.',
         },
     ],
     'cta': {
         'headline': 'Ready to analyze your next tender?',
-        'button': 'Upgrade yearly',
+        'button': 'Upgrade monthly',
     },
 }
 
@@ -183,8 +163,8 @@ DEFAULT_LANDING_MODULES: dict[str, Any] = {
     'faq': copy.deepcopy(DEFAULT_LANDING['faq']),
     'pricing': {
         'title': 'Plans That Scale With You',
-        'subtitle': 'Yearly subscriptions for procurement teams.',
-        'billing_note': 'Yearly billing only.',
+        'subtitle': 'Monthly subscriptions for procurement teams.',
+        'billing_note': 'Monthly billing only.',
     },
     'trusted_by': {
         'title': 'Trusted by Procurement Teams',
@@ -193,7 +173,7 @@ DEFAULT_LANDING_MODULES: dict[str, Any] = {
     'customer_stories': [],
     'cta': {
         'headline': 'Deploy TenderIQ in your procurement workflow',
-        'button': 'Start yearly plan',
+        'button': 'Start monthly plan',
     },
     'contact': {
         'title': 'Talk to our team',
@@ -381,10 +361,12 @@ def pricing_amount_paise(plan_id: str, billing_interval: str, pricing: Optional[
         for p in pricing['plans']:
             if p.get('id') != api_plan:
                 continue
-            inr = p.get('yearly_inr') if cycle == 'yearly' else p.get('monthly_inr')
-            if inr is None:
+            usd = p.get('yearly_usd') if cycle == 'yearly' else p.get('monthly_usd')
+            if usd is None:
+                usd = p.get('yearly_inr') if cycle == 'yearly' else p.get('monthly_inr')
+            if usd is None:
                 return None
-            return int(inr) * 100
+            return int(usd) * 100
     return PLAN_AMOUNT_PAISE.get((api_plan, cycle))
 
 

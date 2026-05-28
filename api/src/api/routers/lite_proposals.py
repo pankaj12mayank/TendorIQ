@@ -76,6 +76,9 @@ async def generate_tender_proposal(
 ):
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail='Workspace context required')
+    from ...core.billing.lite_usage import enforce_quota
+
+    await enforce_quota(db, UUID(current_user.tenant_id), 'proposal_generate')
 
     prefs = await get_ai_preferences_dict(db, current_user.user_id)
     company = await get_company_profile_dict(db, current_user.user_id)

@@ -31,7 +31,7 @@ export async function fetchPaymentConfig(): Promise<PaymentConfig> {
 
 export async function createRazorpayOrder(
   planId: string,
-  billingInterval: 'monthly' | 'yearly'
+  billingInterval: 'monthly'
 ): Promise<RazorpayOrder> {
   const raw = await api.post<{ data?: RazorpayOrder } | RazorpayOrder>(
     '/api/v1/payments/razorpay/create-order',

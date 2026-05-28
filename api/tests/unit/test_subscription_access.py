@@ -92,7 +92,7 @@ def test_apply_plan_period_sets_settings():
     assert tenant.settings['plan_period_end']
 
 
-def test_yearly_period_longer_than_monthly():
+def test_yearly_cycle_maps_to_monthly_window():
     monthly = compute_period_end(billing_cycle='monthly')
     yearly = compute_period_end(billing_cycle='yearly')
-    assert yearly > monthly
+    assert abs((yearly - monthly).total_seconds()) < 2

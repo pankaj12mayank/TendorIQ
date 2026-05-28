@@ -44,8 +44,8 @@ export default function SettingsPage() {
         description="AI defaults and billing settings."
       />
 
-      <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))} className="space-y-6">
-        <TabsList className="max-w-xl">
+      <Tabs value={tab} onValueChange={(v) => setTab(parseTab(v))} className="w-full space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>

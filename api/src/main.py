@@ -113,8 +113,11 @@ async def no_store_api_cache(request: Request, call_next):
         '/api/v1/auth',
         '/api/v1/files',
         '/api/v1/documents',
+        '/api/v1/tenders',
         '/api/v1/analysis',
         '/api/v1/proposals',
+        '/api/v1/billing',
+        '/api/v1/payments',
         '/api/v1/admin/platform/dashboard',
         '/api/v1/admin/platform/analytics',
     )

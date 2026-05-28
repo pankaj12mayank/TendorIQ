@@ -100,6 +100,7 @@ class FileService:
     async def list_documents(
         db: AsyncSession,
         tenant_id: UUID,
+        owner_id: Optional[UUID] = None,
         tender_id: Optional[UUID] = None,
         file_type: Optional[str] = None,
         is_archived: bool = False,
@@ -112,6 +113,8 @@ class FileService:
             Document.deleted_at.is_(None),
             Document.is_archived == is_archived,
         )
+        if owner_id:
+            query = query.where(Document.owner_id == owner_id)
 
         if tender_id:
             query = query.where(Document.tender_id == tender_id)

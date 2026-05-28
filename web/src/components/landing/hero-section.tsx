@@ -32,7 +32,7 @@ export function HeroSection({ content }: { content?: HeroContent }) {
   }, []);
 
   const line1 = content?.headline?.split('\n')[0] ?? 'AI Procurement Platform';
-  const line2 = content?.headline?.split('\n')[1] ?? 'for enterprise tender teams';
+  const line2 = content?.headline?.split('\n')[1] ?? '';
 
   const go = () => {
     if (user) {
@@ -65,8 +65,12 @@ export function HeroSection({ content }: { content?: HeroContent }) {
             className="cinematic-headline-hero"
           >
             <span className="text-gradient-cinematic">{line1}</span>
-            <br />
-            <span className="text-gradient-cinematic-accent">{line2}</span>
+            {line2 ? (
+              <>
+                <br />
+                <span className="text-gradient-cinematic-accent">{line2}</span>
+              </>
+            ) : null}
           </motion.h1>
 
           <motion.p

@@ -689,7 +689,7 @@ class PaymentTransaction(Base, TenantMixin, TimestampMixin):
     payment_id = Column(String(128), nullable=True, index=True)
     external_customer_id = Column(String(128), nullable=True, index=True)
     amount = Column(Float, nullable=False, default=0.0)
-    currency = Column(String(8), nullable=False, default='INR')
+    currency = Column(String(8), nullable=False, default='USD')
     plan = Column(String(64), nullable=True, index=True)
     status = Column(String(32), nullable=False, default='created', index=True)
     failure_reason = Column(Text, nullable=True)

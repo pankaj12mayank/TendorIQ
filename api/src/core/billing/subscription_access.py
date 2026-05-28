@@ -54,7 +54,7 @@ def compute_period_end(*, billing_cycle: str, start: Optional[datetime] = None) 
 
     base = start or datetime.now(timezone.utc)
     if billing_cycle in ('yearly', 'annual'):
-        return base + timedelta(days=365)
+        return base + timedelta(days=30)
     return base + timedelta(days=30)
 
 

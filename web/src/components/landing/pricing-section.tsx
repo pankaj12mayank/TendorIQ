@@ -76,22 +76,13 @@ function getPlanDisplayPrice(
   opts?: { yearlyPrice?: number | null; currencyInr?: boolean }
 ): { price: string; period: string; sublabel?: string } {
   const sym = opts?.currencyInr ? '₹' : '$';
-  if (monthlyPrice === null && !opts?.yearlyPrice) {
+  if (monthlyPrice === null) {
     return { price: 'Custom', period: '' };
   }
-  if (opts?.yearlyPrice != null) {
-    const perMonth = Math.round(opts.yearlyPrice / 12);
-    return {
-      price: `${sym}${perMonth}`,
-      period: '/month',
-      sublabel: `${sym}${opts.yearlyPrice} billed yearly`,
-    };
-  }
-  const yearlyMonthly = Math.round((monthlyPrice ?? 0) * 0.8);
   return {
-    price: `${sym}${yearlyMonthly}`,
+    price: `${sym}${monthlyPrice}`,
     period: '/month',
-    sublabel: `${sym}${(monthlyPrice ?? 0) * 12} billed yearly`,
+    sublabel: `${sym}${monthlyPrice} billed monthly`,
   };
 }
 
@@ -99,19 +90,22 @@ type AdminPlan = {
   id: string;
   name: string;
   description?: string;
+  monthly_usd?: number | null;
+  yearly_usd?: number | null;
   monthly_inr?: number | null;
   yearly_inr?: number | null;
   popular?: boolean;
   contact_sales?: boolean;
   features?: string[];
+  active?: boolean;
 };
 
 function adminPlansToCards(adminPlans: AdminPlan[]) {
   return adminPlans.map((p) => ({
     id: p.id,
     name: p.name,
-    monthlyPrice: p.monthly_inr ?? null,
-    yearlyPrice: p.yearly_inr ?? null,
+    monthlyPrice: p.monthly_usd ?? p.monthly_inr ?? null,
+    yearlyPrice: p.yearly_usd ?? p.yearly_inr ?? null,
     description: p.description ?? '',
     icon: p.id === 'enterprise' ? Building2 : Sparkles,
     color: 'from-primary to-purple-500',
@@ -131,8 +125,11 @@ export function PricingSection({
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const router = useRouter();
-  const displayPlans =
-    adminPlans && adminPlans.length > 0 ? adminPlansToCards(adminPlans) : plans;
+  const displayPlans = (
+    adminPlans && adminPlans.length > 0
+      ? adminPlansToCards(adminPlans.filter((plan) => plan.active !== false))
+      : plans
+  ).slice(0, 1);
 
   const handlePlanSelect = (planId: string) => {
     if (planId === 'enterprise') {
@@ -159,18 +156,16 @@ export function PricingSection({
             {copy?.title ?? 'Plans That Scale With You'}
           </h2>
           <p className="mb-8 text-xl text-muted-foreground">
-            {copy?.subtitle ?? 'Simple yearly subscriptions for procurement teams.'}
+            {copy?.subtitle ?? 'Simple monthly subscriptions for procurement teams.'}
           </p>
-          <p className="text-sm text-muted-foreground">Yearly plans only</p>
+          <p className="text-sm text-muted-foreground">Monthly plans only</p>
         </motion.div>
 
-        <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-3">
+        <div className="mx-auto grid max-w-3xl gap-8 md:grid-cols-1">
           {displayPlans.map((plan, index) => {
             const highlighted = hoveredId ? plan.id === hoveredId : plan.popular;
-            const useInr = Boolean(adminPlans?.length);
             const display = getPlanDisplayPrice(plan.monthlyPrice, {
-              yearlyPrice: 'yearlyPrice' in plan ? (plan as { yearlyPrice?: number | null }).yearlyPrice : undefined,
-              currencyInr: useInr,
+              currencyInr: false,
             });
 
             return (

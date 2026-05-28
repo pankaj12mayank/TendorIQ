@@ -48,11 +48,11 @@ def normalize_plan_id(plan_id: str) -> str:
 
 
 def normalize_billing_cycle(interval: str) -> str:
-    return 'yearly'
+    return 'monthly'
 
 
 def fe_billing_interval(cycle: str) -> str:
-    return 'annual'
+    return 'monthly'
 
 
 async def get_ai_token_usage(db: AsyncSession, tenant_id: UUID) -> int:
@@ -146,7 +146,7 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
     plan_key = (tenant.plan or sub.get('plan') or 'free').strip().lower()
     meta = PLAN_DISPLAY.get(plan_key, PLAN_DISPLAY.get('starter', PLAN_DISPLAY['starter']))
     now = datetime.now(timezone.utc)
-    cycle = getattr(tenant, 'billing_cycle', None) or sub.get('billing_cycle') or 'yearly'
+    cycle = getattr(tenant, 'billing_cycle', None) or sub.get('billing_cycle') or 'monthly'
     raw_status = (tenant.subscription_status or sub.get('status') or 'active').strip().lower()
     access = evaluate_tenant_access(tenant)
 
@@ -190,7 +190,7 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
             'features': [],
         },
         'status': fe_status,
-        'billingInterval': 'annual',
+        'billingInterval': 'monthly',
         'currentPeriodStart': period_start,
         'currentPeriodEnd': period_end,
         'cancelAtPeriodEnd': raw_status in ('canceled', 'cancelled'),
@@ -205,7 +205,7 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
 
 def build_plans_for_fe() -> list[dict[str, Any]]:
     plans = []
-    for api_id, price_inr in (('starter', 999), ('professional', 2999), ('enterprise', 9999)):
+    for api_id, price_usd in (('starter', 29), ('professional', 99), ('enterprise', 299)):
         meta = PLAN_DISPLAY.get(api_id, PLAN_DISPLAY['starter'])
         limits = PlanLimits.get_limits(api_id)
         from .lite_usage import LITE_DEMO_LIMITS
@@ -216,11 +216,11 @@ def build_plans_for_fe() -> list[dict[str, Any]]:
             'name': meta['name'],
             'displayName': meta['displayName'],
             'description': f'{meta["displayName"]} subscription',
-            'priceMonthly': price_inr * 100 * 10,
-            'priceAnnual': price_inr * 100 * 10,
-            'priceMonthlyInr': price_inr * 10,
-            'priceAnnualInr': price_inr * 10,
-            'currency': 'INR',
+            'priceMonthly': price_usd * 100,
+            'priceAnnual': price_usd * 100,
+            'priceMonthlyUsd': price_usd,
+            'priceAnnualUsd': price_usd,
+            'currency': 'USD',
             'isDemo': False,
             'trialDays': 0,
             'isActive': True,

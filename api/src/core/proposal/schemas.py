@@ -160,7 +160,7 @@ class PricingItem(BaseModel):
     quantity: Optional[str] = None
     unit_price: Optional[float] = None
     total_price: Optional[float] = None
-    currency: str = 'INR'
+    currency: str = 'USD'
 
     category: str = Field(default='service', description="service, material, labor, overhead")
     is_optional: bool = Field(default=False)
@@ -175,7 +175,7 @@ class ProposalPricing(BaseModel):
     discount_percentage: float = Field(default=0.0)
     discount_amount: float = Field(default=0.0)
     grand_total: float = Field(default=0.0)
-    currency: str = 'INR'
+    currency: str = 'USD'
 
     payment_terms: Optional[str] = None
     validity_days: int = Field(default=30)

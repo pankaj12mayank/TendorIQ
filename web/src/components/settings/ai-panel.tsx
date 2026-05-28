@@ -47,12 +47,11 @@ export function AiPanel() {
   };
 
   return (
-    <Card className="glass-panel max-w-3xl border-white/10 bg-transparent shadow-none">
+    <Card className="glass-panel w-full border-white/10 bg-transparent shadow-none">
       <CardHeader>
-        <CardTitle>AI defaults</CardTitle>
+        <CardTitle>AI settings</CardTitle>
         <CardDescription>
-          Provider and model are detected automatically from your API keys and local Ollama. Pull
-          new Ollama models anytime — click Refresh on the picker.
+          Provider and model are detected automatically from your API keys and local Ollama.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -99,7 +98,7 @@ export function AiPanel() {
               </div>
             </div>
             <Button onClick={save} disabled={updatePrefs.isPending}>
-              {updatePrefs.isPending ? 'Saving…' : 'Save defaults'}
+              {updatePrefs.isPending ? 'Saving…' : 'Save settings'}
             </Button>
           </>
         )}

@@ -103,7 +103,7 @@ function MemberDashboard() {
   });
   const subscription = subscriptionQuery.data ?? {};
   const quota = quotaQuery.data ?? [];
-  const currentPlan = String(subscription.plan ?? 'starter').toUpperCase();
+  const currentPlan = String(subscription.plan ?? 'pro').toUpperCase();
   const currentPeriodEnd =
     subscription.currentPeriodEnd ?? subscription.current_period_end ?? subscription.expiry ?? null;
   const expiryDate = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
@@ -112,7 +112,7 @@ function MemberDashboard() {
   const daysToExpiry = expiryDate
     ? Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000)
     : null;
-  const uploadQuota = useMemo(() => {
+  const usageQuota = useMemo(() => {
     const item = quota.find((q: any) => {
       const key = String(q.featureKey ?? q.resource ?? q.feature_name ?? '').toLowerCase();
       return key.includes('upload') || key.includes('document');
@@ -131,9 +131,9 @@ function MemberDashboard() {
   }, [quota]);
   const showNearLimitBanner =
     !isExpired &&
-    typeof uploadQuota.remaining === 'number' &&
-    uploadQuota.remaining >= 0 &&
-    uploadQuota.remaining <= 3;
+    typeof usageQuota.remaining === 'number' &&
+    usageQuota.remaining >= 0 &&
+    usageQuota.remaining <= 3;
 
   async function handleDeleteTender(tenderId: string) {
     if (!confirm('Delete this tender? This action cannot be undone.')) return;
@@ -170,7 +170,7 @@ function MemberDashboard() {
         <Card className="border-destructive/50 bg-destructive/5">
           <CardContent className="flex items-center gap-3 py-4">
             <AlertTriangle className="h-4 w-4 text-destructive" />
-            <p className="text-sm font-medium">Renew plan to continue</p>
+            <p className="text-sm font-medium">Your plan expired. Please renew to continue.</p>
           </CardContent>
         </Card>
       ) : null}
@@ -179,7 +179,7 @@ function MemberDashboard() {
           <CardContent className="flex items-center gap-3 py-4">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
             <p className="text-sm font-medium">
-              You have {uploadQuota.remaining} uploads remaining
+              You have {usageQuota.remaining} uploads remaining
             </p>
           </CardContent>
         </Card>
@@ -193,19 +193,19 @@ function MemberDashboard() {
         />
         <KpiCard
           title="Plan expiry"
-          value={expiryDate ? expiryDate.toLocaleDateString() : '—'}
-          trend={daysToExpiry == null ? '' : `${Math.max(daysToExpiry, 0)} day(s)`}
+          value={daysToExpiry == null ? '—' : `Expires in ${Math.max(daysToExpiry, 0)} days`}
+          trend={expiryDate ? expiryDate.toLocaleDateString() : ''}
           trendUp={!isExpired}
           icon={History}
         />
         <KpiCard
-          title="Uploads usage"
+          title="Usage"
           value={
-            uploadQuota.limit > 0
-              ? `${uploadQuota.used}/${uploadQuota.limit}`
-              : String(uploadQuota.used)
+            usageQuota.limit > 0
+              ? `${usageQuota.used}/${usageQuota.limit} uploads used`
+              : `${usageQuota.used} uploads used`
           }
-          trend={typeof uploadQuota.remaining === 'number' ? `${uploadQuota.remaining} remaining` : ''}
+          trend={typeof usageQuota.remaining === 'number' ? `${usageQuota.remaining} remaining` : ''}
           trendUp
           icon={BarChart3}
         />

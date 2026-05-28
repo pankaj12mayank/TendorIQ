@@ -63,7 +63,7 @@ export function CTASection({ cta, contact }: { cta?: CtaContent; contact?: Conta
           transition={{ delay: 0.4 }}
           className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
         >
-          Deploy a commercially reliable AI procurement workflow with secure yearly plans and owner-controlled CMS.
+          Deploy a commercially reliable AI procurement workflow with secure monthly plans and owner-controlled CMS.
         </motion.p>
 
         {/* Buttons */}

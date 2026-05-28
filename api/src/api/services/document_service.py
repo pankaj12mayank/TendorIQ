@@ -73,6 +73,7 @@ class DocumentService:
     async def get_documents(
         db: AsyncSession,
         tenant_id: UUID,
+        owner_id: Optional[UUID] = None,
         search: Optional[str] = None,
         statuses: Optional[list[str]] = None,
         file_types: Optional[list[str]] = None,
@@ -92,6 +93,8 @@ class DocumentService:
             Document.deleted_at.is_(None),
             Document.is_archived == is_archived,
         )
+        if owner_id:
+            query = query.where(Document.owner_id == owner_id)
 
         if search:
             search_term = f'%{search}%'
@@ -316,12 +319,15 @@ class DocumentService:
     async def get_document_stats(
         db: AsyncSession,
         tenant_id: UUID,
+        owner_id: Optional[UUID] = None,
     ) -> dict:
         base_query = select(Document).where(
             Document.tenant_id == tenant_id,
             Document.deleted_at.is_(None),
             Document.is_archived == False,
         )
+        if owner_id:
+            base_query = base_query.where(Document.owner_id == owner_id)
 
         result = await db.execute(base_query)
         docs = result.scalars().all()

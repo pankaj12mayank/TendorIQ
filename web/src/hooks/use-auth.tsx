@@ -36,6 +36,7 @@ import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
 import { getAuthProvider } from '@/lib/auth-provider';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
+import { canAccessAdminConsole } from '@/lib/permissions';
 
 import { AuthContext, type AuthContextValue } from './auth-context';
 
@@ -59,6 +60,10 @@ function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: stri
       const params = new URLSearchParams(window.location.search);
       const redirectUrl = params.get('redirect_url');
       if (redirectUrl && redirectUrl.startsWith('/dashboard')) {
+        if (redirectUrl.startsWith('/dashboard/admin') && !canAccessAdminConsole(role)) {
+          router.replace('/dashboard');
+          return;
+        }
         router.replace(redirectUrl);
       } else {
         router.replace(getPostLoginPath(role));
@@ -285,6 +290,10 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       const redirectUrl = params.get('redirect_url');
 
       if (redirectUrl && redirectUrl.startsWith('/dashboard')) {
+        if (redirectUrl.startsWith('/dashboard/admin') && !canAccessAdminConsole(authUser.role)) {
+          router.push('/dashboard');
+          return;
+        }
         router.push(redirectUrl);
         return;
       }

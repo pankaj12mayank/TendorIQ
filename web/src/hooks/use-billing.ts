@@ -158,7 +158,7 @@ export function useBillingApi(): UseBillingApiReturn {
   );
 
   const initialize = useCallback(async () => {
-    await Promise.all([fetchPlans(), fetchSubscription(), fetchQuotaStatus(), fetchInvoices()]);
+    await Promise.allSettled([fetchPlans(), fetchSubscription(), fetchQuotaStatus(), fetchInvoices()]);
   }, [fetchPlans, fetchSubscription, fetchQuotaStatus, fetchInvoices]);
 
   const createSubscription = useCallback(

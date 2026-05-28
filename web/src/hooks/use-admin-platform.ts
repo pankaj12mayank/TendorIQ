@@ -210,8 +210,14 @@ export function useAdminPlatform() {
     });
   }, []);
 
-  const searchAnalyticsUser = useCallback(async (q: string) => {
-    return await authenticatedJson(`/api/v1/admin/platform/analytics/user-search?q=${encodeURIComponent(q)}`);
+  const searchAnalyticsUser = useCallback(async (q: string, page = 1, limit = 20) => {
+    const term = q.trim();
+    if (!term) {
+      return { data: [], pagination: { page, limit, total: 0 } };
+    }
+    return await authenticatedJson(
+      `/api/v1/admin/platform/analytics/user-search?q=${encodeURIComponent(term)}&page=${page}&limit=${limit}`
+    );
   }, []);
 
   const deleteUpload = useCallback(async (documentId: string) => {
