@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { notifyUnauthorized, setUnauthorizedHandler } from '../auth-unauthorized';
+import {
+  notifyUnauthorized,
+  resetUnauthorizedNotifyStateForTests,
+  setSessionInvalidateHandler,
+  setUnauthorizedHandler,
+} from '../auth-unauthorized';
 
 describe('auth-unauthorized', () => {
   afterEach(() => {
     setUnauthorizedHandler(null);
+    setSessionInvalidateHandler(null);
+    resetUnauthorizedNotifyStateForTests();
   });
 
   it('no-ops in non-browser environments', () => {

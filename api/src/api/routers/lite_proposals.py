@@ -74,11 +74,16 @@ async def generate_tender_proposal(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Workspace context required')
     from ...core.billing.lite_usage import enforce_quota
+    from ...core.billing.subscription_access import assert_can_use_system
+    from ...core.tenant_utils import resolve_member_tenant_uuid
 
-    await enforce_quota(db, UUID(current_user.tenant_id), 'proposal_generate')
+    tenant_uuid = await resolve_member_tenant_uuid(current_user, db)
+    await assert_can_use_system(
+        db, tenant_uuid, is_super_admin=current_user.is_super_admin()
+    )
+    await enforce_quota(db, tenant_uuid, 'proposal_generate')
+    current_user.tenant_id = str(tenant_uuid)
 
     prefs = await get_ai_preferences_dict(db, current_user.user_id)
     company = await get_company_profile_dict(db, current_user.user_id)
@@ -199,8 +204,15 @@ async def export_proposal_pdf(
         raise HTTPException(status_code=404, detail='Proposal not found')
 
     from ...core.billing.lite_usage import enforce_quota, track_usage
+    from ...core.billing.subscription_access import assert_can_use_system
+    from ...core.tenant_utils import resolve_member_tenant_uuid
 
-    await enforce_quota(db, UUID(current_user.tenant_id), 'export_pdf')
+    tenant_uuid = await resolve_member_tenant_uuid(current_user, db)
+    await assert_can_use_system(
+        db, tenant_uuid, is_super_admin=current_user.is_super_admin()
+    )
+    await enforce_quota(db, tenant_uuid, 'export_pdf')
+    current_user.tenant_id = str(tenant_uuid)
 
     company = await get_company_profile_dict(db, current_user.user_id)
     proposal_dict = proposal_row_to_dict(row)

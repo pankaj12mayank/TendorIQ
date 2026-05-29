@@ -114,14 +114,35 @@ async def _sync_checkout_session(db: AsyncSession, session: dict[str, Any]) -> b
         logger.warning('Stripe checkout.session.completed: tenant not resolved')
         return False
 
-    await _upsert_subscription_row(
+    from .razorpay_lite import activate_plan_after_payment, plan_period_days
+    from ..platform.lite_settings import get_setting
+
+    pricing = await get_setting(db, 'pricing')
+    period_days = await plan_period_days(db, plan, pricing)
+    payment_id = str(session.get('payment_intent') or session.get('id') or '')
+    await activate_plan_after_payment(
         db,
-        tenant,
+        tenant_id=tenant.id,
         plan=plan,
-        status='active',
-        stripe_subscription_id=subscription_id if isinstance(subscription_id, str) else None,
-        stripe_customer_id=customer_id if isinstance(customer_id, str) else None,
+        billing_interval=str((session.get('metadata') or {}).get('billing_interval') or 'monthly'),
+        payment_id=payment_id or 'stripe_checkout',
+        order_id=str(session.get('id') or ''),
+        provider='stripe',
+        period_days=period_days,
     )
+    if subscription_id and isinstance(subscription_id, str):
+        tenant.subscription_id = subscription_id
+    if customer_id and isinstance(customer_id, str):
+        existing = (
+            await db.execute(
+                select(Subscription)
+                .where(Subscription.tenant_id == tenant.id)
+                .order_by(Subscription.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            existing.stripe_customer_id = customer_id
     return True
 
 

@@ -61,10 +61,10 @@ class UsageTrackRequest(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
-def _require_tenant_uuid(auth: AuthContext) -> UUID:
-    if not auth.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
-    return parse_tenant_uuid(auth.tenant_id)
+async def _require_tenant_uuid(auth: AuthContext, db: AsyncSession) -> UUID:
+    from ...core.tenant_utils import resolve_member_tenant_uuid
+
+    return await resolve_member_tenant_uuid(auth, db)
 
 
 @router.get('/subscription')
@@ -72,7 +72,7 @@ async def get_subscription(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
+    tenant_id = await _require_tenant_uuid(current_user, db)
     return create_response(await build_subscription_view(db, tenant_id))
 
 
@@ -82,8 +82,10 @@ async def get_usage(
     db: AsyncSession = Depends(get_db),
 ):
     """Legacy usage buckets (users, documents, tenders, ai_tokens)."""
-    tenant_id = _require_tenant_uuid(current_user)
-    tenant = await db.get(Tenant, tenant_id)
+    tenant_id = await _require_tenant_uuid(current_user, db)
+    from ...core.models import pk_str
+
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         raise HTTPException(status_code=404, detail='Tenant not found')
 
@@ -108,7 +110,7 @@ async def get_demo_status(
     """Demo quota usage for Lite MVP."""
     from ...core.billing.lite_usage import build_demo_status
 
-    tenant_id = _require_tenant_uuid(current_user)
+    tenant_id = await _require_tenant_uuid(current_user, db)
     return create_response(await build_demo_status(db, tenant_id))
 
 
@@ -120,7 +122,20 @@ async def get_access_status(
     """Whether the tenant can use product features (login may still work when expired)."""
     from ...core.billing.subscription_access import get_tenant_access
 
-    tenant_id = _require_tenant_uuid(current_user)
+    if current_user.is_super_admin():
+        return create_response(
+            {
+                'can_use_system': True,
+                'is_expired': False,
+                'plan': 'owner_test',
+                'status': 'active',
+                'reason': '',
+                'upgrade_required': False,
+                'owner_test_mode': True,
+            }
+        )
+
+    tenant_id = await _require_tenant_uuid(current_user, db)
     return create_response(await get_tenant_access(db, tenant_id))
 
 
@@ -129,7 +144,7 @@ async def get_quota(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
+    tenant_id = await _require_tenant_uuid(current_user, db)
     quotas = await build_quota_list(db, tenant_id)
     return create_response({'quotas': quotas, 'quota': quotas})
 
@@ -139,13 +154,17 @@ async def get_usage_summary(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
+    tenant_id = await _require_tenant_uuid(current_user, db)
     return create_response(await build_usage_summary(db, tenant_id))
 
 
 @router.get('/plans')
-async def get_plans():
-    plans = build_plans_for_fe()
+async def get_plans(db: AsyncSession = Depends(get_db)):
+    from ...core.platform.lite_settings import get_setting
+    from ...core.billing.fe_responses import build_plans_from_pricing
+
+    pricing = await get_setting(db, 'pricing')
+    plans = build_plans_from_pricing(pricing)
     body = create_response(plans)
     body['plans'] = plans
     return body
@@ -157,8 +176,10 @@ async def upgrade_plan(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
-    tenant = await db.get(Tenant, tenant_id)
+    tenant_id = await _require_tenant_uuid(current_user, db)
+    from ...core.models import pk_str
+
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         raise HTTPException(status_code=404, detail='Tenant not found')
 
@@ -239,7 +260,9 @@ async def change_subscription(
         'success': True,
         'prorationAmount': 0,
         'immediateCharge': False,
-        'nextBillingDate': (await build_subscription_view(db, _require_tenant_uuid(current_user)))[
+        'nextBillingDate': (
+            await build_subscription_view(db, await _require_tenant_uuid(current_user, db))
+        )[
             'currentPeriodEnd'
         ],
         'subscription': result.get('subscription'),
@@ -252,8 +275,10 @@ async def cancel_subscription(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
-    tenant = await db.get(Tenant, tenant_id)
+    tenant_id = await _require_tenant_uuid(current_user, db)
+    from ...core.models import pk_str
+
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         raise HTTPException(status_code=404, detail='Tenant not found')
 
@@ -267,8 +292,10 @@ async def reactivate_subscription(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
-    tenant = await db.get(Tenant, tenant_id)
+    tenant_id = await _require_tenant_uuid(current_user, db)
+    from ...core.models import pk_str
+
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         raise HTTPException(status_code=404, detail='Tenant not found')
 
@@ -298,7 +325,7 @@ async def list_own_payments(
     limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
+    tenant_id = await _require_tenant_uuid(current_user, db)
     q = select(PaymentTransaction).where(
         PaymentTransaction.tenant_id == tenant_id,
         PaymentTransaction.user_id == UUID(current_user.user_id),
@@ -409,6 +436,6 @@ async def check_limit(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = _require_tenant_uuid(current_user)
+    tenant_id = await _require_tenant_uuid(current_user, db)
     allowed = await BillingService.check_all_limits(db, tenant_id, operation)
     return {'allowed': allowed, 'operation': operation}

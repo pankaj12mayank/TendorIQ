@@ -71,7 +71,7 @@ function MemberDashboard() {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(search.trim() ? { search: search.trim() } : {}),
   } as Record<string, string | number>;
-  const { data, isLoading, isError, refetch, isFetching } = useTenders(tenderQueryParams);
+  const { data, isLoading, isError, refetch } = useTenders(tenderQueryParams);
   const deleteTender = useDeleteTender();
   const tenders = data?.data ?? [];
   const totalPages = Number(data?.meta?.totalPages ?? 0);
@@ -327,7 +327,7 @@ function MemberDashboard() {
           </div>
         }
       >
-        {isLoading || isFetching ? (
+        {isLoading ? (
           <DataTable>
             <DataTableHeader>
               <tr>

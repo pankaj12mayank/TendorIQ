@@ -25,6 +25,12 @@ def test_lite_accepts_pdf_within_limit(storage):
     assert msg is None
 
 
+def test_lite_accepts_doc_within_limit(storage):
+    ok, msg = storage.validate_file('spec.doc', 1024)
+    assert ok is True
+    assert msg is None
+
+
 def test_lite_rejects_oversize(storage):
     max_bytes = LITE_MAX_FILE_SIZE_MB * 1024 * 1024
     ok, msg = storage.validate_file('big.pdf', max_bytes + 1)

@@ -11,6 +11,7 @@ import { DashboardBootLoading, SidebarSkeleton } from '@/components/layout/dashb
 import { Toaster } from '@/components/ui/sonner';
 import { ROUTES } from '@/lib/routes';
 import { SubscriptionExpiredBanner } from '@/components/billing/subscription-gate';
+import { OwnerCustomerTestBanner } from '@/components/layout/owner-customer-test-banner';
 import { CinematicBackground } from '@/components/cinematic/cinematic-background';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { canAccessAdminConsole } from '@/lib/permissions';
@@ -35,10 +36,15 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
+  const [everAuthed, setEverAuthed] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (userId) setEverAuthed(true);
+  }, [userId]);
 
   useEffect(() => {
     if (isLoaded && !userId) {
@@ -49,22 +55,25 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!isLoaded || !userId) return;
     const isOwner = canAccessAdminConsole(user?.role);
-    if (isOwner) return;
-    const blockedDashboardPaths = ['/dashboard/admin'];
-    if (blockedDashboardPaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+
+    if (isOwner && pathname === ROUTES.dashboard) {
+      return;
+    }
+
+    if (pathname === ROUTES.admin || pathname.startsWith(`${ROUTES.admin}/`)) {
       router.replace(ROUTES.dashboard);
       return;
     }
-    // Non-owner users can use settings pages except admin-only AI controls.
+
     if (pathname === ROUTES.settings) {
       const tab = searchParams.get('tab');
       if (tab === 'ai') {
-        router.replace(ROUTES.dashboard);
+        router.replace(`${ROUTES.settings}?tab=account`, { scroll: false });
       }
     }
   }, [isLoaded, userId, user?.role, pathname, searchParams, router]);
 
-  if (!mounted || !isLoaded) {
+  if (!mounted || (!isLoaded && !everAuthed)) {
     return <DashboardBootLoading message="Loading workspace..." />;
   }
 
@@ -85,6 +94,7 @@ export default function DashboardLayout({
           <PageContent>
             <Suspense fallback={null}>
               <ExpiredPlanBanner />
+              <OwnerCustomerTestBanner />
             </Suspense>
             {children}
           </PageContent>

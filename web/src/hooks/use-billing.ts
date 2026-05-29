@@ -70,7 +70,16 @@ interface UseBillingApiReturn {
 }
 
 export function useBillingApi(): UseBillingApiReturn {
-  const store = useBillingStore();
+  const plans = useBillingStore((s) => s.plans);
+  const currentSubscription = useBillingStore((s) => s.currentSubscription);
+  const invoices = useBillingStore((s) => s.invoices);
+  const paymentMethods = useBillingStore((s) => s.paymentMethods);
+  const quotaStatus = useBillingStore((s) => s.quotaStatus);
+  const setPlans = useBillingStore((s) => s.setPlans);
+  const setSubscription = useBillingStore((s) => s.setSubscription);
+  const setInvoices = useBillingStore((s) => s.setInvoices);
+  const setPaymentMethods = useBillingStore((s) => s.setPaymentMethods);
+  const setQuotaStatus = useBillingStore((s) => s.setQuotaStatus);
   const [isLoading, setLoading] = useState(false);
   const [isProcessing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,13 +90,13 @@ export function useBillingApi(): UseBillingApiReturn {
     try {
       const res = await api.get<unknown>('/api/v1/billing/plans');
       const plans = parsePlansResponse(res);
-      store.setPlans(plans);
+      setPlans(plans);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch plans');
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [setPlans]);
 
   const fetchSubscription = useCallback(async (): Promise<Subscription> => {
     setLoading(true);
@@ -95,7 +104,7 @@ export function useBillingApi(): UseBillingApiReturn {
     try {
       const res = await api.get<Subscription>('/api/v1/billing/subscription');
       const sub = mapSubscriptionFromApi(res);
-      store.setSubscription(sub);
+      setSubscription(sub);
       return sub;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch subscription');
@@ -103,7 +112,7 @@ export function useBillingApi(): UseBillingApiReturn {
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [setSubscription]);
 
   const fetchInvoices = useCallback(async (): Promise<Invoice[]> => {
     setLoading(true);
@@ -111,7 +120,7 @@ export function useBillingApi(): UseBillingApiReturn {
     try {
       const res = await api.get<unknown>('/api/v1/billing/invoices');
       const invoices = parseInvoicesResponse(res);
-      store.setInvoices(invoices);
+      setInvoices(invoices);
       return invoices;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch invoices');
@@ -119,7 +128,7 @@ export function useBillingApi(): UseBillingApiReturn {
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [setInvoices]);
 
   const fetchQuotaStatus = useCallback(async (): Promise<QuotaStatus[]> => {
     setLoading(true);
@@ -129,7 +138,7 @@ export function useBillingApi(): UseBillingApiReturn {
         '/api/v1/billing/quota'
       );
       const quota = mapQuotaFromUsageApi(res);
-      store.setQuotaStatus(quota);
+      setQuotaStatus(quota);
       return quota;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch quota');
@@ -137,7 +146,7 @@ export function useBillingApi(): UseBillingApiReturn {
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [setQuotaStatus]);
 
   const fetchPaymentHistory = useCallback(
     async (params?: { page?: number; limit?: number; status?: string; provider?: string }) => {
@@ -171,7 +180,7 @@ export function useBillingApi(): UseBillingApiReturn {
           billing_interval: billingInterval,
         });
         const sub = mapSubscriptionFromApi((res as { subscription: Subscription }).subscription ?? res);
-        store.setSubscription(sub);
+        setSubscription(sub);
         return sub;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create subscription');
@@ -180,7 +189,7 @@ export function useBillingApi(): UseBillingApiReturn {
         setProcessing(false);
       }
     },
-    [store]
+    [setSubscription]
   );
 
   const changePlan = useCallback(
@@ -193,7 +202,7 @@ export function useBillingApi(): UseBillingApiReturn {
           { plan_id: planId, billing_interval: billingInterval }
         );
         if (res.subscription) {
-          store.setSubscription(mapSubscriptionFromApi(res.subscription));
+          setSubscription(mapSubscriptionFromApi(res.subscription));
         } else {
           await fetchSubscription();
         }
@@ -207,7 +216,7 @@ export function useBillingApi(): UseBillingApiReturn {
         setProcessing(false);
       }
     },
-    [store, fetchSubscription, fetchQuotaStatus]
+    [setSubscription, fetchSubscription, fetchQuotaStatus]
   );
 
   const cancelSubscription = useCallback(
@@ -218,14 +227,14 @@ export function useBillingApi(): UseBillingApiReturn {
         const res = await api.post<{ subscription: Subscription }>('/api/v1/billing/subscription/cancel', {
           reason,
         });
-        store.setSubscription(mapSubscriptionFromApi(res.subscription));
+        setSubscription(mapSubscriptionFromApi(res.subscription));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to cancel subscription');
       } finally {
         setProcessing(false);
       }
     },
-    [store]
+    [setSubscription]
   );
 
   const reactivateSubscription = useCallback(async () => {
@@ -233,13 +242,13 @@ export function useBillingApi(): UseBillingApiReturn {
     setError(null);
     try {
       const res = await api.post<{ subscription: Subscription }>('/api/v1/billing/subscription/reactivate');
-      store.setSubscription(mapSubscriptionFromApi(res.subscription));
+      setSubscription(mapSubscriptionFromApi(res.subscription));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reactivate subscription');
     } finally {
       setProcessing(false);
     }
-  }, [store]);
+  }, [setSubscription]);
 
   const updatePaymentMethod = useCallback(
     async (methodId: string, isDefault: boolean) => {
@@ -247,14 +256,14 @@ export function useBillingApi(): UseBillingApiReturn {
       try {
         await api.patch(`/api/v1/billing/payment-methods/${methodId}`, { is_default: isDefault });
         const res = await api.get<unknown>('/api/v1/billing/payment-methods');
-        store.setPaymentMethods(parsePaymentMethodsResponse(res));
+        setPaymentMethods(parsePaymentMethodsResponse(res));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to update payment method');
       } finally {
         setProcessing(false);
       }
     },
-    [store]
+    [setPaymentMethods]
   );
 
   const addPaymentMethod = useCallback(
@@ -263,7 +272,7 @@ export function useBillingApi(): UseBillingApiReturn {
       try {
         const res = await api.post<PaymentMethod>('/api/v1/billing/payment-methods', { token });
         const pmRes = await api.get<unknown>('/api/v1/billing/payment-methods');
-        store.setPaymentMethods(parsePaymentMethodsResponse(pmRes));
+        setPaymentMethods(parsePaymentMethodsResponse(pmRes));
         return res;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to add payment method');
@@ -272,7 +281,7 @@ export function useBillingApi(): UseBillingApiReturn {
         setProcessing(false);
       }
     },
-    [store]
+    [setPaymentMethods]
   );
 
   const removePaymentMethod = useCallback(
@@ -281,31 +290,31 @@ export function useBillingApi(): UseBillingApiReturn {
       try {
         await api.delete(`/api/v1/billing/payment-methods/${methodId}`);
         const res = await api.get<unknown>('/api/v1/billing/payment-methods');
-        store.setPaymentMethods(parsePaymentMethodsResponse(res));
+        setPaymentMethods(parsePaymentMethodsResponse(res));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to remove payment method');
       } finally {
         setProcessing(false);
       }
     },
-    [store]
+    [setPaymentMethods]
   );
 
-  const getPlanById = useCallback((planId: string) => store.plans.find((p) => p.id === planId), [store.plans]);
+  const getPlanById = useCallback((planId: string) => plans.find((p) => p.id === planId), [plans]);
 
   const getUpgradeOptions = useCallback(() => {
-    const currentPlan = store.currentSubscription?.plan;
-    if (!currentPlan) return store.plans.filter((p) => p.isActive);
-    const currentIndex = store.plans.findIndex((p) => p.id === currentPlan.id);
-    return store.plans.slice(currentIndex + 1).filter((p) => p.isActive);
-  }, [store.currentSubscription, store.plans]);
+    const currentPlan = currentSubscription?.plan;
+    if (!currentPlan) return plans.filter((p) => p.isActive);
+    const currentIndex = plans.findIndex((p) => p.id === currentPlan.id);
+    return plans.slice(currentIndex + 1).filter((p) => p.isActive);
+  }, [currentSubscription, plans]);
 
   const getDowngradeOptions = useCallback(() => {
-    const currentPlan = store.currentSubscription?.plan;
+    const currentPlan = currentSubscription?.plan;
     if (!currentPlan) return [];
-    const currentIndex = store.plans.findIndex((p) => p.id === currentPlan.id);
-    return store.plans.slice(0, currentIndex).filter((p) => p.isActive).reverse();
-  }, [store.currentSubscription, store.plans]);
+    const currentIndex = plans.findIndex((p) => p.id === currentPlan.id);
+    return plans.slice(0, currentIndex).filter((p) => p.isActive).reverse();
+  }, [currentSubscription, plans]);
 
   const canUpgrade = useCallback((planId: string) => getUpgradeOptions().some((p) => p.id === planId), [getUpgradeOptions]);
   const canDowngrade = useCallback(
@@ -314,11 +323,11 @@ export function useBillingApi(): UseBillingApiReturn {
   );
 
   return {
-    plans: store.plans,
-    currentSubscription: store.currentSubscription,
-    invoices: store.invoices,
-    paymentMethods: store.paymentMethods,
-    quotaStatus: store.quotaStatus,
+    plans,
+    currentSubscription,
+    invoices,
+    paymentMethods,
+    quotaStatus,
     isLoading,
     isProcessing,
     error,

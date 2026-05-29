@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Tenant, Subscription, Document, Tender, OCRJob, UsageLog
+from ..models import Tenant, Subscription, Document, Tender, OCRJob, UsageLog, pk_str
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class BillingEnforcer:
     @staticmethod
     async def check_user_limit(db: AsyncSession, tenant_id: UUID) -> bool:
         """Check if user can be added"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         
@@ -130,7 +130,7 @@ class BillingEnforcer:
     @staticmethod
     async def check_document_limit(db: AsyncSession, tenant_id: UUID) -> bool:
         """Check if document can be uploaded"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         plan = tenant.plan or 'starter'
         limits = PlanLimits.get_limits(plan)
         
@@ -148,7 +148,7 @@ class BillingEnforcer:
     @staticmethod
     async def check_tender_limit(db: AsyncSession, tenant_id: UUID) -> bool:
         """Check if tender can be created"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         plan = tenant.plan or 'starter'
         limits = PlanLimits.get_limits(plan)
         
@@ -166,7 +166,7 @@ class BillingEnforcer:
     @staticmethod
     async def check_ai_tokens(db: AsyncSession, tenant_id: UUID, tokens_to_add: int = 0) -> bool:
         """Check AI token limit"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         plan = tenant.plan or 'starter'
         limits = PlanLimits.get_limits(plan)
         
@@ -186,7 +186,7 @@ class BillingEnforcer:
     @staticmethod
     async def check_ocr_concurrency(db: AsyncSession, tenant_id: UUID) -> bool:
         """Check concurrent OCR limit"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         plan = tenant.plan or 'starter'
         limits = PlanLimits.get_limits(plan)
         
@@ -207,7 +207,7 @@ class BillingEnforcer:
     @staticmethod
     async def check_export_limit(db: AsyncSession, tenant_id: UUID) -> bool:
         """Check daily export limit"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         plan = tenant.plan or 'starter'
         limits = PlanLimits.get_limits(plan)
         
@@ -232,7 +232,7 @@ class BillingService:
     @staticmethod
     async def get_subscription(db: AsyncSession, tenant_id: UUID) -> dict:
         """Get subscription details with limits"""
-        tenant = await db.get(Tenant, tenant_id)
+        tenant = await db.get(Tenant, pk_str(tenant_id))
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
         

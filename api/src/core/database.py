@@ -81,7 +81,7 @@ def _allow_start_without_db() -> bool:
 
 
 async def _ensure_dev_accounts_on_startup() -> None:
-    """Guarantee system owner + demo passwords whenever API starts in dev."""
+    """Guarantee system owner credentials whenever API starts in dev."""
     try:
         from .local_user_auth import ensure_dev_accounts
 

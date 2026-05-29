@@ -23,12 +23,12 @@ async def _verify() -> list[str]:
         ensure_dev_accounts,
     )
 
-    owner_email, owner_pass, _, demo_email, demo_pass, _ = _owner_defaults()
+    owner_email, owner_pass, _ = _owner_defaults()
     errors: list[str] = []
 
     async with async_session_maker() as db:
         await ensure_dev_accounts(db)
-        for email, password in ((owner_email, owner_pass), (demo_email, demo_pass)):
+        for email, password in ((owner_email, owner_pass),):
             result = await authenticate_email_password(db, email, password)
             if not result:
                 errors.append(f'Login failed for {email} (check .tenderiq/owner-account.txt)')
@@ -58,7 +58,7 @@ def main() -> int:
 
     from src.core.local_user_auth import _owner_defaults, owner_account_file_path
 
-    owner_email, owner_pass, _, _, _, _ = _owner_defaults()
+    owner_email, owner_pass, _ = _owner_defaults()
     print(f'OK auth: {owner_email} / {owner_pass}')
     print(f'    file: {owner_account_file_path()}')
     return 0

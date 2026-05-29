@@ -32,7 +32,7 @@ describe('routes', () => {
       '/dashboard/settings?tab=billing'
     );
     expect(resolveLegacyDashboardRedirect('/dashboard/settings/ai')).toBe(
-      '/dashboard/settings?tab=ai'
+      '/dashboard/settings?tab=account'
     );
     expect(resolveLegacyDashboardRedirect('/dashboard/tenders')).toBe(ROUTES.upload);
   });

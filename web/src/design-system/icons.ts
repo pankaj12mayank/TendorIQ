@@ -55,11 +55,22 @@ const platformAdminGroup = {
   items: [{ name: 'Admin', href: '/dashboard/admin', icon: Shield }],
 };
 
+const customerTestGroup = {
+  label: 'Test customer flow',
+  items: [
+    { name: 'Upload', href: '/dashboard/upload', icon: Upload },
+    { name: 'Analysis', href: '/dashboard/analysis', icon: FileSearch },
+    { name: 'Proposal', href: '/dashboard/proposal', icon: FileText },
+    { name: 'Settings', href: '/dashboard/settings?tab=account', icon: Settings },
+    { name: 'Billing test', href: '/dashboard/settings?tab=billing', icon: Settings },
+  ],
+};
+
 export const roleNavGroups: Record<
   AppRole,
   { label: string; items: { name: string; href: string; icon: LucideIcon }[] }[]
 > = {
-  super_admin: [workspaceNavGroup, platformAdminGroup],
+  super_admin: [platformAdminGroup, customerTestGroup],
   tenant_admin: [workspaceNavGroup],
   owner: [workspaceNavGroup],
   admin: [workspaceNavGroup],

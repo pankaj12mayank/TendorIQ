@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { FileDown, FileText, Loader2 } from 'lucide-react';
 import { appToast } from '@/lib/app-toast';
+import { SubscriptionGate } from '@/components/billing/subscription-gate';
 import { AnalysisContent } from '@/components/analysis';
 import { PageHeader } from '@/components/design-system/page-header';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ export default function AnalysisPage() {
   const [exporting, setExporting] = useState(false);
 
   return (
+    <SubscriptionGate>
     <div className="space-y-8">
       <PageHeader
         title="Analysis"
@@ -77,5 +79,6 @@ export default function AnalysisPage() {
         </p>
       )}
     </div>
+    </SubscriptionGate>
   );
 }

@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Subscription, Tenant
+from ..models import Subscription, Tenant, pk_str
 
 FREE_PLAN = 'free'
 PAID_PLANS = frozenset({'starter', 'professional', 'enterprise', 'pro'})
@@ -49,13 +49,19 @@ def period_end_from_tenant(tenant: Tenant) -> Optional[datetime]:
     return None
 
 
-def compute_period_end(*, billing_cycle: str, start: Optional[datetime] = None) -> datetime:
+def compute_period_end(
+    *,
+    billing_cycle: str,
+    start: Optional[datetime] = None,
+    period_days: int = 30,
+) -> datetime:
     from datetime import timedelta
 
     base = start or datetime.now(timezone.utc)
+    days = max(1, int(period_days or 30))
     if billing_cycle in ('yearly', 'annual'):
-        return base + timedelta(days=30)
-    return base + timedelta(days=30)
+        return base + timedelta(days=days * 12)
+    return base + timedelta(days=days)
 
 
 def apply_plan_period(
@@ -63,10 +69,11 @@ def apply_plan_period(
     *,
     billing_cycle: str,
     start: Optional[datetime] = None,
+    period_days: int = 30,
 ) -> tuple[datetime, datetime]:
     """Persist plan period on tenant.settings (used for expiry checks)."""
     begin = start or datetime.now(timezone.utc)
-    end = compute_period_end(billing_cycle=billing_cycle, start=begin)
+    end = compute_period_end(billing_cycle=billing_cycle, start=begin, period_days=period_days)
     settings = _tenant_settings(tenant)
     settings['plan_period_start'] = begin.isoformat()
     settings['plan_period_end'] = end.isoformat()
@@ -140,12 +147,12 @@ def evaluate_tenant_access(tenant: Optional[Tenant]) -> dict[str, Any]:
 
     if plan == FREE_PLAN:
         return {
-            'can_use_system': True,
-            'is_expired': False,
+            'can_use_system': False,
+            'is_expired': True,
             'plan': plan,
-            'status': status or 'active',
-            'reason': '',
-            'upgrade_required': False,
+            'status': status or 'inactive',
+            'reason': 'Choose a plan on Billing to use uploads, analysis, and proposals.',
+            'upgrade_required': True,
             'period_end': period_end.isoformat() if period_end else None,
         }
 
@@ -195,12 +202,19 @@ def evaluate_tenant_access(tenant: Optional[Tenant]) -> dict[str, Any]:
 
 
 async def get_tenant_access(db: AsyncSession, tenant_id: UUID) -> dict[str, Any]:
-    tenant = await db.get(Tenant, tenant_id)
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     return evaluate_tenant_access(tenant)
 
 
-async def assert_can_use_system(db: AsyncSession, tenant_id: UUID) -> None:
+async def assert_can_use_system(
+    db: AsyncSession,
+    tenant_id: UUID,
+    *,
+    is_super_admin: bool = False,
+) -> None:
     """Block product usage when plan expired; login remains allowed."""
+    if is_super_admin:
+        return
     access = await get_tenant_access(db, tenant_id)
     if access['can_use_system']:
         return

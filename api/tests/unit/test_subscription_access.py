@@ -25,10 +25,10 @@ def _tenant(**kwargs) -> Tenant:
     return t
 
 
-def test_free_plan_always_usable():
+def test_free_plan_requires_purchase():
     access = evaluate_tenant_access(_tenant(plan='free'))
-    assert access['can_use_system'] is True
-    assert access['is_expired'] is False
+    assert access['can_use_system'] is False
+    assert access['upgrade_required'] is True
 
 
 def test_paid_plan_expired_by_period_end(monkeypatch):

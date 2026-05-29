@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Tenant, UsageLog
+from ..models import Tenant, UsageLog, pk_str
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ async def check_quota_allowed(
 ) -> tuple[bool, str]:
     from .subscription_access import evaluate_tenant_access
 
-    tenant = await db.get(Tenant, tenant_id)
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         return False, 'Workspace not found'
 
@@ -197,7 +197,7 @@ async def enforce_quota(
     if allowed:
         return
 
-    tenant = await db.get(Tenant, tenant_id)
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     access = evaluate_tenant_access(tenant)
     if not access['can_use_system']:
         raise HTTPException(
@@ -222,7 +222,7 @@ async def enforce_quota(
 
 
 async def build_demo_status(db: AsyncSession, tenant_id: UUID) -> dict[str, Any]:
-    tenant = await db.get(Tenant, tenant_id)
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     plan = (tenant.plan if tenant else None) or 'free'
     limits = await resolve_plan_limits(db, plan)
     usage_rows = []

@@ -83,6 +83,20 @@ export function parseApiErrorMessage(errorData: Record<string, unknown>): string
   return 'An error occurred';
 }
 
+/** Login 422 with body.username usually means another app's API is on port 8000 (e.g. ServiceBridge). */
+export function isForeignAuthApiError(errorData: Record<string, unknown>): boolean {
+  const detail = errorData.detail;
+  if (!Array.isArray(detail)) return false;
+  return detail.some((item) => {
+    if (!item || typeof item !== 'object' || !('loc' in item)) return false;
+    const loc = (item as { loc?: unknown }).loc;
+    return Array.isArray(loc) && loc.some((part) => part === 'username');
+  });
+}
+
+export const FOREIGN_AUTH_API_MESSAGE =
+  'Wrong backend on port 8000 (another project may be running). From the tendoriq folder run: run.bat stop — then run.bat';
+
 export function parseApiErrorCode(errorData: Record<string, unknown>): string | undefined {
   const nested = errorData.error;
   if (nested && typeof nested === 'object' && nested !== null && 'code' in nested) {

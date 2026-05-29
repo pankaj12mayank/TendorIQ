@@ -21,6 +21,7 @@ from .user_preferences import normalize_preferences
 logger = get_logger('local_user_auth')
 
 PLATFORM_ADMIN_PREF = 'platform_super_admin'
+LEGACY_DEMO_EMAIL = 'demo@tendoriq.com'
 
 
 def owner_account_file_path():
@@ -57,15 +58,32 @@ Change password: Dashboard → Settings → Profile (recommended after first log
     path.write_text(body.strip() + '\n', encoding='utf-8')
 
 
-def _owner_defaults() -> tuple[str, str, str, str, str, str]:
+def _owner_defaults() -> tuple[str, str, str]:
     s = get_settings()
     owner_email = (s.SYSTEM_OWNER_EMAIL or 'admin@tendoriq.com').strip().lower()
     owner_pass = (s.SYSTEM_OWNER_DEFAULT_PASSWORD or 'Owner@ChangeMe123').strip()
     owner_name = (s.SYSTEM_OWNER_NAME or 'System Owner').strip()
-    demo_email = (s.DEMO_USER_EMAIL or 'demo@tendoriq.com').strip().lower()
-    demo_pass = (s.DEMO_USER_DEFAULT_PASSWORD or 'Demo@ChangeMe123').strip()
-    demo_name = (s.DEMO_USER_NAME or 'Demo User').strip()
-    return owner_email, owner_pass, owner_name, demo_email, demo_pass, demo_name
+    return owner_email, owner_pass, owner_name
+
+
+async def _remove_legacy_demo_user(db: AsyncSession) -> bool:
+    """Drop legacy seeded demo account from older installs."""
+    from .models import Membership
+
+    user = (
+        await db.execute(select(User).where(User.email == LEGACY_DEMO_EMAIL))
+    ).scalar_one_or_none()
+    if not user:
+        return False
+
+    memberships = (
+        await db.execute(select(Membership).where(Membership.user_id == user.id))
+    ).scalars().all()
+    for membership in memberships:
+        await db.delete(membership)
+    await db.delete(user)
+    logger.info('Removed legacy demo account: %s', LEGACY_DEMO_EMAIL)
+    return True
 
 
 def _user_prefs(user: User) -> dict[str, Any]:
@@ -285,17 +303,12 @@ async def repair_users_missing_password_hashes(db: AsyncSession) -> bool:
     """Assign default DB passwords to users that have no password_hash yet."""
     import json
 
-    owner_email, owner_pass, owner_name, demo_email, demo_pass, demo_name = _owner_defaults()
+    owner_email, owner_pass, owner_name = _owner_defaults()
     targets = {
         owner_email: {
             'platform_super_admin': True,
             'name': owner_name,
             'password': owner_pass,
-        },
-        demo_email: {
-            'platform_super_admin': False,
-            'name': demo_name,
-            'password': demo_pass,
         },
     }
     creds: list[dict[str, str]] = []
@@ -384,8 +397,8 @@ async def _ensure_user_with_password(
             # Dev recovery: re-sync seed accounts to .env defaults when hash drifted
             if not get_settings().is_development:
                 return False, cred
-            owner_email, owner_pass, _, demo_email, demo_pass, _ = _owner_defaults()
-            if email not in (owner_email, demo_email) or password not in (owner_pass, demo_pass):
+            owner_email, owner_pass, _ = _owner_defaults()
+            if email != owner_email or password != owner_pass:
                 return False, cred
             prefs = _user_prefs(user)
             prefs['password_hash'] = hash_password(password)
@@ -433,15 +446,13 @@ async def _ensure_user_with_password(
 
 
 async def ensure_dev_accounts(db: AsyncSession) -> bool:
-    """Ensure system owner + demo exist and have login passwords (idempotent)."""
-    from sqlalchemy import select as sa_select
-
-    from .config import settings
-    from .models import Membership, Tenant
-
-    owner_email, owner_pass, owner_name, demo_email, demo_pass, demo_name = _owner_defaults()
+    """Ensure system owner exists with login password (idempotent)."""
+    owner_email, owner_pass, owner_name = _owner_defaults()
     changed = False
     creds: list[dict[str, str]] = []
+
+    if await _remove_legacy_demo_user(db):
+        changed = True
 
     created, cred = await _ensure_user_with_password(
         db,
@@ -454,80 +465,6 @@ async def ensure_dev_accounts(db: AsyncSession) -> bool:
         changed = True
     creds.append(cred)
 
-    slug = (settings.DEMO_TENANT_SLUG or 'demo').strip().lower()
-    tenant = (
-        await db.execute(sa_select(Tenant).where(Tenant.slug == slug))
-    ).scalar_one_or_none()
-    if not tenant:
-        tenant = Tenant(
-            id=generate_uuid(),
-            name=settings.DEMO_TENANT_NAME or 'Demo Organization',
-            slug=slug,
-            plan='professional',
-            subscription_status='active',
-            status='active',
-        )
-        db.add(tenant)
-        await db.flush()
-        changed = True
-
-    demo_user = (
-        await db.execute(select(User).where(User.email == demo_email))
-    ).scalar_one_or_none()
-    if demo_user:
-        created_demo, cred_demo = await _ensure_user_with_password(
-            db,
-            email=demo_email,
-            password=demo_pass,
-            name=demo_name,
-            platform_admin=False,
-        )
-        if created_demo:
-            changed = True
-        creds.append(cred_demo)
-        mem = (
-            await db.execute(
-                select(Membership).where(
-                    Membership.user_id == demo_user.id,
-                    Membership.tenant_id == tenant.id,
-                )
-            )
-        ).scalar_one_or_none()
-        if not mem:
-            db.add(
-                Membership(
-                    user_id=demo_user.id,
-                    tenant_id=tenant.id,
-                    role='admin',
-                    status='active',
-                )
-            )
-            changed = True
-    else:
-        created_demo, cred_demo = await _ensure_user_with_password(
-            db,
-            email=demo_email,
-            password=demo_pass,
-            name=demo_name,
-            platform_admin=False,
-        )
-        if created_demo:
-            changed = True
-        creds.append(cred_demo)
-        demo_user = (
-            await db.execute(select(User).where(User.email == demo_email))
-        ).scalar_one_or_none()
-        if demo_user:
-            db.add(
-                Membership(
-                    user_id=demo_user.id,
-                    tenant_id=tenant.id,
-                    role='admin',
-                    status='active',
-                )
-            )
-            changed = True
-
     if await repair_users_missing_password_hashes(db):
         changed = True
 
@@ -535,27 +472,22 @@ async def ensure_dev_accounts(db: AsyncSession) -> bool:
         await db.commit()
         await _write_bootstrap_credentials(
             creds,
-            note='Dev accounts. System owner: .tenderiq/owner-account.txt',
+            note='System owner only. Credentials: .tenderiq/owner-account.txt',
         )
-        logger.info('Dev accounts ensured; owner login: %s', owner_account_file_path())
+        logger.info('System owner ensured; login file: %s', owner_account_file_path())
     return changed
 
 
 async def seed_initial_accounts_if_empty(db: AsyncSession) -> bool:
-    """Create system owner + demo test user when no password users exist."""
+    """Create system owner when no password users exist."""
     import json
 
-    from sqlalchemy import select as sa_select
-
-    from .config import settings
-    from .models import Membership, Tenant
-
-    if await count_password_users(db) == 0:
-        pass
-    else:
+    if await count_password_users(db) > 0:
         return await ensure_dev_accounts(db)
 
-    owner_email, owner_pass, owner_name, demo_email, demo_pass, demo_name = _owner_defaults()
+    owner_email, owner_pass, owner_name = _owner_defaults()
+
+    await _remove_legacy_demo_user(db)
 
     admin_prefs = {
         'password_hash': hash_password(owner_pass),
@@ -570,42 +502,6 @@ async def seed_initial_accounts_if_empty(db: AsyncSession) -> bool:
         preferences=admin_prefs,
     )
     db.add(admin)
-
-    slug = (settings.DEMO_TENANT_SLUG or 'demo').strip().lower()
-    tenant = (
-        await db.execute(sa_select(Tenant).where(Tenant.slug == slug))
-    ).scalar_one_or_none()
-    if not tenant:
-        tenant = Tenant(
-            id=generate_uuid(),
-            name=settings.DEMO_TENANT_NAME or 'Demo Organization',
-            slug=slug,
-            plan='professional',
-            status='active',
-        )
-        db.add(tenant)
-        await db.flush()
-
-    demo = User(
-        id=generate_uuid(),
-        email=demo_email,
-        name=demo_name,
-        role='admin',
-        email_verified=True,
-        preferences={'password_hash': hash_password(demo_pass)},
-    )
-    db.add(demo)
-    await db.flush()
-
-    db.add(
-        Membership(
-            user_id=demo.id,
-            tenant_id=tenant.id,
-            role='admin',
-            status='active',
-        )
-    )
-
     await db.commit()
 
     write_owner_account_file(email=owner_email, password=owner_pass)
@@ -615,10 +511,9 @@ async def seed_initial_accounts_if_empty(db: AsyncSession) -> bool:
     cred_path.write_text(
         json.dumps(
             {
-                'note': 'Default dev accounts. System owner file: .tenderiq/owner-account.txt',
+                'note': 'System owner account. See .tenderiq/owner-account.txt',
                 'accounts': [
                     {'email': owner_email, 'password': owner_pass, 'role': 'platform_admin'},
-                    {'email': demo_email, 'password': demo_pass, 'role': 'tenant_admin'},
                 ],
             },
             indent=2,
@@ -626,7 +521,7 @@ async def seed_initial_accounts_if_empty(db: AsyncSession) -> bool:
         encoding='utf-8',
     )
     logger.info(
-        'Bootstrap accounts created; owner login: %s',
+        'System owner created; login file: %s',
         owner_account_file_path(),
     )
     return True

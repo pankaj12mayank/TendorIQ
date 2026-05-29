@@ -311,7 +311,7 @@ async def reset_password(
 
 @router.post('/bootstrap-seed', include_in_schema=False)
 async def bootstrap_seed(db: AsyncSession = Depends(get_db)):
-    """Dev/first-run: ensure system owner + demo accounts exist (idempotent)."""
+    """Dev/first-run: ensure system owner account exists (idempotent)."""
     if settings.NODE_ENV == 'production':
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     try:

@@ -158,7 +158,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       );
 
       if (!completeResponse.ok) {
-        throw new Error('Failed to complete upload');
+        const errBody = (await completeResponse.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >;
+        throw new Error(parseApiErrorMessage(errBody) || 'Failed to complete upload');
       }
 
       return {
@@ -199,7 +203,11 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
       if (!directResponse.ok) {
         const errBody = (await directResponse.json().catch(() => ({}))) as Record<string, unknown>;
-        throw new Error(parseApiErrorMessage(errBody) || 'Upload rejected');
+        const msg = parseApiErrorMessage(errBody) || 'Upload rejected';
+        if (directResponse.status === 402) {
+          throw new Error(msg.includes('plan') ? msg : `${msg} Buy a plan under Settings → Billing.`);
+        }
+        throw new Error(msg);
       }
 
       const directData = parseDirectResponse(await directResponse.json());

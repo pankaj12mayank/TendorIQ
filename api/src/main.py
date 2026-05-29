@@ -131,6 +131,10 @@ async def no_store_api_cache(request: Request, call_next):
 def _http_exception_message(detail: object) -> str:
     if isinstance(detail, str):
         return detail
+    if isinstance(detail, dict):
+        msg = detail.get('message')
+        if msg:
+            return str(msg)
     if isinstance(detail, list):
         parts: list[str] = []
         for item in detail:

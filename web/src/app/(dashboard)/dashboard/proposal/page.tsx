@@ -6,8 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { FileDown, Loader2, Sparkles } from 'lucide-react';
 import { appToast } from '@/lib/app-toast';
 
+import { SubscriptionGate } from '@/components/billing/subscription-gate';
 import { PageHeader } from '@/components/design-system/page-header';
-import { AiModelPicker } from '@/components/upload/ai-model-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,8 +18,6 @@ import {
   useTenderProposal,
   type ProposalSection,
 } from '@/hooks/use-proposal';
-import { mergePrefsWithLocal, useAiPreferences } from '@/hooks/use-ai-preferences';
-import { ROUTES } from '@/lib/routes';
 
 function SectionCard({
   section,
@@ -57,8 +55,6 @@ function SectionCard({
 export default function ProposalPage() {
   const searchParams = useSearchParams();
   const tenderId = searchParams.get('tenderId') ?? undefined;
-  const { data: aiPrefs } = useAiPreferences();
-  const selection = mergePrefsWithLocal(aiPrefs ?? undefined);
   const { data: proposal, isLoading } = useTenderProposal(tenderId);
   const generate = useGenerateProposal(tenderId);
   const [exporting, setExporting] = useState(false);
@@ -102,10 +98,7 @@ export default function ProposalPage() {
       return;
     }
     try {
-      await generate.mutateAsync({
-        provider: selection.provider,
-        model: selection.model,
-      });
+      await generate.mutateAsync({});
       appToast.success('Proposal generated.');
     } catch (err) {
       appToast.error(err instanceof Error ? err.message : 'Generation failed');
@@ -130,6 +123,7 @@ export default function ProposalPage() {
   };
 
   return (
+    <SubscriptionGate>
     <div className="space-y-8">
       <PageHeader
         title="Proposal"
@@ -162,21 +156,6 @@ export default function ProposalPage() {
         }
       />
 
-      <Card className="border-border/80 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">AI model</CardTitle>
-          <CardDescription>
-            Defaults from{' '}
-            <Link href={`${ROUTES.settings}/ai`} className="underline">
-              Settings → AI
-            </Link>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AiModelPicker value={selection} showTest={false} />
-        </CardContent>
-      </Card>
-
       {isLoading && <p className="text-sm text-muted-foreground">Loading proposal…</p>}
 
       {proposal && (
@@ -208,5 +187,6 @@ export default function ProposalPage() {
         </Card>
       )}
     </div>
+    </SubscriptionGate>
   );
 }

@@ -84,6 +84,27 @@ router = APIRouter(
 )
 logger = get_logger('files_api')
 
+
+async def _resolve_upload_tenant_id(
+    current_user: TenantUser,
+    db: AsyncSession,
+) -> str:
+    """Ensure tenant_id for customer file ops (including owner test mode)."""
+    if current_user.tenant_id:
+        return current_user.tenant_id
+    from ...core.personal_workspace import ensure_personal_workspace
+
+    tenant_id, membership_role = await ensure_personal_workspace(
+        db,
+        current_user.user_id,
+        current_user.email,
+    )
+    current_user.tenant_id = tenant_id
+    if membership_role and not current_user.membership_role:
+        current_user.membership_role = membership_role
+    return tenant_id
+
+
 PDF_MAGIC = b'%PDF-'
 ZIP_MAGIC = b'PK\x03\x04'
 OLE_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
@@ -149,10 +170,12 @@ async def initiate_upload(
     db: AsyncSession = Depends(get_db),
 ):
     """Initiate a file upload - generates storage key and signed URL"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    tenant_id = await _resolve_upload_tenant_id(current_user, db)
+    from ...core.billing.subscription_access import assert_can_use_system
 
-    tenant_id = current_user.tenant_id
+    await assert_can_use_system(
+        db, UUID(tenant_id), is_super_admin=current_user.is_super_admin()
+    )
 
     safe_filename = storage_service.sanitize_filename(data.file_name)
     storage_key = storage_service.generate_storage_key(
@@ -230,8 +253,7 @@ async def complete_upload(
     ai_model: Optional[str] = Query(None, alias='model'),
 ):
     """Mark upload as complete and verify file exists"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     doc = await file_service.get_document(db, UUID(document_id))
     if not doc:
@@ -327,8 +349,12 @@ async def direct_upload(
     ai_model: Optional[str] = Query(None, alias='model'),
 ):
     """Direct upload via multipart form (local storage only; R2/S3 use presigned flow)."""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    tenant_id = await _resolve_upload_tenant_id(current_user, db)
+    from ...core.billing.subscription_access import assert_can_use_system
+
+    await assert_can_use_system(
+        db, UUID(tenant_id), is_super_admin=current_user.is_super_admin()
+    )
 
     if settings.STORAGE_PROVIDER in ('r2', 's3'):
         raise HTTPException(
@@ -454,8 +480,7 @@ async def download_file(
     expires_seconds: int = Query(3600, ge=60, le=86400),
 ):
     """Get signed download URL for a file"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     doc = await file_service.get_document(db, UUID(document_id))
     if not doc:
@@ -504,8 +529,7 @@ async def list_files(
     search: Optional[str] = Query(None),
 ):
     """List files for the current tenant"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     docs, total = await file_service.list_documents(
         db=db,
@@ -538,8 +562,7 @@ async def get_file(
     db: AsyncSession = Depends(get_db),
 ):
     """Get file metadata"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     doc = await file_service.get_document(db, UUID(document_id))
     if not doc:
@@ -561,8 +584,7 @@ async def delete_file(
     permanently: bool = Query(False),
 ):
     """Delete a file"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     doc = await file_service.get_document(db, UUID(document_id))
     if not doc:
@@ -617,8 +639,7 @@ async def generate_signed_url(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate a signed URL for upload or download"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     doc = await file_service.get_document(db, UUID(data.document_id))
     if not doc:
@@ -687,8 +708,7 @@ async def get_storage_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Get storage usage statistics for tenant"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     stats = await file_service.get_storage_stats(db, UUID(current_user.tenant_id))
 
@@ -711,8 +731,7 @@ async def batch_delete_files(
     permanently: bool = Query(False),
 ):
     """Batch delete multiple files"""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Tenant context required')
+    await _resolve_upload_tenant_id(current_user, db)
 
     uuids = [UUID(did) for did in document_ids]
     docs = []

@@ -1,16 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Upload, ExternalLink } from 'lucide-react';
 import { PageHeader } from '@/components/design-system/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SubscriptionGate } from '@/components/billing/subscription-gate';
 import { FileUploader } from '@/components/upload/file-uploader';
-import { AiModelPicker } from '@/components/upload/ai-model-picker';
 import { useDashboardStore } from '@/stores/dashboard-store';
 import { useDocumentProcessing } from '@/hooks/use-document-processing';
-import { loadAiSelection, type AiSelection } from '@/hooks/use-ai-catalog';
-import { mergePrefsWithLocal, useAiPreferences } from '@/hooks/use-ai-preferences';
 import type { UploadResult } from '@/hooks/use-file-upload';
 import { appToast } from '@/lib/app-toast';
 
@@ -60,27 +58,22 @@ function ProcessingBanner({ documentId }: { documentId: string }) {
 }
 
 export default function UploadPage() {
-  const { data: savedPrefs } = useAiPreferences();
-  const [aiSelection, setAiSelection] = useState<AiSelection>(() => loadAiSelection());
-
-  useEffect(() => {
-    if (savedPrefs) setAiSelection(mergePrefsWithLocal(savedPrefs));
-  }, [savedPrefs]);
   const [lastDocumentId, setLastDocumentId] = useState<string | null>(null);
   const addActivity = useDashboardStore((state) => state.addActivity);
 
   const handleUploadComplete = (results: UploadResult[]) => {
     const ok = results.filter((r) => r.success && r.document_id);
     if (ok.length === 0) {
-      appToast.error('Upload failed. Try again with valid files.');
+      const detail =
+        results.find((r) => r.error)?.error ??
+        'Upload failed. Use PDF, DOC, or DOCX (max 25MB each).';
+      appToast.error(detail);
       return;
     }
     const last = ok[ok.length - 1];
     if (last.document_id) setLastDocumentId(last.document_id);
 
-    appToast.success(
-      `${ok.length} file(s) uploaded. AI analysis started with ${aiSelection.provider}/${aiSelection.model}.`
-    );
+    appToast.success(`${ok.length} file(s) uploaded. AI analysis has started.`);
     addActivity({
       id: `activity-${Date.now()}`,
       type: 'complete',
@@ -91,10 +84,11 @@ export default function UploadPage() {
   };
 
   return (
+    <SubscriptionGate>
     <div className="space-y-8">
       <PageHeader
         title="Upload documents"
-        description="Upload tender PDFs or Word files. AI analysis starts automatically with your selected model."
+        description="Upload tender PDFs or Word files. AI analysis starts automatically after upload."
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -110,9 +104,7 @@ export default function UploadPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <AiModelPicker value={aiSelection} onChange={setAiSelection} />
               <FileUploader
-                aiSelection={aiSelection}
                 onUploadComplete={handleUploadComplete}
                 maxFiles={10}
                 category="documents"
@@ -143,8 +135,7 @@ export default function UploadPage() {
               <div>
                 <h4 className="font-medium mb-1">Processing</h4>
                 <p className="text-muted-foreground">
-                  After upload, TenderIQ extracts text and runs your chosen AI model (OpenAI,
-                  Anthropic, Gemini, or local Ollama).
+                  After upload, TenderIQ extracts text and runs AI analysis on your documents.
                 </p>
               </div>
             </CardContent>
@@ -152,5 +143,6 @@ export default function UploadPage() {
         </div>
       </div>
     </div>
+    </SubscriptionGate>
   );
 }

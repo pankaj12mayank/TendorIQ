@@ -18,8 +18,15 @@ import {
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { apiUrl as resolveApiUrl } from '@/lib/api-config';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
-import { parseApiErrorMessage } from '@/lib/api-envelope';
-import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
+import {
+  FOREIGN_AUTH_API_MESSAGE,
+  isForeignAuthApiError,
+  parseApiErrorMessage,
+} from '@/lib/api-envelope';
+import {
+  setSessionInvalidateHandler,
+  setUnauthorizedHandler,
+} from '@/lib/auth-unauthorized';
 import { isProtectedPath } from '@/lib/clerk-config';
 import { isSuperAdmin } from '@/lib/permissions';
 import { appToast } from '@/lib/app-toast';
@@ -64,14 +71,23 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
   const stored = typeof window !== 'undefined' ? getStoredSession() : null;
 
   useEffect(() => {
+    const invalidateSession = () => {
+      setSyncedUser(null);
+      clearStoredSession();
+    };
+    setSessionInvalidateHandler(invalidateSession);
     setUnauthorizedHandler(({ pathname, search }) => {
+      invalidateSession();
       const url = new URL('/sign-in', window.location.origin);
       if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
         url.searchParams.set('redirect_url', pathname + search);
       }
       router.replace(url.pathname + url.search);
     });
-    return () => setUnauthorizedHandler(null);
+    return () => {
+      setSessionInvalidateHandler(null);
+      setUnauthorizedHandler(null);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -168,6 +184,9 @@ export function ClerkAuthProvider({ children }: { children: ReactNode }) {
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (res.status === 422 && isForeignAuthApiError(err)) {
+          throw new Error(FOREIGN_AUTH_API_MESSAGE);
+        }
         throw new Error(parseApiErrorMessage(err) || 'Login failed');
       }
       const data = await res.json();

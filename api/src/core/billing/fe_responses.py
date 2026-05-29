@@ -134,9 +134,9 @@ async def build_usage_summary(db: AsyncSession, tenant_id: UUID) -> dict[str, An
 
 
 async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str, Any]:
-    from ..models import Tenant
+    from ..models import Tenant, pk_str
 
-    tenant = await db.get(Tenant, tenant_id)
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         raise ValueError('Tenant not found')
 
@@ -201,6 +201,64 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
         'isExpired': access['is_expired'],
         'upgradeRequired': access['upgrade_required'],
     }
+
+
+def build_plans_from_pricing(pricing: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
+    """Plans shown to customers — sourced from owner Pricing settings when available."""
+    raw_plans = (pricing or {}).get('plans') if isinstance(pricing, dict) else None
+    if isinstance(raw_plans, list) and raw_plans:
+        from .lite_usage import LITE_DEMO_LIMITS
+
+        built: list[dict[str, Any]] = []
+        for row in raw_plans:
+            if not isinstance(row, dict):
+                continue
+            if row.get('active') is False:
+                continue
+            api_id = normalize_plan_id(str(row.get('id') or 'professional'))
+            meta = PLAN_DISPLAY.get(api_id, PLAN_DISPLAY['professional'])
+            monthly_usd = row.get('monthly_usd')
+            if monthly_usd is None:
+                monthly_usd = row.get('monthly_inr')
+            monthly_usd = int(monthly_usd or 0)
+            limits = PlanLimits.get_limits(api_id)
+            lite_limits = LITE_DEMO_LIMITS.get(api_id, limits)
+            built.append(
+                {
+                    'id': meta['id'] if str(row.get('id', '')).startswith('plan_') else f"plan_{api_id}",
+                    'name': meta['name'],
+                    'displayName': str(row.get('name') or meta['displayName']),
+                    'description': str(row.get('description') or f'{meta["displayName"]} subscription'),
+                    'priceMonthly': monthly_usd * 100,
+                    'priceAnnual': monthly_usd * 100,
+                    'priceMonthlyUsd': monthly_usd,
+                    'priceAnnualUsd': monthly_usd,
+                    'currency': str((pricing or {}).get('currency') or 'USD'),
+                    'isDemo': False,
+                    'trialDays': 0,
+                    'isActive': True,
+                    'expiryPeriodDays': int(row.get('expiry_period_days') or 30),
+                    'features': [
+                        {'key': f'feature_{i}', 'name': str(f), 'limit': None, 'unit': '/mo', 'isEnabled': True}
+                        for i, f in enumerate(row.get('features') or [])
+                    ]
+                    or [
+                        {
+                            'key': k,
+                            'name': QUOTA_LABELS.get(k, k.replace('_per_month', '')),
+                            'limit': v if v != -1 else None,
+                            'unit': '/mo',
+                            'isEnabled': True,
+                        }
+                        for k, v in lite_limits.items()
+                        if k.endswith('_per_month') or k in ('users', 'documents', 'tenders', 'ai_tokens')
+                    ],
+                    'apiPlanId': api_id,
+                }
+            )
+        if built:
+            return built
+    return build_plans_for_fe()
 
 
 def build_plans_for_fe() -> list[dict[str, Any]]:

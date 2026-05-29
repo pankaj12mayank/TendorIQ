@@ -5,9 +5,8 @@ import { appToast } from '@/lib/app-toast';
 
 import { useCurrentUser } from '@/hooks/use-auth';
 import { useCompanyProfile, useUpdateCompanyProfile } from '@/hooks/use-company-profile';
-import { apiUrl } from '@/lib/api-config';
-import { buildApiAuthHeaders } from '@/lib/auth-user';
-import { getStoredSession } from '@/lib/auth-session';
+import { api } from '@/lib/api-client';
+import { parseApiErrorMessage } from '@/lib/api-envelope';
 import { getAuthProvider } from '@/lib/auth-provider';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Button } from '@/components/ui/button';
@@ -49,35 +48,24 @@ export function ProfilePanel() {
       appToast.warning('New passwords do not match.');
       return;
     }
-    const token = getStoredSession()?.token;
-    if (!token) {
-      appToast.error('Sign in again to change your password.');
+    if (!currentPassword.trim()) {
+      appToast.warning('Enter your current password.');
       return;
     }
     setChangingPassword(true);
     try {
-      const res = await fetch(apiUrl('/auth/change-password'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...buildApiAuthHeaders(token, user ?? undefined),
-        },
-        body: JSON.stringify({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
+      await api.post('/api/v1/auth/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = (body as { detail?: string }).detail;
-        throw new Error(typeof detail === 'string' ? detail : 'Password change failed');
-      }
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      appToast.success('Password updated.');
+      appToast.success('Password updated. Use your new password on the next sign-in.');
     } catch (err) {
-      appToast.error(err instanceof Error ? err.message : 'Password change failed');
+      const message =
+        err instanceof Error && err.message ? err.message : 'Password change failed';
+      appToast.error(message);
     } finally {
       setChangingPassword(false);
     }
@@ -116,49 +104,59 @@ export function ProfilePanel() {
           </p>
         </CardContent>
       </Card>
-      {isLocalAuth && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Change password</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Change password</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!isLocalAuth ? (
             <p className="text-sm text-muted-foreground">
-              Updates your login password in the database. Use this after first sign-in with the
-              default from <code className="text-xs">.tenderiq/owner-account.txt</code>.
+              Password is managed by your external sign-in provider. Use that provider to change your
+              password.
             </p>
-            <div className="space-y-2">
-              <Label htmlFor="current_password">Current password</Label>
-              <PasswordInput
-                id="current_password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new_password">New password</Label>
-              <PasswordInput
-                id="new_password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm_password">Confirm new password</Label>
-              <PasswordInput
-                id="confirm_password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                autoComplete="new-password"
-              />
-            </div>
-            <Button onClick={changePassword} disabled={changingPassword}>
-              {changingPassword ? 'Updating…' : 'Update password'}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Set a new password for this account. After saving, sign in with your email and the
+                new password.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="current_password">Current password</Label>
+                <PasswordInput
+                  id="current_password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new_password">New password</Label>
+                <PasswordInput
+                  id="new_password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm_password">Confirm new password</Label>
+                <PasswordInput
+                  id="confirm_password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+              <Button
+                onClick={() => void changePassword()}
+                disabled={changingPassword || !currentPassword || !newPassword}
+              >
+                {changingPassword ? 'Updating…' : 'Update password'}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
       <Card id="company">
         <CardHeader>
           <CardTitle>Company profile</CardTitle>

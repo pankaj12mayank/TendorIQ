@@ -1,7 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { FlaskConical, Upload } from 'lucide-react';
 import { appToast } from '@/lib/app-toast';
+import { ROUTES } from '@/lib/routes';
 
 import { AdminRouteGuard } from '@/components/auth/admin-route-guard';
 import { CmsControlPanel } from '@/components/admin/cms-control-panel';
@@ -283,6 +286,27 @@ export default function AdminDashboardPage() {
           title="Platform admin"
           description="Manage users, pricing, landing content, payments, and platform operations."
         />
+
+        <Card className="border-primary/25 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FlaskConical className="h-5 w-5 text-primary" />
+              Test customer flow
+            </CardTitle>
+            <CardDescription>
+              Preview upload, analysis, proposal, and billing exactly as a paying customer. Use the
+              sidebar section &quot;Test customer flow&quot; or start with Upload.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href={ROUTES.upload}>
+                <Upload className="mr-2 h-4 w-4" />
+                Open customer Upload
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
 
         <div
           className="tabs-pill-list flex flex-wrap gap-2 rounded-xl border border-border/60 bg-muted/20 p-2"

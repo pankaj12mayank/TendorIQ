@@ -1,6 +1,7 @@
 import type { ZodSchema } from 'zod';
 
 import { notifyUnauthorized } from '@/lib/auth-unauthorized';
+import { attemptSessionRefresh } from '@/lib/auth-refresh';
 import { clearStoredSession, getAuthToken } from '@/lib/auth-session';
 import { getSessionRequestHeaders } from '@/lib/api-headers';
 import { getApiBaseUrl, DEFAULT_API_TIMEOUT_MS } from '@/lib/api-config';
@@ -23,6 +24,8 @@ interface RequestOptions extends RequestInit {
   schema?: ZodSchema;
   /** Request timeout in ms (default 30s). Use {@link UPLOAD_API_TIMEOUT_MS} for large uploads. */
   timeout?: number;
+  /** @internal single 401 refresh retry */
+  _retry401?: boolean;
 }
 
 class ApiClient {
@@ -77,7 +80,15 @@ class ApiClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        if (response.status === 401 && typeof window !== 'undefined') {
+        if (
+          response.status === 401 &&
+          typeof window !== 'undefined' &&
+          !options._retry401
+        ) {
+          const refreshed = await attemptSessionRefresh();
+          if (refreshed) {
+            return this.request<T>(endpoint, { ...options, _retry401: true });
+          }
           clearStoredSession();
           notifyUnauthorized();
         }

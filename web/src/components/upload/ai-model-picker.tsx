@@ -151,13 +151,7 @@ export function AiModelPicker({ value, onChange, showTest = true, className }: A
 
       {configured.length === 0 ? (
         <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-          <p>No AI provider is active yet.</p>
-          <p>
-            Add <code className="rounded bg-muted px-1">OPENAI_API_KEY</code> in{' '}
-            <code className="rounded bg-muted px-1">.env</code>, or run{' '}
-            <code className="rounded bg-muted px-1">ollama serve</code> and pull a model, then
-            click Refresh.
-          </p>
+          <p>AI is not available right now. Please try again later or contact support.</p>
           {ollamaEntry?.hint && <p className="text-amber-600 dark:text-amber-400">{ollamaEntry.hint}</p>}
         </div>
       ) : (

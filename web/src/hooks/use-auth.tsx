@@ -5,6 +5,7 @@ import {
   useEffect,
   useCallback,
   useContext,
+  useRef,
   useState,
   useMemo,
   type ReactNode,
@@ -31,8 +32,15 @@ import {
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { buildApiAuthHeaders } from '@/lib/auth-user';
 import { syncTenantStoreFromUser } from '@/lib/sync-tenant-store';
-import { parseApiErrorMessage } from '@/lib/api-envelope';
-import { setUnauthorizedHandler } from '@/lib/auth-unauthorized';
+import {
+  FOREIGN_AUTH_API_MESSAGE,
+  isForeignAuthApiError,
+  parseApiErrorMessage,
+} from '@/lib/api-envelope';
+import {
+  setSessionInvalidateHandler,
+  setUnauthorizedHandler,
+} from '@/lib/auth-unauthorized';
 import { isClerkConfigured, isProtectedPath } from '@/lib/clerk-config';
 import { getAuthProvider } from '@/lib/auth-provider';
 import { useLazyClientModule } from '@/lib/lazy-client-module';
@@ -75,27 +83,40 @@ function useRouteGuard(isAuthenticated: boolean, isLoading: boolean, role?: stri
 function LocalAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const authEpochRef = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
 
+  const isAuthEpochCurrent = useCallback((epoch: number) => epoch === authEpochRef.current, []);
+
   useEffect(() => {
+    const invalidateSession = () => {
+      setUser(null);
+      setIsLoading(false);
+    };
+    setSessionInvalidateHandler(invalidateSession);
     setUnauthorizedHandler(({ pathname, search }) => {
+      invalidateSession();
       const url = new URL('/sign-in', window.location.origin);
       if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
         url.searchParams.set('redirect_url', pathname + search);
       }
       router.replace(url.pathname + url.search);
     });
-    return () => setUnauthorizedHandler(null);
+    return () => {
+      setSessionInvalidateHandler(null);
+      setUnauthorizedHandler(null);
+    };
   }, [router]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function restore() {
+      const epoch = authEpochRef.current;
       const session = getStoredSession();
       if (!session) {
-        if (!cancelled) {
+        if (!cancelled && isAuthEpochCurrent(epoch)) {
           setUser(null);
           setIsLoading(false);
         }
@@ -111,7 +132,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       );
 
       if (networkError) {
-        if (!cancelled) {
+        if (!cancelled && isAuthEpochCurrent(epoch)) {
           setUser(session.user);
           setIsLoading(false);
           appToast.error('API is not reachable. Run run.bat and keep the API window open.');
@@ -121,6 +142,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
       if (unauthorized && refreshToken) {
         const refreshed = await refreshAccessToken(refreshToken);
+        if (!isAuthEpochCurrent(epoch)) return;
         if (refreshed) {
           accessToken = refreshed.access_token;
           refreshToken = refreshed.refresh_token ?? refreshToken;
@@ -128,7 +150,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
           me = retry.user;
           unauthorized = retry.unauthorized;
           if (retry.networkError) {
-            if (!cancelled) {
+            if (!cancelled && isAuthEpochCurrent(epoch)) {
               setUser(session.user);
               setIsLoading(false);
               appToast.error('API is not reachable. Run run.bat and keep the API window open.');
@@ -137,6 +159,8 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
           }
         }
       }
+
+      if (!isAuthEpochCurrent(epoch)) return;
 
       if (unauthorized) {
         clearStoredSession();
@@ -157,7 +181,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
           }
         : session.user;
 
-      if (!cancelled) {
+      if (!cancelled && isAuthEpochCurrent(epoch)) {
         setUser(restored);
         setStoredSession(accessToken, restored, {
           refreshToken,
@@ -185,7 +209,9 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       const session = getStoredSession();
       if (!session && !notified) {
         notified = true;
+        authEpochRef.current += 1;
         setUser(null);
+        setIsLoading(false);
         appToast.error('Your session has expired. Please sign in again.');
         router.replace('/sign-in');
         return;
@@ -203,14 +229,20 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    const touch = () => markSessionActivity();
-    const events: (keyof WindowEventMap)[] = ['click', 'keydown', 'mousemove', 'focus', 'scroll'];
+    let lastTouchAt = 0;
+    const touch = () => {
+      const now = Date.now();
+      if (now - lastTouchAt < 30_000) return;
+      lastTouchAt = now;
+      markSessionActivity();
+    };
+    const events: (keyof WindowEventMap)[] = ['click', 'keydown', 'focus'];
     events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
     touch();
     return () => {
       events.forEach((e) => window.removeEventListener(e, touch));
     };
-  }, [user, pathname]);
+  }, [user]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -246,6 +278,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         // Clear local session even if revoke call fails
       }
     }
+    authEpochRef.current += 1;
     clearStoredSession();
     setUser(null);
     router.push('/');
@@ -255,6 +288,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithCredentials = useCallback(
     async (email: string, password: string) => {
+      authEpochRef.current += 1;
       let res: Response;
       try {
         res = await fetch(apiUrl('/auth/login'), {
@@ -272,7 +306,9 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         let message = parseApiErrorMessage(err) || 'Login failed';
-        if (res.status === 503 || res.status === 502) {
+        if (res.status === 422 && isForeignAuthApiError(err)) {
+          message = FOREIGN_AUTH_API_MESSAGE;
+        } else if (res.status === 503 || res.status === 502) {
           message = 'API is not running. Start with run.bat, then try again.';
         }
         throw new Error(message);
@@ -285,6 +321,7 @@ function LocalAuthProvider({ children }: { children: ReactNode }) {
         expiresInSec: tokens.expires_in,
       });
       setUser(authUser);
+      setIsLoading(false);
       appToast.success('Signed in successfully.');
       const params = new URLSearchParams(window.location.search);
       const redirectUrl = params.get('redirect_url');

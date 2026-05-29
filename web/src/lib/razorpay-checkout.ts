@@ -13,9 +13,14 @@ export interface RazorpayOrder {
 }
 
 export interface PaymentConfig {
+  payment_enabled?: boolean;
+  preferred_provider?: 'stripe' | 'razorpay' | null;
   razorpay_enabled: boolean;
+  stripe_enabled?: boolean;
+  stripe_publishable_key?: string | null;
   razorpay_key_id?: string;
   currency: string;
+  providers?: string[];
 }
 
 declare global {

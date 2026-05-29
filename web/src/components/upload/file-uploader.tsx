@@ -167,7 +167,7 @@ export function FileUploader({
           Drag & drop files here, or click to browse
         </p>
         <p className="mb-4 text-xs text-muted-foreground">
-          Max {maxSizeMB}MB per file. PDF and DOCX only.
+          Max {maxSizeMB}MB per file. PDF, DOC, and DOCX only.
           {uploadConfig?.use_presigned ? ' Uploads go directly to cloud storage.' : ''}
         </p>
         <input

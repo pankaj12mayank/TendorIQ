@@ -14,24 +14,27 @@ if (Test-Path (Join-Path $Root '.env')) {
     }
 }
 
+$ownerFile = Join-Path $Root '.tenderiq\owner-account.txt'
+if ((Test-Path $ownerFile) -and -not $env:E2E_ADMIN_EMAIL) {
+    $content = Get-Content $ownerFile -Raw
+    if ($content -match 'Email:\s*(\S+)') { $env:E2E_ADMIN_EMAIL = $Matches[1] }
+    if ($content -match 'Password:\s*(\S+)') { $env:E2E_ADMIN_PASSWORD = $Matches[1] }
+}
+
 $credFile = Join-Path $Root '.tenderiq\bootstrap-credentials.json'
-if ((Test-Path $credFile) -and -not $env:E2E_DEMO_EMAIL) {
+if ((Test-Path $credFile) -and -not $env:E2E_ADMIN_EMAIL) {
     $json = Get-Content $credFile -Raw | ConvertFrom-Json
     foreach ($acct in $json.accounts) {
         if ($acct.role -eq 'platform_admin' -and -not $env:E2E_ADMIN_EMAIL) {
             $env:E2E_ADMIN_EMAIL = $acct.email
             $env:E2E_ADMIN_PASSWORD = $acct.password
         }
-        if ($acct.role -eq 'tenant_admin' -and -not $env:E2E_DEMO_EMAIL) {
-            $env:E2E_DEMO_EMAIL = $acct.email
-            $env:E2E_DEMO_PASSWORD = $acct.password
-        }
     }
 }
 
-if (-not $env:E2E_DEMO_EMAIL) { $env:E2E_DEMO_EMAIL = 'demo@tendoriq.com' }
-if (-not $env:E2E_DEMO_PASSWORD) {
-    Write-Host '[FAIL] Set E2E_DEMO_PASSWORD or run run.bat once to create .tenderiq/bootstrap-credentials.json' -ForegroundColor Red
+if (-not $env:E2E_ADMIN_EMAIL) { $env:E2E_ADMIN_EMAIL = 'admin@tendoriq.com' }
+if (-not $env:E2E_ADMIN_PASSWORD) {
+    Write-Host '[FAIL] Set E2E_ADMIN_PASSWORD or run run.bat once to create .tenderiq/owner-account.txt' -ForegroundColor Red
     exit 1
 }
 

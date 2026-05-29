@@ -23,7 +23,12 @@ function Test-ApiHealth {
     param([int]$Port)
     try {
         $h = Invoke-RestMethod "http://127.0.0.1:$Port/health" -TimeoutSec 3
-        return ($h.status -eq 'healthy')
+        if ($h.status -ne 'healthy') { return $false }
+        # TenderIQ Lite /health includes version + environment (not ServiceBridge's database field).
+        $hasVersion = $null -ne $h.PSObject.Properties['version']
+        $hasEnvironment = $null -ne $h.PSObject.Properties['environment']
+        if ($hasVersion -and $hasEnvironment) { return $true }
+        return $false
     } catch {
         return $false
     }
@@ -116,6 +121,7 @@ function Sync-WebEnvLocal {
         if ($line -match '^APP_URL=(.+)$' -and -not $appUrl) { $appUrl = $Matches[1].Trim() }
     }
     $lines = @(
+        "API_URL=http://127.0.0.1:$ApiPort"
         "NEXT_PUBLIC_API_URL=http://127.0.0.1:$ApiPort"
         "NEXT_PUBLIC_USE_API_PROXY=1"
         "NEXT_PUBLIC_APP_URL=$appUrl"
@@ -150,13 +156,20 @@ function Resolve-ApiPort {
         }
     }
 
+    try {
+        $foreign = Invoke-RestMethod "http://127.0.0.1:8000/health" -TimeoutSec 2
+        if ($foreign.status -eq 'healthy' -and $null -ne $foreign.PSObject.Properties['database']) {
+            Write-Log "WARN" "Port 8000 is another app (not TenderIQ). Stop ServiceBridge or free port 8000, or TenderIQ will use 8002."
+        }
+    } catch { }
+
     Stop-ListenPort 8000
     Start-Sleep -Seconds 1
     if (-not (Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue)) {
         return @{ Port = 8000; AlreadyRunning = $false }
     }
 
-    Write-Log "WARN" "Port 8000 busy but not healthy - trying port 8002."
+    Write-Log "WARN" "Port 8000 busy but not TenderIQ API - trying port 8002."
     Stop-ListenPort 8002
     Start-Sleep -Seconds 1
     if (-not (Get-NetTCPConnection -LocalPort 8002 -State Listen -ErrorAction SilentlyContinue)) {
@@ -430,7 +443,7 @@ if (-not $webOk) {
 
 if (-not $apiOk) { exit 1 }
 
-Write-Log "INFO" "Verifying login accounts (owner + demo)..."
+Write-Log "INFO" "Verifying system owner login..."
 Push-Location $ApiDir
 $env:DOTENV_PATH = $rootEnv
 & $VenvPython (Join-Path $ApiDir 'scripts\verify_auth.py')

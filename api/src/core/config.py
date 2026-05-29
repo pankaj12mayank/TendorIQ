@@ -170,13 +170,6 @@ class Settings(BaseSettings):
     SYSTEM_OWNER_DEFAULT_PASSWORD: str = 'Owner@ChangeMe123'
     SYSTEM_OWNER_NAME: str = 'System Owner'
 
-    # Demo tenant (testing only — not system owner)
-    DEMO_USER_EMAIL: str = 'demo@tendoriq.com'
-    DEMO_USER_DEFAULT_PASSWORD: str = 'Demo@ChangeMe123'
-    DEMO_USER_NAME: str = 'Demo User'
-    DEMO_TENANT_SLUG: str = 'demo'
-    DEMO_TENANT_NAME: str = 'Demo Organization'
-
     # SMTP
     SMTP_HOST: str = ''
     SMTP_PORT: int = 587
@@ -199,7 +192,7 @@ class Settings(BaseSettings):
     STORAGE_SIGNED_URL_EXPIRE_SECONDS: int = 3600
     STORAGE_TOKEN_CLOCK_SKEW_SECONDS: int = 120
     STORAGE_MAX_FILE_SIZE_MB: int = 25
-    STORAGE_ALLOWED_EXTENSIONS: str = '.pdf,.docx'
+    STORAGE_ALLOWED_EXTENSIONS: str = '.pdf,.doc,.docx'
 
     # ===========================================
     # RATE LIMITING

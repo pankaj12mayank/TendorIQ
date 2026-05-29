@@ -1,18 +1,28 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useCurrentUser } from '@/hooks/use-auth';
 import { useSubscriptionAccess } from '@/hooks/use-subscription-access';
+import { canAccessAdminConsole } from '@/lib/permissions';
 import { settingsTabHref } from '@/lib/routes';
 
 export function SubscriptionExpiredBanner() {
-  const { data: access } = useSubscriptionAccess();
+  const user = useCurrentUser();
+  const { data: access, isLoading } = useSubscriptionAccess();
 
-  if (!access?.is_expired || access.can_use_system) {
+  if (canAccessAdminConsole(user?.role)) {
     return null;
   }
+
+  if (isLoading || !access || access.can_use_system) {
+    return null;
+  }
+
+  const title =
+    access.plan === 'free' ? 'Active subscription required' : 'Your plan expired';
 
   return (
     <div
@@ -22,14 +32,14 @@ export function SubscriptionExpiredBanner() {
       <div className="flex gap-3">
         <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
         <div>
-          <p className="font-medium text-destructive">Your plan expired. Please renew to continue.</p>
+          <p className="font-medium text-destructive">{title}</p>
           <p className="text-sm text-muted-foreground">
-            {access.reason || 'Renew your monthly subscription to upload, analyze, generate proposals, and export PDFs.'}
+            {access.reason || 'Buy a plan on Billing to upload, analyze, and export.'}
           </p>
         </div>
       </div>
       <Button asChild variant="destructive" size="sm" className="shrink-0">
-        <Link href={settingsTabHref('billing')}>Renew plan</Link>
+        <Link href={settingsTabHref('billing')}>View plans</Link>
       </Button>
     </div>
   );
@@ -37,27 +47,59 @@ export function SubscriptionExpiredBanner() {
 
 interface SubscriptionGateProps {
   children: React.ReactNode;
-  /** Allow billing/settings UI even when expired */
   allowWhenExpired?: boolean;
 }
 
 export function SubscriptionGate({ children, allowWhenExpired = false }: SubscriptionGateProps) {
-  const { data: access, isLoading } = useSubscriptionAccess();
+  const user = useCurrentUser();
+  const { data: access, isLoading, isError } = useSubscriptionAccess();
+  const isOwner = canAccessAdminConsole(user?.role);
 
-  if (allowWhenExpired || isLoading || !access || access.can_use_system) {
+  if (isOwner) {
     return <>{children}</>;
   }
 
-  return (
-    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8 text-center">
-      <AlertTriangle className="h-10 w-10 text-destructive" />
-      <h2 className="text-lg font-semibold">Your plan expired. Please renew to continue.</h2>
-      <p className="max-w-md text-sm text-muted-foreground">
-        {access.reason || 'Analysis, uploads, proposal generation, and exports are paused until renewal.'}
-      </p>
-      <Button asChild>
-        <Link href={settingsTabHref('billing')}>Renew monthly plan</Link>
-      </Button>
-    </div>
-  );
+  if (allowWhenExpired) {
+    return <>{children}</>;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[32vh] items-center justify-center gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Checking subscription…</span>
+      </div>
+    );
+  }
+
+  if (isError || !access) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8 text-center">
+        <p className="text-sm text-muted-foreground">Could not verify subscription. Try again.</p>
+        <Button asChild variant="outline" size="sm">
+          <Link href={settingsTabHref('billing')}>Open Billing</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  if (!access.can_use_system) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8 text-center">
+        <AlertTriangle className="h-10 w-10 text-destructive" />
+        <h2 className="text-lg font-semibold">
+          {access.plan === 'free' ? 'Purchase a plan to continue' : 'Your plan expired'}
+        </h2>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {access.reason ||
+            'Upload, analysis, proposals, and exports need an active monthly plan.'}
+        </p>
+        <Button asChild>
+          <Link href={settingsTabHref('billing')}>View plans</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }

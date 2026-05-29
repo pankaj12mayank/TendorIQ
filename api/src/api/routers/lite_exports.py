@@ -37,12 +37,14 @@ async def download_tender_analysis_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     """Stream analysis report PDF (no job queue)."""
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail='Workspace context required')
-
     from ...core.billing.lite_usage import enforce_quota, track_usage
+    from ...core.billing.subscription_access import assert_can_use_system
+    from ...core.tenant_utils import resolve_member_tenant_uuid
 
-    tenant_uuid = parse_tenant_uuid(current_user.tenant_id)
+    tenant_uuid = await resolve_member_tenant_uuid(current_user, db)
+    await assert_can_use_system(
+        db, tenant_uuid, is_super_admin=current_user.is_super_admin()
+    )
     await enforce_quota(db, tenant_uuid, 'export_pdf')
 
     payload = await build_tender_report_payload(

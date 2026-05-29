@@ -22,14 +22,7 @@ SYSTEM_OWNER_DEFAULT_PASSWORD=Owner@ChangeMe123
 
 Login hamesha **database** se hota hai — `.env` se direct login nahi.
 
-## Demo user (testing — owner nahi)
-
-| | |
-|--|--|
-| Email | `demo@tendoriq.com` |
-| Password (default) | `Demo@ChangeMe123` |
-
-Details: `.tenderiq/bootstrap-credentials.json` (same folder as owner file)
+Paid/test users sign up from `/sign-up` or are created by the system owner in the admin panel.
 
 ## Owner control center quick check
 

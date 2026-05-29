@@ -70,8 +70,16 @@ def create_order(
     billing_interval: str,
     user_email: Optional[str] = None,
     pricing: dict | None = None,
+    gateway_cfg: dict | None = None,
 ) -> dict[str, Any]:
-    client = get_client()
+    if gateway_cfg:
+        from .payment_gateways import razorpay_client
+
+        client = razorpay_client(gateway_cfg)
+        key_id = gateway_cfg['razorpay_key_id']
+    else:
+        client = get_client()
+        key_id = settings.RAZORPAY_KEY_ID
     api_plan = normalize_plan_id(plan_id)
     amount = plan_amount_paise(plan_id, billing_interval, pricing=pricing)
     currency = (getattr(settings, 'RAZORPAY_CURRENCY', None) or 'USD').upper()
@@ -94,7 +102,7 @@ def create_order(
         'order_id': order['id'],
         'amount': amount,
         'currency': currency,
-        'key_id': settings.RAZORPAY_KEY_ID,
+        'key_id': key_id,
         'plan': api_plan,
         'plan_id': plan_id,
         'billing_interval': billing_interval,
@@ -105,8 +113,14 @@ def verify_payment_signature(
     order_id: str,
     payment_id: str,
     signature: str,
+    gateway_cfg: dict | None = None,
 ) -> bool:
-    client = get_client()
+    if gateway_cfg:
+        from .payment_gateways import razorpay_client
+
+        client = razorpay_client(gateway_cfg)
+    else:
+        client = get_client()
     try:
         client.utility.verify_payment_signature(
             {
@@ -121,6 +135,18 @@ def verify_payment_signature(
         return False
 
 
+async def plan_period_days(db, plan_id: str, pricing: dict | None = None) -> int:
+    from ..platform.lite_settings import get_setting
+
+    if pricing is None:
+        pricing = await get_setting(db, 'pricing')
+    api_plan = normalize_plan_id(plan_id)
+    for row in (pricing or {}).get('plans') or []:
+        if isinstance(row, dict) and normalize_plan_id(str(row.get('id') or '')) == api_plan:
+            return max(1, int(row.get('expiry_period_days') or 30))
+    return 30
+
+
 async def activate_plan_after_payment(
     db,
     *,
@@ -129,15 +155,17 @@ async def activate_plan_after_payment(
     billing_interval: str,
     payment_id: str,
     order_id: str,
+    provider: str = 'razorpay',
+    period_days: Optional[int] = None,
 ) -> None:
-    from ..models import Tenant
+    from ..models import Tenant, pk_str
     from .subscription_access import (
         apply_plan_period,
         apply_tenant_plan_entitlements,
         sync_subscription_row,
     )
 
-    tenant = await db.get(Tenant, tenant_id)
+    tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         raise ValueError('Tenant not found')
 
@@ -147,13 +175,17 @@ async def activate_plan_after_payment(
     tenant.subscription_status = 'active'
     tenant.subscription_id = payment_id
     apply_tenant_plan_entitlements(tenant, tenant.plan)
-    period_start, period_end = apply_plan_period(tenant, billing_cycle=cycle)
+    if period_days is None:
+        period_days = await plan_period_days(db, plan)
+    period_start, period_end = apply_plan_period(
+        tenant, billing_cycle=cycle, period_days=period_days
+    )
 
     settings_json = dict(tenant.settings or {})
     payments = list(settings_json.get('payments') or [])
     payments.append(
         {
-            'provider': 'razorpay',
+            'provider': provider,
             'order_id': order_id,
             'payment_id': payment_id,
             'plan': tenant.plan,

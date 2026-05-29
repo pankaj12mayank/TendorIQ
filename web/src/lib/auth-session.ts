@@ -33,6 +33,18 @@ export function getRefreshToken(): string | null {
   return localStorage.getItem(REFRESH_KEY);
 }
 
+/** Read cached user without clearing session when access token metadata is stale. */
+export function readPersistedAuthUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
 export function getStoredSession(): StoredAuthSession | null {
   if (typeof window === 'undefined') return null;
   const token = localStorage.getItem(TOKEN_KEY);
@@ -60,7 +72,10 @@ export function setStoredSession(
   user: AuthUser,
   options?: { refreshToken?: string; expiresInSec?: number }
 ): void {
-  const maxAgeSec = options?.expiresInSec ?? Math.floor(SESSION_MAX_AGE_MS / 1000);
+  const sessionMaxSec = Math.floor(SESSION_MAX_AGE_MS / 1000);
+  const requested = options?.expiresInSec;
+  const maxAgeSec =
+    requested && requested >= 60 ? Math.min(requested, sessionMaxSec) : sessionMaxSec;
   const expiresAt = Date.now() + maxAgeSec * 1000;
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));

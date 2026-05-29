@@ -46,14 +46,6 @@ async def repair_tenant_billing_state(db: AsyncSession) -> bool:
         if plan == 'free':
             continue
 
-        # Demo workspace: keep generous dev plan
-        if settings.is_development and (tenant.slug or '').lower() == (
-            settings.DEMO_TENANT_SLUG or 'demo'
-        ).lower():
-            if tenant.plan != 'professional':
-                tenant.plan = 'professional'
-                changed = True
-
         period_end = period_end_from_tenant(tenant)
         if not period_end and settings.is_development:
             cycle = (tenant.billing_cycle or 'monthly').strip().lower()
