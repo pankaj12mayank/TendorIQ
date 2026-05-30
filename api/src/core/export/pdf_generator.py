@@ -3,6 +3,7 @@
 import io
 import logging
 import math
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -111,6 +112,18 @@ class PDFGenerator:
             alignment=TA_CENTER,
         ))
 
+    @staticmethod
+    def _md_to_rl(text: str) -> str:
+        escaped = (
+            text.replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+        )
+        escaped = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', escaped)
+        escaped = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', escaped)
+        escaped = re.sub(r'`(.+?)`', r'<font face="Courier">\1</font>', escaped)
+        return escaped
+
     def _hex_to_rgb(self, hex_color: str) -> tuple:
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
@@ -197,17 +210,17 @@ class PDFGenerator:
         story = []
 
         title_style = self._styles['DocTitle']
-        story.append(Paragraph(data.get('title', 'Proposal Document'), title_style))
+        story.append(Paragraph(self._md_to_rl(data.get('title', 'Proposal Document')), title_style))
 
         meta_data = []
         if data.get('status'):
-            meta_data.append(f"<b>Status:</b> {data['status']}")
+            meta_data.append(f"<b>Status:</b> {self._md_to_rl(data['status'])}")
         if data.get('version'):
-            meta_data.append(f"<b>Version:</b> {data['version']}")
+            meta_data.append(f"<b>Version:</b> {self._md_to_rl(data['version'])}")
         if data.get('created_at'):
-            meta_data.append(f"<b>Generated:</b> {data['created_at']}")
+            meta_data.append(f"<b>Generated:</b> {self._md_to_rl(data['created_at'])}")
         if data.get('organization'):
-            meta_data.append(f"<b>Organization:</b> {data['organization']}")
+            meta_data.append(f"<b>Organization:</b> {self._md_to_rl(data['organization'])}")
 
         if meta_data:
             story.append(Spacer(1, 0.3 * cm))
@@ -223,7 +236,7 @@ class PDFGenerator:
         ))
 
         for section in data.get('sections', []):
-            story.append(Paragraph(section.get('title', ''), self._styles['SectionHeader']))
+            story.append(Paragraph(self._md_to_rl(section.get('title', '')), self._styles['SectionHeader']))
 
             content = section.get('content', '')
             if isinstance(content, str):
@@ -231,7 +244,7 @@ class PDFGenerator:
                 for para in paragraphs:
                     para = para.strip()
                     if para:
-                        story.append(Paragraph(para, self._styles['TenderBodyText']))
+                        story.append(Paragraph(self._md_to_rl(para), self._styles['TenderBodyText']))
 
             if section.get('word_count'):
                 story.append(Paragraph(
@@ -244,7 +257,7 @@ class PDFGenerator:
         if data.get('summary'):
             story.append(Spacer(1, 1 * cm))
             story.append(Paragraph('Executive Summary', self._styles['SectionHeader']))
-            story.append(Paragraph(data['summary'], self._styles['TenderBodyText']))
+            story.append(Paragraph(self._md_to_rl(data['summary']), self._styles['TenderBodyText']))
 
         doc.build(
             story,
@@ -269,10 +282,10 @@ class PDFGenerator:
 
         story = []
 
-        story.append(Paragraph(data.get('name', 'Compliance Checklist'), self._styles['DocTitle']))
+        story.append(Paragraph(self._md_to_rl(data.get('name', 'Compliance Checklist')), self._styles['DocTitle']))
 
         if data.get('description'):
-            story.append(Paragraph(data['description'], self._styles['TenderBodyText']))
+            story.append(Paragraph(self._md_to_rl(data['description']), self._styles['TenderBodyText']))
 
         progress = data.get('completion_percentage', 0)
         score = data.get('score', {})
@@ -384,7 +397,7 @@ class PDFGenerator:
 
         if data.get('summary'):
             story.append(Paragraph('Executive Summary', self._styles['SectionHeader']))
-            story.append(Paragraph(data['summary'], self._styles['TenderBodyText']))
+            story.append(Paragraph(self._md_to_rl(data['summary']), self._styles['TenderBodyText']))
             story.append(Spacer(1, 0.5 * cm))
 
         risk_colors = {

@@ -39,6 +39,9 @@ export interface UseFileUploadOptions {
   maxSizeMB?: number;
   allowedExtensions?: string[];
   aiSelection?: AiUploadSelection;
+}
+
+export interface UploadCallbacks {
   onProgress?: (progress: UploadProgress) => void;
   onComplete?: (result: UploadResult) => void;
   onError?: (error: string) => void;
@@ -85,12 +88,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     options.allowedExtensions ?? config.allowed_extensions ?? [...LITE_ALLOWED_EXTENSIONS];
   const usePresigned = config.use_presigned ?? config.provider !== 'local';
 
-  const {
-    onProgress,
-    onComplete,
-    onError,
-  } = options;
-
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +114,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   );
 
   const uploadViaPresigned = useCallback(
-    async (file: File, tenderId?: string, category: string = 'documents'): Promise<UploadResult> => {
+    async (file: File, tenderId?: string, category: string = 'documents', callbacks?: UploadCallbacks): Promise<UploadResult> => {
       const initResponse = await authenticatedFetch('/api/v1/files/upload/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,24 +130,56 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
       if (!initResponse.ok) {
         const err = (await initResponse.json().catch(() => ({}))) as Record<string, unknown>;
-        throw new Error(parseApiErrorMessage(err) || 'Failed to initiate upload');
+        const msg = parseApiErrorMessage(err) || 'Failed to initiate upload';
+        if (initResponse.status === 402) {
+          throw new Error(msg.includes('plan') ? msg : `${msg} Buy a plan under Settings → Billing.`);
+        }
+        throw new Error(msg);
       }
 
       const initData = parseInitiateResponse(await initResponse.json());
 
-      const uploadResponse = await fetch(initData.upload_url, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-        },
+      const progressPayload: UploadProgress = { loaded: 0, total: file.size, percent: 0 };
+      setProgress(progressPayload);
+      callbacks?.onProgress?.(progressPayload);
+
+      const uploadResult = await new Promise<{ ok: boolean; status: number }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', initData.upload_url);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+        xhr.upload.onprogress = (e: ProgressEvent) => {
+          if (e.lengthComputable) {
+            const p: UploadProgress = {
+              loaded: e.loaded,
+              total: e.total,
+              percent: Math.round((e.loaded / e.total) * 100),
+            };
+            setProgress(p);
+            callbacks?.onProgress?.(p);
+          }
+        };
+        xhr.onload = () => {
+          const ok = xhr.status >= 200 && xhr.status < 300;
+          if (ok) {
+            const p: UploadProgress = { loaded: file.size, total: file.size, percent: 100 };
+            setProgress(p);
+            callbacks?.onProgress?.(p);
+          }
+          resolve({ ok, status: xhr.status });
+        };
+        xhr.onerror = () => reject(new Error('Network error during file upload'));
+        xhr.onabort = () => reject(new Error('Upload was cancelled'));
+        xhr.send(file);
+
+        const timeoutMs = UPLOAD_API_TIMEOUT_MS;
+        const timer = setTimeout(() => { xhr.abort(); reject(new Error('Upload timed out')); }, timeoutMs);
+        xhr.addEventListener('loadend', () => clearTimeout(timer));
       });
 
-      if (!uploadResponse.ok) {
+      if (!uploadResult.ok) {
         throw new Error('Failed to upload file to storage (check R2 CORS if using Cloudflare R2)');
       }
-
-      setProgress({ loaded: file.size, total: file.size, percent: 100 });
 
       const completeResponse = await authenticatedFetch(
         `/api/v1/files/upload/complete/${initData.document_id}${aiQueryParams(aiSelection)}`,
@@ -165,17 +194,19 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         throw new Error(parseApiErrorMessage(errBody) || 'Failed to complete upload');
       }
 
-      return {
+      const result: UploadResult = {
         success: true,
         document_id: initData.document_id,
         storage_key: initData.storage_key,
       };
+      callbacks?.onComplete?.(result);
+      return result;
     },
     [aiSelection]
   );
 
   const uploadViaDirect = useCallback(
-    async (file: File, tenderId?: string, category: string = 'documents'): Promise<UploadResult> => {
+    async (file: File, tenderId?: string, category: string = 'documents', callbacks?: UploadCallbacks): Promise<UploadResult> => {
       const params = new URLSearchParams({ category });
       if (tenderId) params.set('tender_id', tenderId);
 
@@ -191,6 +222,10 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       if (aiParams) {
         aiParams.forEach((v, k) => params.set(k, v));
       }
+
+      const progressPayload: UploadProgress = { loaded: 0, total: file.size, percent: 0 };
+      setProgress(progressPayload);
+      callbacks?.onProgress?.(progressPayload);
 
       const directResponse = await authenticatedFetch(
         `/api/v1/files/upload/direct?${params.toString()}`,
@@ -211,7 +246,10 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       }
 
       const directData = parseDirectResponse(await directResponse.json());
-      setProgress({ loaded: file.size, total: file.size, percent: 100 });
+      const p: UploadProgress = { loaded: file.size, total: file.size, percent: 100 };
+      setProgress(p);
+      callbacks?.onProgress?.(p);
+      callbacks?.onComplete?.({ success: true, document_id: directData.document_id, storage_key: directData.storage_key });
       return {
         success: true,
         document_id: directData.document_id,
@@ -222,7 +260,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   );
 
   const uploadFile = useCallback(
-    async (file: File, tenderId?: string, category: string = 'documents'): Promise<UploadResult> => {
+    async (file: File, tenderId?: string, category?: string, callbacks?: UploadCallbacks): Promise<UploadResult> => {
       setUploading(true);
       setError(null);
       setProgress({ loaded: 0, total: file.size, percent: 0 });
@@ -231,40 +269,40 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         const validationError = validateFile(file);
         if (validationError) {
           setError(validationError);
-          onError?.(validationError);
+          callbacks?.onError?.(validationError);
           setUploading(false);
           return { success: false, error: validationError };
         }
 
+        const cat = category ?? 'documents';
         let result: UploadResult;
 
         if (usePresigned) {
-          result = await uploadViaPresigned(file, tenderId, category);
+          result = await uploadViaPresigned(file, tenderId, cat, callbacks);
         } else {
           try {
-            result = await uploadViaDirect(file, tenderId, category);
+            result = await uploadViaDirect(file, tenderId, cat, callbacks);
           } catch (directErr) {
             const message = directErr instanceof Error ? directErr.message : 'Direct upload failed';
             if (message.includes('presigned')) {
-              result = await uploadViaPresigned(file, tenderId, category);
+              result = await uploadViaPresigned(file, tenderId, cat, callbacks);
             } else {
               throw directErr;
             }
           }
         }
 
-        onComplete?.(result);
         setUploading(false);
         return result;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Upload failed';
         setError(errorMessage);
-        onError?.(errorMessage);
+        callbacks?.onError?.(errorMessage);
         setUploading(false);
         return { success: false, error: errorMessage };
       }
     },
-    [validateFile, usePresigned, uploadViaDirect, uploadViaPresigned, onComplete, onError]
+    [validateFile, usePresigned, uploadViaDirect, uploadViaPresigned]
   );
 
   const uploadFiles = useCallback(

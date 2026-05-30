@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
 from .local_user_auth import _password_hash, _set_user_prefs, _user_prefs
+from .logging import get_logger
 from .mailer import send_smtp_email
 from .models import PasswordResetToken, User, generate_uuid, pk_str
 from .passwords import hash_password
@@ -19,6 +20,8 @@ from .smtp_settings import get_smtp_settings
 
 TOKEN_TTL_MINUTES = 30
 MAX_ACTIVE_TOKENS_PER_USER = 5
+
+logger = get_logger('password_reset')
 
 
 def _hash_token(token: str) -> str:
@@ -88,12 +91,15 @@ async def request_password_reset(
         f'{reset_link}\n\n'
         'If you did not request this, you can safely ignore this email.\n'
     )
-    send_smtp_email(
-        smtp_settings=smtp,
-        to_email=user.email,
-        subject='TenderIQ password reset',
-        text_body=body,
-    )
+    try:
+        send_smtp_email(
+            smtp_settings=smtp,
+            to_email=user.email,
+            subject='TenderIQ password reset',
+            text_body=body,
+        )
+    except Exception:
+        logger.exception('Failed to send password reset email to %s', user.email)
 
 
 async def verify_reset_token(db: AsyncSession, token: str) -> tuple[bool, str]:

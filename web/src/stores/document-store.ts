@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-export type DocumentStatus = 'uploaded' | 'processing' | 'retrying' | 'completed' | 'failed' | 'needs_review' | 'deleted';
+export type DocumentStatus = 'uploaded' | 'queued' | 'extracting' | 'processing' | 'validating' | 'retrying' | 'completed' | 'failed' | 'needs_review' | 'deleted';
 
 export interface Document {
   id: string;

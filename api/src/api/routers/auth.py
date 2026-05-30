@@ -81,7 +81,7 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: str
-    password: str
+    password: str = Field(min_length=8, max_length=256)
     name: Optional[str] = None
 
 
@@ -374,7 +374,7 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Missing refresh token',
         )
-    payload = AuthService().verify_token(refresh)
+    payload = AuthService().verify_token(refresh, expected_type='refresh')
     if not payload or payload.exp < datetime.now(timezone.utc).timestamp():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -626,6 +626,7 @@ async def owner_account_file_hint() -> dict:
 async def logout(
     current_user: CurrentUser,
     response: Response,
+    db: AsyncSession = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ) -> dict:
     """Logout user and revoke the current access token jti."""
@@ -634,7 +635,7 @@ async def logout(
         token = authorization.replace('Bearer ', '').strip()
         payload = auth_service.verify_token(token)
         if payload:
-            auth_service.revoke_token(payload.jti)
+            auth_service.revoke_token(payload.jti, db=db)
     logger.info('User logged out', user_id=current_user.user_id)
     _clear_session_cookies(response)
     return {'message': 'Logged out successfully'}

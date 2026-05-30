@@ -17,7 +17,7 @@ import { PremiumErrorState } from '@/components/design-system/empty-state';
 export default function AnalysisPage() {
   const params = useSearchParams();
   const tenderId = params.get('tenderId') ?? undefined;
-  const { isLoading, error, exportAnalysis } = useAnalysisApi(tenderId);
+  const { isLoading, error, refetch, exportAnalysis } = useAnalysisApi(tenderId);
   const [exporting, setExporting] = useState(false);
 
   return (
@@ -70,6 +70,7 @@ export default function AnalysisPage() {
         <PremiumErrorState
           title="Analysis unavailable"
           description={typeof error === 'string' ? error : 'Could not load analysis'}
+          onRetry={() => refetch()}
         />
       )}
       {!isLoading && !error && <AnalysisContent />}

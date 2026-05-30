@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import imghdr
 import copy
 from uuid import UUID
 from datetime import datetime, timezone
@@ -99,6 +98,7 @@ class OwnerProfilePatch(BaseModel):
 class PaymentGatewaySettingsBody(BaseModel):
     razorpay_key_id: Optional[str] = ''
     razorpay_key_secret: Optional[str] = ''
+    razorpay_webhook_secret: Optional[str] = ''
     razorpay_test_mode: bool = True
     stripe_publishable_key: Optional[str] = ''
     stripe_secret_key: Optional[str] = ''
@@ -134,7 +134,7 @@ def _decode_secret(value: str) -> str:
 
 def _sanitize_gateway_out(data: dict) -> dict:
     out = dict(data or {})
-    for key in ('razorpay_key_secret', 'stripe_secret_key', 'stripe_webhook_secret'):
+    for key in ('razorpay_key_secret', 'razorpay_webhook_secret', 'stripe_secret_key', 'stripe_webhook_secret'):
         out[key] = _decode_secret(str(out.get(key) or ''))
     out['razorpay_test_mode'] = bool(out.get('razorpay_test_mode', True))
     out['stripe_test_mode'] = bool(out.get('stripe_test_mode', True))
@@ -143,7 +143,7 @@ def _sanitize_gateway_out(data: dict) -> dict:
 
 def _sanitize_gateway_store(data: dict) -> dict:
     out = dict(data or {})
-    for key in ('razorpay_key_secret', 'stripe_secret_key', 'stripe_webhook_secret'):
+    for key in ('razorpay_key_secret', 'razorpay_webhook_secret', 'stripe_secret_key', 'stripe_webhook_secret'):
         out[key] = _encode_secret(str(out.get(key) or ''))
     out['razorpay_test_mode'] = bool(out.get('razorpay_test_mode', True))
     out['stripe_test_mode'] = bool(out.get('stripe_test_mode', True))
@@ -156,8 +156,8 @@ async def _read_valid_image(file: UploadFile) -> bytes:
         raise HTTPException(status_code=400, detail='Image is empty')
     if len(payload) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=400, detail='Image exceeds 5MB limit')
-    kind = imghdr.what(None, h=payload)
-    if kind not in ALLOWED_IMAGE_TYPES:
+    ext = (file.filename or '').rsplit('.', 1)[-1].lower() if file.filename else ''
+    if ext not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail='Unsupported image type')
     return payload
 
@@ -811,10 +811,110 @@ async def stripe_webhook(
     import hashlib
 
     body = await request.body()
+    parts = stripe_signature.split(',')
+    expected = None
+    for part in parts:
+        part = part.strip()
+        if part.startswith('v1='):
+            expected = part[3:]
+            break
+    if not expected:
+        raise HTTPException(status_code=400, detail='Missing v1 signature in Stripe-Signature header')
+
     digest = hmac.new(secret.encode('utf-8'), body, hashlib.sha256).hexdigest()
-    if digest not in stripe_signature:
+    if not hmac.compare_digest(digest, expected):
         raise HTTPException(status_code=400, detail='Invalid Stripe webhook signature')
-    return {'success': True, 'message': 'Webhook accepted'}
+
+    import json
+    try:
+        event = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid JSON body')
+
+    from ...core.billing.stripe_webhook import apply_stripe_webhook_event
+
+    result = await apply_stripe_webhook_event(db, event)
+    return {'success': True, 'message': 'Webhook processed', 'handled': result['handled'], 'type': result['type']}
+
+
+@router.post('/payments/webhooks/razorpay')
+async def razorpay_webhook(
+    request: Request,
+    x_razorpay_signature: Optional[str] = Header(None, alias='X-Razorpay-Signature'),
+    db=Depends(get_db),
+):
+    cfg = _sanitize_gateway_out(await get_setting(db, 'payment_gateways'))
+    secret = str(cfg.get('razorpay_webhook_secret') or '').strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail='Razorpay webhook secret not configured')
+    if not x_razorpay_signature:
+        raise HTTPException(status_code=400, detail='Missing X-Razorpay-Signature header')
+
+    import hashlib
+    import hmac
+
+    body = await request.body()
+    expected = hmac.new(secret.encode('utf-8'), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, x_razorpay_signature):
+        raise HTTPException(status_code=400, detail='Invalid Razorpay webhook signature')
+
+    import json
+    try:
+        event = json.loads(body)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid JSON body')
+
+    event_type = (event.get('event') or '').strip()
+    payload = event.get('payload', {})
+    payment = payload.get('payment', {}) or {}
+    entity = payment.get('entity', {}) or {}
+
+    razorpay_payment_id = entity.get('id') or ''
+    razorpay_order_id = ''
+    order = entity.get('order_id')
+    if order:
+        razorpay_order_id = str(order)
+    notes = entity.get('notes', {}) or {}
+    tenant_id = notes.get('tenant_id') or ''
+    plan_id = notes.get('plan_id') or 'professional'
+
+    if not razorpay_payment_id or not tenant_id:
+        return {'success': False, 'message': 'Skipped: missing payment_id or tenant_id in payload'}
+
+    from uuid import UUID
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from ..models import PaymentTransaction
+    from ...core.tenant_utils import find_tenant_uuid  # not using Subscription directly here
+
+    existing = (
+        await db.execute(
+            select(PaymentTransaction).where(
+                PaymentTransaction.provider == 'razorpay',
+                PaymentTransaction.payment_id == razorpay_payment_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing and existing.status == 'paid':
+        return {'success': True, 'message': 'Duplicate webhook — already processed'}
+
+    if event_type in ('payment.captured', 'subscription.charged'):
+        from uuid import UUID as _UUID
+        from ...core.billing.fe_responses import activate_plan_after_payment
+
+        billing_interval = notes.get('billing_interval', 'monthly')
+        await activate_plan_after_payment(
+            db,
+            tenant_id=_UUID(tenant_id),
+            plan=plan_id,
+            billing_interval=billing_interval,
+            payment_id=razorpay_payment_id,
+            order_id=razorpay_order_id,
+            provider='razorpay',
+        )
+        return {'success': True, 'message': 'Payment webhook processed', 'event': event_type}
+
+    return {'success': True, 'message': 'Unhandled webhook event', 'event': event_type}
 
 
 @router.get('/uploads')

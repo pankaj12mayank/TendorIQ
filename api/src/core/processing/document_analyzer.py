@@ -10,7 +10,13 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..ai.lite_ai import chat_completion, extract_json_object, resolve_default_model, resolve_default_provider
+from ..ai.lite_ai import (
+    build_provider_catalog,
+    chat_completion,
+    extract_json_object,
+    resolve_default_model,
+    resolve_default_provider,
+)
 from ...api.router.analysis_mapper import empty_dashboard_analysis
 from ..config import settings
 from ..models import AnalysisResult, Document, Tender
@@ -20,6 +26,11 @@ from ..storage.client import storage_service
 logger = logging.getLogger(__name__)
 
 MAX_TEXT_CHARS = 100_000
+
+VALID_KEYS = frozenset({
+    'summary', 'eligibility', 'technical', 'financial',
+    'risks', 'deadlines', 'mandatoryDocs', 'importantClauses',
+})
 
 ANALYSIS_SYSTEM = """You are a tender document analyst. Extract structured insights from the document text.
 Return ONLY valid JSON matching this schema (no markdown):
@@ -43,19 +54,45 @@ Use realistic values inferred from the document. If information is missing, use 
 def _merge_dashboard(tender_id: str, ai_payload: dict[str, Any]) -> dict[str, Any]:
     base = empty_dashboard_analysis(tender_id)
     base['status'] = 'completed'
-    for key in (
-        'summary',
-        'eligibility',
-        'technical',
-        'financial',
-        'risks',
-        'deadlines',
-        'mandatoryDocs',
-        'importantClauses',
-    ):
+    for key in VALID_KEYS:
         if key in ai_payload and isinstance(ai_payload[key], dict):
             base[key] = {**base.get(key, {}), **ai_payload[key]}
     return base
+
+
+def _validate_ai_schema(payload: dict[str, Any]) -> None:
+    """Validate AI response has the expected top-level keys with proper types."""
+    for key in VALID_KEYS:
+        val = payload.get(key)
+        if not isinstance(val, dict):
+            raise ValueError(
+                f'AI response missing or invalid key "{key}": expected dict, got {type(val).__name__}'
+            )
+    summary = payload.get('summary', {})
+    if not isinstance(summary.get('confidence'), dict):
+        raise ValueError('AI response missing "summary.confidence" object')
+    if not isinstance(summary.get('keyFindings'), list):
+        raise ValueError('AI response missing "summary.keyFindings" array')
+    if not isinstance(summary.get('overallAssessment'), str):
+        raise ValueError('AI response missing "summary.overallAssessment" string')
+
+
+async def _set_status(db: AsyncSession, doc: Document, status: str, error: str | None = None) -> None:
+    """Update document processing status and commit."""
+    doc.processing_status = status
+    if error:
+        doc.processing_error = error[:2000]
+    elif status == 'completed':
+        doc.processed_at = datetime.now(timezone.utc)
+        doc.processing_error = None
+    meta = dict(doc.metadata_json or {})
+    analysis = dict(meta.get('analysis', {}))
+    analysis['status'] = status
+    if error:
+        analysis['error'] = error[:500]
+    meta['analysis'] = analysis
+    doc.metadata_json = meta
+    await db.commit()
 
 
 async def _ensure_tender(
@@ -105,8 +142,6 @@ async def run_document_analysis(
     prov = provider or resolve_default_provider()
     mdl = model or resolve_default_model(prov)
 
-    doc.processing_status = 'processing'
-    doc.processing_error = None
     meta = dict(doc.metadata_json or {})
     meta['analysis'] = {
         'status': 'running',
@@ -115,7 +150,8 @@ async def run_document_analysis(
         'started_at': datetime.now(timezone.utc).isoformat(),
     }
     doc.metadata_json = meta
-    await db.commit()
+    doc.processing_error = None
+    await _set_status(db, doc, 'extracting')
 
     try:
         read = await storage_service.read_file(doc.storage_key)
@@ -139,6 +175,8 @@ async def run_document_analysis(
         tender = await _ensure_tender(db, doc, owner_id)
         tender_id = str(tender.id)
 
+        await _set_status(db, doc, 'processing')
+
         user_prompt = f"""Analyze this tender document.
 
 File: {doc.file_name}
@@ -148,19 +186,60 @@ Type: {doc.file_type}
 {text}
 --- END ---"""
 
-        completion = await chat_completion(
-            [
-                {'role': 'system', 'content': ANALYSIS_SYSTEM},
-                {'role': 'user', 'content': user_prompt},
-            ],
-            provider=prov,
-            model=mdl,
-            temperature=min(settings.AI_TEMPERATURE, 0.4),
-            max_tokens=settings.AI_MAX_TOKENS,
-            json_mode=True,
-        )
+        messages = [
+            {'role': 'system', 'content': ANALYSIS_SYSTEM},
+            {'role': 'user', 'content': user_prompt},
+        ]
+        temperature = min(settings.AI_TEMPERATURE, 0.4)
+        max_tokens = settings.AI_MAX_TOKENS
+
+        from ..ai.lite_ai import _is_transient_error
+
+        completion = None
+        fallback_chain = [(prov, mdl)]
+        catalog = await build_provider_catalog()
+        configured = {p.id for p in catalog if p.configured}
+        if prov not in configured:
+            raise ValueError(f'Provider "{prov}" is not configured. Check /api/v1/ai/catalog')
+
+        fallback_candidates = [p.id for p in catalog if p.configured and p.id != prov]
+        if fallback_candidates:
+            fallback_chain.extend(
+                (fb, resolve_default_model(fb)) for fb in fallback_candidates
+            )
+
+        last_error = None
+        for fb_prov, fb_mdl in fallback_chain:
+            try:
+                completion = await chat_completion(
+                    messages,
+                    provider=fb_prov,
+                    model=fb_mdl,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    json_mode=True,
+                )
+                logger.info(
+                    'AI analysis succeeded with provider=%s model=%s (original=%s)',
+                    fb_prov, fb_mdl, prov,
+                )
+                break
+            except Exception as exc:
+                last_error = exc
+                if not _is_transient_error(exc) or fb_prov == fallback_chain[-1][0]:
+                    raise
+                logger.warning(
+                    'Provider %s failed (transient), falling back: %s', fb_prov, exc,
+                )
+        if completion is None:
+            raise last_error or RuntimeError('All AI providers failed')
+
+        prov = completion['provider']
+        mdl = completion['model']
+        await _set_status(db, doc, 'validating')
 
         ai_json = extract_json_object(completion['content'])
+        _validate_ai_schema(ai_json)
         dashboard = _merge_dashboard(tender_id, ai_json)
         dashboard['tenderId'] = tender_id
         dashboard['documentId'] = str(document_id)
@@ -216,21 +295,19 @@ Type: {doc.file_type}
             )
             db.add(row)
 
-        doc.processing_status = 'completed'
         doc.processed_at = datetime.now(timezone.utc)
-        doc.processing_error = None
-        meta = dict(doc.metadata_json or {})
-        meta['analysis'] = {
-            'status': 'completed',
-            'provider': prov,
-            'model': mdl,
-            'tender_id': tender_id,
-            'analysis_id': None,
-            'finished_at': datetime.now(timezone.utc).isoformat(),
-        }
-        doc.metadata_json = meta
         await db.flush()
-        meta['analysis']['analysis_id'] = str(row.id)
+
+        analysis_id = str(row.id)
+        meta = dict(doc.metadata_json or {})
+        analysis = dict(meta.get('analysis', {}))
+        analysis.update({
+            'status': 'completed',
+            'tender_id': tender_id,
+            'analysis_id': analysis_id,
+            'finished_at': datetime.now(timezone.utc).isoformat(),
+        })
+        meta['analysis'] = analysis
         doc.metadata_json = meta
 
         await track_usage(
@@ -243,14 +320,14 @@ Type: {doc.file_type}
             tokens_used=tokens or None,
             metadata={'provider': prov, 'model': mdl},
         )
-        await db.commit()
+        await _set_status(db, doc, 'completed')
         await db.refresh(row)
 
         return {
             'success': True,
             'document_id': str(document_id),
             'tender_id': tender_id,
-            'analysis_id': str(row.id),
+            'analysis_id': analysis_id,
             'processing_status': 'completed',
             'provider': prov,
             'model': mdl,
@@ -260,16 +337,5 @@ Type: {doc.file_type}
         await db.rollback()
         doc = await db.get(Document, document_id)
         if doc:
-            doc.processing_status = 'failed'
-            doc.processing_error = str(exc)[:2000]
-            meta = dict(doc.metadata_json or {})
-            meta['analysis'] = {
-                'status': 'failed',
-                'error': str(exc)[:500],
-                'provider': prov,
-                'model': mdl,
-                'finished_at': datetime.now(timezone.utc).isoformat(),
-            }
-            doc.metadata_json = meta
-            await db.commit()
+            await _set_status(db, doc, 'failed', error=str(exc))
         raise

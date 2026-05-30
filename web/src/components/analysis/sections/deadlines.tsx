@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 interface DeadlinesSectionProps {
   data: DeadlinesData;
   isEditing?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
 }
 
 const TYPE_ICONS = {
@@ -31,7 +33,7 @@ const TYPE_COLORS = {
   other: 'bg-gray-100 text-gray-600',
 };
 
-export function DeadlinesSection({ data, isEditing = false }: DeadlinesSectionProps) {
+export function DeadlinesSection({ data, isEditing = false, onEdit, onSave }: DeadlinesSectionProps) {
   const upcomingCount = data.deadlines.filter(d => d.daysRemaining <= 7 && d.daysRemaining > 0).length;
   const passedCount = data.deadlines.filter(d => d.daysRemaining < 0).length;
   const metCount = data.deadlines.filter(d => d.isMet === true).length;
@@ -61,7 +63,7 @@ export function DeadlinesSection({ data, isEditing = false }: DeadlinesSectionPr
           </div>
         </div>
         {!isEditing && (
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit
           </Button>
@@ -125,7 +127,7 @@ export function DeadlinesSection({ data, isEditing = false }: DeadlinesSectionPr
               {data.deadlines
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                 .map((deadline) => {
-                  const IconComponent = TYPE_ICONS[deadline.type];
+                  const IconComponent = TYPE_ICONS[deadline.type] ?? Clock;
                   const isUrgent = deadline.daysRemaining <= 7 && deadline.daysRemaining > 0;
                   const isPast = deadline.daysRemaining < 0;
 
@@ -185,11 +187,11 @@ export function DeadlinesSection({ data, isEditing = false }: DeadlinesSectionPr
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline">
+          <Button variant="outline" onClick={onSave}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button>
+          <Button onClick={onSave}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

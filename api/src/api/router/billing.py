@@ -26,6 +26,7 @@ from ...core.models import Tenant, PaymentTransaction
 from ...core.tenant_utils import parse_tenant_uuid
 from ..dependencies.access import TenantUser, require_tenant_member
 from ..schemas.base import create_response
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.auth import AuthContext

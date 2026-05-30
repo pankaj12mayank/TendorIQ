@@ -44,23 +44,73 @@ export function AnalysisContent({ className }: AnalysisContentProps) {
   };
 
   const renderSection = () => {
-    switch (activeSection) {
+    const section: AnalysisSection = activeSection;
+    switch (section) {
       case 'summary':
-        return <SummarySection data={analysis.summary} isEditing={editingSections.has('summary')} />;
+        return (
+          <SummarySection
+            data={analysis.summary}
+            isEditing={editingSections.has('summary')}
+            onEdit={() => handleEdit('summary')}
+            onSave={() => handleSave('summary')}
+          />
+        );
       case 'eligibility':
-        return <EligibilitySection data={analysis.eligibility} isEditing={editingSections.has('eligibility')} />;
+        return (
+          <EligibilitySection
+            data={analysis.eligibility}
+            isEditing={editingSections.has('eligibility')}
+            onEdit={() => handleEdit('eligibility')}
+            onSave={() => handleSave('eligibility')}
+          />
+        );
       case 'technical':
-        return <TechnicalSection data={analysis.technical} isEditing={editingSections.has('technical')} />;
+        return (
+          <TechnicalSection
+            data={analysis.technical}
+            isEditing={editingSections.has('technical')}
+            onEdit={() => handleEdit('technical')}
+            onSave={() => handleSave('technical')}
+          />
+        );
       case 'financial':
-        return <FinancialSection data={analysis.financial} isEditing={editingSections.has('financial')} />;
+        return (
+          <FinancialSection
+            data={analysis.financial}
+            isEditing={editingSections.has('financial')}
+            onEdit={() => handleEdit('financial')}
+            onSave={() => handleSave('financial')}
+          />
+        );
       case 'risks':
-        return <RisksSection data={analysis.risks} isEditing={editingSections.has('risks')} />;
+        return (
+          <RisksSection
+            data={analysis.risks}
+            isEditing={editingSections.has('risks')}
+            onEdit={() => handleEdit('risks')}
+            onSave={() => handleSave('risks')}
+          />
+        );
       case 'deadlines':
-        return <DeadlinesSection data={analysis.deadlines} isEditing={editingSections.has('deadlines')} />;
+        return (
+          <DeadlinesSection
+            data={analysis.deadlines}
+            isEditing={editingSections.has('deadlines')}
+            onEdit={() => handleEdit('deadlines')}
+            onSave={() => handleSave('deadlines')}
+          />
+        );
       case 'important_clauses':
         return <ImportantClausesSection data={analysis.importantClauses} />;
       case 'mandatory_docs':
-        return <MandatoryDocsSection data={analysis.mandatoryDocs} isEditing={editingSections.has('mandatory_docs')} />;
+        return (
+          <MandatoryDocsSection
+            data={analysis.mandatoryDocs}
+            isEditing={editingSections.has('mandatory_docs')}
+            onEdit={() => handleEdit('mandatory_docs')}
+            onSave={() => handleSave('mandatory_docs')}
+          />
+        );
       default:
         return null;
     }

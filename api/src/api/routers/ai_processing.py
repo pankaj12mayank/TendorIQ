@@ -17,7 +17,7 @@ from ...core.ai.lite_ai import (
     resolve_default_provider,
 )
 from ...core.database import get_db
-from ...core.lite_scope import user_owns_row
+
 from ...core.processing.document_analyzer import run_document_analysis
 from ...core.processing.tasks import schedule_document_analysis
 from ...core.billing.subscription_access import assert_can_use_system
@@ -84,13 +84,10 @@ async def get_processing_status(
         raise HTTPException(status_code=400, detail='Workspace context required')
     await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
 
-    doc = await file_service.get_document(db, UUID(document_id))
+    tenant_uuid = parse_tenant_uuid(current_user.tenant_id)
+    doc = await file_service.get_document(db, UUID(document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(
-        doc, current_user.user_id
-    ):
-        raise HTTPException(status_code=403, detail='Access denied')
 
     meta = doc.metadata_json or {}
     analysis_meta = meta.get('analysis') or {}
@@ -119,13 +116,10 @@ async def analyze_document(
         raise HTTPException(status_code=400, detail='Workspace context required')
     await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
 
-    doc = await file_service.get_document(db, UUID(document_id))
+    tenant_uuid = parse_tenant_uuid(current_user.tenant_id)
+    doc = await file_service.get_document(db, UUID(document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(
-        doc, current_user.user_id
-    ):
-        raise HTTPException(status_code=403, detail='Access denied')
 
     if body.async_mode:
         await schedule_document_analysis(

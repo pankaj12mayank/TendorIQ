@@ -12,7 +12,9 @@ export function DocumentStats() {
   const { fetchStats } = useDocumentsApi();
 
   useEffect(() => {
-    fetchStats();
+    fetchStats().catch((err: unknown) => {
+      console.error('Failed to fetch document stats:', err);
+    });
   }, [fetchStats]);
 
   const stats = store.stats;

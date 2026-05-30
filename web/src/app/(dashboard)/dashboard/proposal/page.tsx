@@ -61,35 +61,64 @@ export default function ProposalPage() {
   const [draftSections, setDraftSections] = useState<ProposalSection[]>([]);
   const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightSave = useRef(false);
+  const sectionsRef = useRef(draftSections);
+  const proposalRef = useRef(proposal);
 
   useEffect(() => {
     setDraftSections(proposal?.sections ?? []);
   }, [proposal?.sections]);
 
   useEffect(() => {
+    sectionsRef.current = draftSections;
+  }, [draftSections]);
+
+  useEffect(() => {
+    proposalRef.current = proposal;
+  }, [proposal]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (autosaveState === 'saving') {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('beforeunload', handler);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      window.removeEventListener('beforeunload', handler);
     };
-  }, []);
+  }, [autosaveState]);
 
   const patchSection = useCallback(
     async (sectionId: string, content: string) => {
-      const updated = draftSections.map((s) => (s.section_id === sectionId ? { ...s, content } : s));
-      setDraftSections(updated);
-      if (!proposal?.id) return;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      setAutosaveState('saving');
-      saveTimer.current = setTimeout(async () => {
-        try {
-          await autosaveProposal(proposal.id, { title: proposal.title, sections: updated });
-          setAutosaveState('saved');
-        } catch (err) {
-          setAutosaveState('error');
-          appToast.error(err instanceof Error ? err.message : 'Autosave failed');
-        }
-      }, 1200);
+      setDraftSections((prev) => {
+        const next = prev.map((s) => (s.section_id === sectionId ? { ...s, content } : s));
+        sectionsRef.current = next;
+
+        const p = proposalRef.current;
+        if (!p?.id) return next;
+
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        setAutosaveState('saving');
+        saveTimer.current = setTimeout(async () => {
+          if (inFlightSave.current) return;
+          inFlightSave.current = true;
+          try {
+            await autosaveProposal(p.id, { title: p.title, sections: sectionsRef.current });
+            setAutosaveState('saved');
+          } catch (err) {
+            setAutosaveState('error');
+            appToast.error(err instanceof Error ? err.message : 'Autosave failed');
+          } finally {
+            inFlightSave.current = false;
+          }
+        }, 1200);
+
+        return next;
+      });
     },
-    [draftSections, proposal?.id, proposal?.title]
+    []
   );
 
   const handleGenerate = async () => {

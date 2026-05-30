@@ -32,6 +32,7 @@ import {
 import { StatusBadge } from './status-badge';
 import { useDocumentStore, Document, DocumentStatus } from '@/stores/document-store';
 import { useDocumentsApi } from '@/hooks/use-documents';
+import { appToast } from '@/lib/app-toast';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -121,13 +122,20 @@ export function DocumentTable() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this document?')) {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    try {
       await deleteDocument(id);
+    } catch (err: unknown) {
+      appToast.error(err instanceof Error ? err.message : 'Failed to delete document');
     }
   };
 
   const handleRetry = async (id: string) => {
-    await retryDocuments([id]);
+    try {
+      await retryDocuments([id]);
+    } catch (err: unknown) {
+      appToast.error(err instanceof Error ? err.message : 'Failed to retry document');
+    }
   };
 
   const allSelected = store.documents.length > 0 &&

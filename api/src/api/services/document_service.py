@@ -53,7 +53,7 @@ class DocumentService:
             uploaded_at=datetime.now(timezone.utc),
         )
         db.add(doc)
-        await db.commit()
+        await db.flush()
         await db.refresh(doc)
         logger.info(f'Document created: {doc.id}', tenant_id=str(tenant_id), file_name=file_name)
         return doc
@@ -159,7 +159,7 @@ class DocumentService:
             if hasattr(doc, key):
                 setattr(doc, key, value)
 
-        await db.commit()
+        await db.flush()
         await db.refresh(doc)
         logger.info(f'Document updated: {document_id}')
         return doc
@@ -188,7 +188,7 @@ class DocumentService:
         if metadata:
             doc.metadata_json = {**(doc.metadata_json or {}), **metadata}
 
-        await db.commit()
+        await db.flush()
         await db.refresh(doc)
         logger.info(f'Document status updated: {document_id} -> {status}')
         return doc
@@ -211,7 +211,7 @@ class DocumentService:
         doc.retry_count += 1
         doc.processing_error = None
 
-        await db.commit()
+        await db.flush()
         await db.refresh(doc)
         logger.info(f'Document retry initiated: {document_id}, attempt {doc.retry_count}')
         return doc
@@ -230,7 +230,7 @@ class DocumentService:
         doc.deleted_at = datetime.now(timezone.utc)
         doc.deleted_by_id = deleted_by_id
         doc.processing_status = 'deleted'
-        await db.commit()
+        await db.flush()
         logger.info(f'Document soft-deleted: {document_id}')
         return True
 
@@ -245,7 +245,7 @@ class DocumentService:
             return None
 
         await db.delete(doc)
-        await db.commit()
+        await db.flush()
         logger.info(f'Document permanently deleted: {document_id}')
         return doc
 
@@ -265,7 +265,7 @@ class DocumentService:
             )
             .values(is_archived=True, archived_at=now)
         )
-        await db.commit()
+        await db.flush()
         logger.info(f'Documents archived: {result.rowcount}')
         return result.rowcount
 
@@ -284,7 +284,7 @@ class DocumentService:
             )
             .values(is_archived=False, archived_at=None)
         )
-        await db.commit()
+        await db.flush()
         logger.info(f'Documents unarchived: {result.rowcount}')
         return result.rowcount
 
@@ -312,7 +312,7 @@ class DocumentService:
 
             success += 1
 
-        await db.commit()
+        await db.flush()
         return success, failed
 
     @staticmethod
@@ -390,9 +390,9 @@ class DocumentService:
             }
 
         current_storage_mb = (tenant.used_storage_mb or 0)
-        current_files = (tenant.used_users or 1)
+        current_files = (tenant.used_documents or 0)
         quota_storage_mb = tenant.quota_storage_mb or 1024
-        quota_files = tenant.quota_users or 5
+        quota_files = tenant.quota_documents or 100
 
         file_size_mb = file_size / (1024 * 1024)
         new_storage_mb = current_storage_mb + file_size_mb
@@ -434,7 +434,7 @@ class DocumentService:
         else:
             tenant.used_storage_mb = max(0, (tenant.used_storage_mb or 0) - file_size_mb)
 
-        await db.commit()
+        await db.flush()
 
 
 document_service = DocumentService()

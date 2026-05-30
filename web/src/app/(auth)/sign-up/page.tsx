@@ -11,11 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
-import {
-  tokensFromLoginResponse,
-  userFromLoginResponse,
-} from '@/lib/auth-api';
-import { apiUrl } from '@/lib/api-config';
+import { registerUser } from '@/lib/auth-api';
 import { getPostLoginPath } from '@/lib/auth-redirect';
 import { setStoredSession } from '@/lib/auth-session';
 import { isClerkConfigured } from '@/lib/clerk-config';
@@ -44,23 +40,11 @@ export default function SignUpPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch(apiUrl('/auth/register'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name: name || undefined }),
+      const { user: authUser, tokens } = await registerUser({
+        email,
+        password,
+        name: name || undefined,
       });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = (body as { detail?: string; error?: { message?: string } }).detail;
-        const msg =
-          (typeof detail === 'string' ? detail : undefined) ||
-          (body as { error?: { message?: string } }).error?.message ||
-          'Registration failed';
-        throw new Error(msg);
-      }
-      const tokens = tokensFromLoginResponse(body);
-      const authUser = userFromLoginResponse(body);
       setStoredSession(tokens.access_token, authUser, {
         refreshToken: tokens.refresh_token,
         expiresInSec: tokens.expires_in,

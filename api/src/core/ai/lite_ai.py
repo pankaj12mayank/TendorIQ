@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -14,6 +15,45 @@ import httpx
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+AI_RETRY_MAX = 3
+AI_RETRY_BASE_DELAY = 1.0
+AI_RETRY_MAX_DELAY = 30.0
+TRANSIENT_STATUSES = frozenset({429, 500, 502, 503})
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Check if an exception represents a transient API error worth retrying."""
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    if isinstance(exc, httpx.NetworkError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in TRANSIENT_STATUSES
+    if isinstance(exc, ValueError):
+        msg = str(exc)
+        for code in ('429', '500', '502', '503'):
+            if f'error {code}' in msg:
+                return True
+    return False
+
+
+async def _retry_with_backoff(coro_factory):
+    """Call coroutine factory, retrying transient errors with exponential backoff + jitter."""
+    last_exc = None
+    for attempt in range(AI_RETRY_MAX + 1):
+        try:
+            return await coro_factory()
+        except Exception as exc:
+            last_exc = exc
+            if not _is_transient_error(exc) or attempt == AI_RETRY_MAX:
+                raise
+            delay = min(AI_RETRY_BASE_DELAY * (2 ** attempt), AI_RETRY_MAX_DELAY)
+            import random
+            jitter = random.uniform(0, delay * 0.1)
+            logger.warning('AI transient error (attempt %d/%d): %s. Retrying in %.1fs', attempt + 1, AI_RETRY_MAX, exc, delay + jitter)
+            await asyncio.sleep(delay + jitter)
+    raise last_exc  # type: ignore[misc]
+
 
 # Static fallbacks when live list APIs are unavailable
 OPENAI_MODELS = [
@@ -299,26 +339,29 @@ async def _openai_chat(
     if json_mode:
         payload['response_format'] = {'type': 'json_object'}
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
-            json=payload,
-        )
-        if r.status_code != 200:
-            raise ValueError(f'OpenAI error {r.status_code}: {r.text[:500]}')
-        data = r.json()
-        content = data['choices'][0]['message']['content'] or ''
-        usage = data.get('usage', {})
-        return {
-            'content': content,
-            'provider': 'openai',
-            'model': model,
-            'usage': {
-                'input_tokens': usage.get('prompt_tokens', 0),
-                'output_tokens': usage.get('completion_tokens', 0),
-            },
-        }
+    async def _do_request() -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'},
+                json=payload,
+            )
+            if r.status_code != 200:
+                raise ValueError(f'OpenAI error {r.status_code}: {r.text[:500]}')
+            data = r.json()
+            content = data['choices'][0]['message']['content'] or ''
+            usage = data.get('usage', {})
+            return {
+                'content': content,
+                'provider': 'openai',
+                'model': model,
+                'usage': {
+                    'input_tokens': usage.get('prompt_tokens', 0),
+                    'output_tokens': usage.get('completion_tokens', 0),
+                },
+            }
+
+    return await _retry_with_backoff(_do_request)
 
 
 async def _anthropic_chat(
@@ -350,31 +393,34 @@ async def _anthropic_chat(
     if system.strip():
         payload['system'] = system.strip()
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(
-            'https://api.anthropic.com/v1/messages',
-            headers={
-                'x-api-key': key,
-                'anthropic-version': '2023-06-01',
-                'Content-Type': 'application/json',
-            },
-            json=payload,
-        )
-        if r.status_code != 200:
-            raise ValueError(f'Anthropic error {r.status_code}: {r.text[:500]}')
-        data = r.json()
-        blocks = data.get('content', [])
-        content = ''.join(b.get('text', '') for b in blocks if b.get('type') == 'text')
-        usage = data.get('usage', {})
-        return {
-            'content': content,
-            'provider': 'anthropic',
-            'model': model,
-            'usage': {
-                'input_tokens': usage.get('input_tokens', 0),
-                'output_tokens': usage.get('output_tokens', 0),
-            },
-        }
+    async def _do_request() -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                'https://api.anthropic.com/v1/messages',
+                headers={
+                    'x-api-key': key,
+                    'anthropic-version': '2023-06-01',
+                    'Content-Type': 'application/json',
+                },
+                json=payload,
+            )
+            if r.status_code != 200:
+                raise ValueError(f'Anthropic error {r.status_code}: {r.text[:500]}')
+            data = r.json()
+            blocks = data.get('content', [])
+            content = ''.join(b.get('text', '') for b in blocks if b.get('type') == 'text')
+            usage = data.get('usage', {})
+            return {
+                'content': content,
+                'provider': 'anthropic',
+                'model': model,
+                'usage': {
+                    'input_tokens': usage.get('input_tokens', 0),
+                    'output_tokens': usage.get('output_tokens', 0),
+                },
+            }
+
+    return await _retry_with_backoff(_do_request)
 
 
 async def _gemini_chat(
@@ -404,22 +450,26 @@ async def _gemini_chat(
         payload['generationConfig']['responseMimeType'] = 'application/json'
 
     url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}'
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(url, json=payload)
-        if r.status_code != 200:
-            raise ValueError(f'Gemini error {r.status_code}: {r.text[:500]}')
-        data = r.json()
-        candidates = data.get('candidates', [])
-        text = ''
-        if candidates:
-            parts_out = candidates[0].get('content', {}).get('parts', [])
-            text = ''.join(p.get('text', '') for p in parts_out)
-        return {
-            'content': text,
-            'provider': 'gemini',
-            'model': model,
-            'usage': {'input_tokens': 0, 'output_tokens': 0},
-        }
+
+    async def _do_request() -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(url, json=payload)
+            if r.status_code != 200:
+                raise ValueError(f'Gemini error {r.status_code}: {r.text[:500]}')
+            data = r.json()
+            candidates = data.get('candidates', [])
+            text = ''
+            if candidates:
+                parts_out = candidates[0].get('content', {}).get('parts', [])
+                text = ''.join(p.get('text', '') for p in parts_out)
+            return {
+                'content': text,
+                'provider': 'gemini',
+                'model': model,
+                'usage': {'input_tokens': 0, 'output_tokens': 0},
+            }
+
+    return await _retry_with_backoff(_do_request)
 
 
 async def _ollama_chat(
@@ -442,21 +492,25 @@ async def _ollama_chat(
         'stream': False,
         'options': {'temperature': temperature, 'num_predict': max_tokens},
     }
-    async with httpx.AsyncClient(base_url=base.rstrip('/'), timeout=180) as client:
-        r = await client.post('/api/chat', json=payload)
-        if r.status_code != 200:
-            raise ValueError(f'Ollama error {r.status_code}: {r.text[:500]}')
-        data = r.json()
-        content = data.get('message', {}).get('content', '')
-        return {
-            'content': content,
-            'provider': 'ollama',
-            'model': model,
-            'usage': {
-                'input_tokens': data.get('prompt_eval_count', 0),
-                'output_tokens': data.get('eval_count', 0),
-            },
-        }
+
+    async def _do_request() -> dict[str, Any]:
+        async with httpx.AsyncClient(base_url=base.rstrip('/'), timeout=180) as client:
+            r = await client.post('/api/chat', json=payload)
+            if r.status_code != 200:
+                raise ValueError(f'Ollama error {r.status_code}: {r.text[:500]}')
+            data = r.json()
+            content = data.get('message', {}).get('content', '')
+            return {
+                'content': content,
+                'provider': 'ollama',
+                'model': model,
+                'usage': {
+                    'input_tokens': data.get('prompt_eval_count', 0),
+                    'output_tokens': data.get('eval_count', 0),
+                },
+            }
+
+    return await _retry_with_backoff(_do_request)
 
 
 def extract_json_object(text: str) -> dict[str, Any]:

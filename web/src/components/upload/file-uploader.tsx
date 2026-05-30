@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Upload, X, FileIcon, CheckCircle2, AlertCircle, Loader2, CloudUpload } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useFileUpload, UploadResult, type AiUploadSelection } from '@/hooks/use-file-upload';
+import { useFileUpload, UploadResult, type AiUploadSelection, type UploadProgress } from '@/hooks/use-file-upload';
 import { useUploadConfig } from '@/hooks/use-upload-config';
 import { LITE_ACCEPT_ATTR } from '@/shared/upload-policy';
 import { Button } from '@/components/ui/button';
@@ -38,32 +38,36 @@ export function FileUploader({
 }: FileUploaderProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const uploadingIds = useRef<Set<string>>(new Set());
   const { data: uploadConfig } = useUploadConfig();
-  const { uploadFile, validateFile, formatFileSize, uploading } = useFileUpload({
+  const { uploadFile, validateFile, formatFileSize } = useFileUpload({
     uploadConfig,
     aiSelection,
-    onProgress: () => {
-      // Progress tracked per-file in state
-    },
   });
   const maxSizeMB = uploadConfig?.max_file_size_mb ?? 25;
 
+  const updateFileProgress = useCallback((fileId: string, p: UploadProgress) => {
+    setFiles((prev) =>
+      prev.map((f) => (f.id === fileId ? { ...f, progress: p.percent } : f))
+    );
+  }, []);
+
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const fileArray = Array.from(newFiles);
-    const remaining = maxFiles - files.length;
-    const toAdd = fileArray.slice(0, remaining);
-
-    const newUploadFiles: UploadedFile[] = toAdd.map((file) => ({
-      id: Math.random().toString(36).substr(2, 9),
-      file,
-      name: file.name,
-      size: file.size,
-      status: 'pending' as const,
-      progress: 0,
-    }));
-
-    setFiles((prev) => [...prev, ...newUploadFiles]);
-  }, [files.length, maxFiles]);
+    setFiles((prev) => {
+      const remaining = maxFiles - prev.length;
+      const toAdd = fileArray.slice(0, remaining);
+      const newUploadFiles: UploadedFile[] = toAdd.map((file) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        file,
+        name: file.name,
+        size: file.size,
+        status: 'pending' as const,
+        progress: 0,
+      }));
+      return [...prev, ...newUploadFiles];
+    });
+  }, [maxFiles]);
 
   const removeFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -93,61 +97,45 @@ export function FileUploader({
     }
   }, [addFiles]);
 
-  const uploadAll = useCallback(async () => {
-    const pendingFiles = files.filter((f) => f.status === 'pending');
-    const results: UploadResult[] = [];
-
-    for (const file of pendingFiles) {
-      setFiles((prev) =>
-        prev.map((f) => (f.id === file.id ? { ...f, status: 'uploading' as const, progress: 0 } : f))
-      );
-
-      const result = await uploadFile(file.file, tenderId, category);
-
-      if (result.success) {
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === file.id ? { ...f, status: 'completed' as const, progress: 100, documentId: result.document_id } : f
-          )
-        );
-      } else {
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === file.id ? { ...f, status: 'error' as const, error: result.error } : f
-          )
-        );
-      }
-
-      results.push(result);
-    }
-
-    onUploadComplete?.(results);
-  }, [files, uploadFile, tenderId, category, onUploadComplete]);
-
   const uploadSingle = useCallback(async (fileId: string) => {
+    if (uploadingIds.current.has(fileId)) return;
     const file = files.find((f) => f.id === fileId);
-    if (!file) return;
+    if (!file || file.status !== 'pending') return;
 
+    uploadingIds.current.add(fileId);
     setFiles((prev) =>
       prev.map((f) => (f.id === fileId ? { ...f, status: 'uploading' as const, progress: 0 } : f))
     );
 
-    const result = await uploadFile(file.file, tenderId, category);
+    const result = await uploadFile(file.file, tenderId, category, {
+      onProgress: (p) => updateFileProgress(fileId, p),
+    });
 
-    if (result.success) {
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === fileId ? { ...f, status: 'completed' as const, progress: 100, documentId: result.document_id } : f
-        )
-      );
-    } else {
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === fileId ? { ...f, status: 'error' as const, error: result.error } : f
-        )
-      );
+    uploadingIds.current.delete(fileId);
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === fileId
+          ? result.success
+            ? { ...f, status: 'completed' as const, progress: 100, documentId: result.document_id }
+            : { ...f, status: 'error' as const, error: result.error }
+          : f
+      )
+    );
+    return result;
+  }, [files, uploadFile, tenderId, category, updateFileProgress]);
+
+  const uploadAll = useCallback(async () => {
+    const pending = files.filter((f) => f.status === 'pending');
+    const results: UploadResult[] = [];
+    for (const f of pending) {
+      const r = await uploadSingle(f.id);
+      if (r) results.push(r);
     }
-  }, [files, uploadFile, tenderId, category]);
+    onUploadComplete?.(results);
+  }, [files, uploadSingle, onUploadComplete]);
+
+  const anyUploading = uploadingIds.current.size > 0;
+  const pendingCount = files.filter((f) => f.status === 'pending').length;
 
   return (
     <div className={cn('space-y-4', className)}>
@@ -244,10 +232,10 @@ export function FileUploader({
           <div className="flex items-center gap-3">
             <Button
               onClick={uploadAll}
-              disabled={uploading || files.filter((f) => f.status === 'pending').length === 0}
+              disabled={anyUploading || pendingCount === 0}
               className="flex-1"
             >
-              {uploading ? (
+              {anyUploading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Uploading...
@@ -255,7 +243,7 @@ export function FileUploader({
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload {files.filter((f) => f.status === 'pending').length} file(s)
+                  Upload {pendingCount} file(s)
                 </>
               )}
             </Button>
@@ -264,22 +252,4 @@ export function FileUploader({
       )}
     </div>
   );
-}
-
-function getMimeType(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = {
-    pdf: 'application/pdf',
-    doc: 'application/msword',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xls: 'application/vnd.ms-excel',
-    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    txt: 'text/plain',
-    csv: 'text/csv',
-  };
-  return mimeTypes[ext || ''] || 'application/octet-stream';
 }

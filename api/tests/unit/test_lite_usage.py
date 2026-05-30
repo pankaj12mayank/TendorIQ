@@ -15,7 +15,7 @@ def test_get_plan_limits_defaults_free():
 
 
 def test_plan_amount_paise_starter():
-    assert plan_amount_paise('plan_pro', 'monthly') == 299900
+    assert plan_amount_paise('plan_pro', 'monthly') == 9900
 
 
 def test_plan_amount_free_raises():

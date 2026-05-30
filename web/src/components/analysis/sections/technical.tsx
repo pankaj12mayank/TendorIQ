@@ -13,9 +13,11 @@ import { cn } from '@/lib/utils';
 interface TechnicalSectionProps {
   data: TechnicalData;
   isEditing?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
 }
 
-export function TechnicalSection({ data, isEditing = false }: TechnicalSectionProps) {
+export function TechnicalSection({ data, isEditing = false, onEdit, onSave }: TechnicalSectionProps) {
   const compliantCount = data.requirements.filter(r => r.isCompliant === true).length;
   const nonCompliantCount = data.requirements.filter(r => r.isCompliant === false).length;
   const pendingCount = data.requirements.filter(r => r.isCompliant === null).length;
@@ -33,7 +35,7 @@ export function TechnicalSection({ data, isEditing = false }: TechnicalSectionPr
           </div>
         </div>
         {!isEditing && (
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit
           </Button>
@@ -159,11 +161,11 @@ export function TechnicalSection({ data, isEditing = false }: TechnicalSectionPr
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline">
+          <Button variant="outline" onClick={onSave}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button>
+          <Button onClick={onSave}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

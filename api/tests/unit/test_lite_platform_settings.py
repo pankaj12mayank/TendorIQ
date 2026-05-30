@@ -17,9 +17,9 @@ def test_deep_merge_nested():
 
 def test_pricing_amount_paise_from_admin_plans():
     amount = pricing_amount_paise('starter', 'monthly', DEFAULT_PRICING)
-    assert amount == 999 * 100
+    assert amount == 29 * 100
 
 
 def test_pricing_amount_paise_fallback():
     amount = pricing_amount_paise('starter', 'monthly', None)
-    assert amount == 99900
+    assert amount == 2900

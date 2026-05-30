@@ -122,16 +122,40 @@ class AuthService:
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
         return token, exp
 
-    def revoke_token(self, jti: Optional[str]) -> None:
-        """Invalidate a token by jti (logout). In-memory for single-process dev."""
-        if jti:
-            self._revoked_jtis.add(jti)
+    def     revoke_token(self, jti: Optional[str], db=None) -> None:
+        """Invalidate a token by jti (logout). Persisted to DB when db provided."""
+        if not jti:
+            return
+        self._revoked_jtis.add(jti)
+        if db is not None:
+            try:
+                from .models import RevokedToken, generate_uuid
 
-    def is_token_revoked(self, jti: Optional[str]) -> bool:
-        return bool(jti and jti in self._revoked_jtis)
+                db.add(RevokedToken(id=generate_uuid(), jti=jti))
+            except Exception:
+                logger.exception('Failed to persist revoked token jti=%s', jti)
 
-    def verify_token(self, token: str) -> Optional[TokenPayload]:
-        """Verify and decode JWT token"""
+    def is_token_revoked(self, jti: Optional[str], db=None) -> bool:
+        if not jti:
+            return False
+        if jti in self._revoked_jtis:
+            return True
+        if db is not None:
+            try:
+                from sqlalchemy import select
+                from .models import RevokedToken
+
+                result = db.execute(select(RevokedToken).where(RevokedToken.jti == jti).limit(1))
+                found = result.scalar_one_or_none()
+                if found:
+                    self._revoked_jtis.add(jti)
+                    return True
+            except Exception:
+                logger.exception('Failed to check revoked token jti=%s', jti)
+        return False
+
+    def verify_token(self, token: str, expected_type: Optional[str] = None) -> Optional[TokenPayload]:
+        """Verify and decode JWT token, optionally checking the token type claim."""
         try:
             payload = jwt.decode(
                 token,
@@ -141,6 +165,9 @@ class AuthService:
             token_payload = TokenPayload.from_dict(payload)
             if self.is_token_revoked(token_payload.jti):
                 logger.info('Rejected revoked token jti=%s', token_payload.jti)
+                return None
+            if expected_type and payload.get('type') != expected_type:
+                logger.info('Rejected token with mismatched type (expected=%s, got=%s)', expected_type, payload.get('type'))
                 return None
             return token_payload
         except JWTError as e:

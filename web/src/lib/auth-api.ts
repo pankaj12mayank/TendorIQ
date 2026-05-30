@@ -124,6 +124,35 @@ export interface ClerkSessionExchangeResult {
 }
 
 
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+export async function registerUser(
+  payload: RegisterPayload
+): Promise<{ user: AuthUser; tokens: ApiSessionPayload }> {
+  const res = await fetch(apiUrl('/auth/register'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      (body as { detail?: string }).detail ||
+      (body as { error?: { message?: string } }).error?.message ||
+      'Registration failed';
+    throw new Error(msg);
+  }
+  const tokens = tokensFromLoginResponse(body as Record<string, unknown>);
+  const user = userFromLoginResponse(body as Record<string, unknown>);
+  return { user, tokens };
+}
+
 export async function requestPasswordReset(email: string): Promise<void> {
   const res = await fetch(apiUrl('/auth/forgot-password'), {
     method: 'POST',

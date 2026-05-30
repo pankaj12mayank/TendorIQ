@@ -222,6 +222,8 @@ async def initiate_upload(
     )
 
     if not signed_result.get('success'):
+        await file_service.permanent_delete_document(db, doc.id, UUID(tenant_id))
+        await db.commit()
         raise HTTPException(status_code=500, detail='Failed to generate upload URL')
 
     await track_usage(
@@ -255,28 +257,34 @@ async def complete_upload(
     """Mark upload as complete and verify file exists"""
     await _resolve_upload_tenant_id(current_user, db)
 
-    doc = await file_service.get_document(db, UUID(document_id))
+    tenant_uuid = UUID(current_user.tenant_id)
+    doc = await file_service.get_document(db, UUID(document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
 
-    from ...core.lite_scope import user_owns_row
-
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(doc, current_user.user_id):
-        raise HTTPException(status_code=403, detail='Access denied')
-
     meta = await storage_service.get_file_metadata(doc.storage_key)
     if not meta.get('success'):
+        await storage_service.delete_file(doc.storage_key)
+        await file_service.permanent_delete_document(db, UUID(document_id), tenant_id=tenant_uuid)
+        await db.commit()
         raise HTTPException(status_code=400, detail='File not found in storage')
 
     from ...core.security.upload_scan import assert_upload_clean
 
     read_result = await storage_service.read_file(doc.storage_key)
     if read_result.get('success') and read_result.get('content'):
-        await assert_upload_clean(read_result['content'], doc.file_name)
+        try:
+            await assert_upload_clean(read_result['content'], doc.file_name)
+        except HTTPException:
+            await storage_service.delete_file(doc.storage_key)
+            await file_service.permanent_delete_document(db, UUID(document_id), tenant_id=tenant_uuid)
+            await db.commit()
+            raise
 
     await file_service.update_document(
         db,
         UUID(document_id),
+        tenant_id=tenant_uuid,
         file_size=meta.get('content_length', doc.file_size),
         checksum=meta.get('etag', doc.checksum),
     )
@@ -297,7 +305,13 @@ async def complete_upload(
     content_hash = None
     if read_result.get('success') and read_result.get('content'):
         file_bytes = read_result['content']
-        _assert_magic_bytes(doc.file_name, file_bytes)
+        try:
+            _assert_magic_bytes(doc.file_name, file_bytes)
+        except HTTPException:
+            await storage_service.delete_file(doc.storage_key)
+            await file_service.permanent_delete_document(db, UUID(document_id), tenant_id=tenant_uuid)
+            await db.commit()
+            raise
         content_hash = hashlib.sha256(file_bytes).hexdigest()
     if content_hash:
         dup = await file_service.find_duplicate_document(
@@ -308,8 +322,9 @@ async def complete_upload(
             exclude_document_id=UUID(document_id),
         )
         if dup:
-            await file_service.permanent_delete_document(db, UUID(document_id))
             await storage_service.delete_file(doc.storage_key)
+            await file_service.permanent_delete_document(db, UUID(document_id), tenant_id=tenant_uuid)
+            await db.commit()
             raise HTTPException(
                 status_code=409,
                 detail=f'Duplicate file already uploaded (document_id={dup.id})',
@@ -317,6 +332,7 @@ async def complete_upload(
         await file_service.update_document(
             db,
             UUID(document_id),
+            tenant_id=tenant_uuid,
             checksum=content_hash,
         )
 
@@ -413,53 +429,58 @@ async def direct_upload(
     if not result.get('success'):
         raise HTTPException(status_code=500, detail=result.get('error', 'Upload failed'))
 
-    file_ext = re.sub(r'^\.', '', safe_filename.rsplit('.', 1)[-1]) if '.' in safe_filename else ''
+    try:
+        file_ext = re.sub(r'^\.', '', safe_filename.rsplit('.', 1)[-1]) if '.' in safe_filename else ''
 
-    doc = await file_service.create_document(
-        db=db,
-        tenant_id=UUID(current_user.tenant_id),
-        name=file.filename or safe_filename,
-        file_name=safe_filename,
-        file_type=file_ext,
-        file_size=len(contents),
-        storage_key=storage_key,
-        storage_provider=settings.STORAGE_PROVIDER,
-        mime_type=file.content_type,
-        checksum=checksum,
-        tender_id=UUID(tender_id) if tender_id else None,
-        owner_id=UUID(current_user.user_id),
-    )
+        doc = await file_service.create_document(
+            db=db,
+            tenant_id=UUID(current_user.tenant_id),
+            name=file.filename or safe_filename,
+            file_name=safe_filename,
+            file_type=file_ext,
+            file_size=len(contents),
+            storage_key=storage_key,
+            storage_provider=settings.STORAGE_PROVIDER,
+            mime_type=file.content_type,
+            checksum=checksum,
+            tender_id=UUID(tender_id) if tender_id else None,
+            owner_id=UUID(current_user.user_id),
+        )
 
-    from ..services.document_service import document_service as doc_svc
+        from ..services.document_service import document_service as doc_svc
 
-    await doc_svc.update_processing_status(
-        db,
-        doc.id,
-        UUID(current_user.tenant_id),
-        status='processing',
-        metadata={'uploaded_by': current_user.user_id},
-    )
+        await doc_svc.update_processing_status(
+            db,
+            doc.id,
+            UUID(current_user.tenant_id),
+            status='processing',
+            metadata={'uploaded_by': current_user.user_id},
+        )
 
-    await track_usage(
-        db,
-        tenant_id=UUID(current_user.tenant_id),
-        user_id=UUID(current_user.user_id),
-        action='upload_document',
-        resource_type='document',
-        resource_id=doc.id,
-    )
+        await track_usage(
+            db,
+            tenant_id=UUID(current_user.tenant_id),
+            user_id=UUID(current_user.user_id),
+            action='upload_document',
+            resource_type='document',
+            resource_id=doc.id,
+        )
 
-    from ...core.processing.tasks import schedule_document_analysis
+        from ...core.processing.tasks import schedule_document_analysis
 
-    await schedule_document_analysis(
-        document_id=str(doc.id),
-        tenant_id=current_user.tenant_id,
-        owner_id=current_user.user_id,
-        provider=ai_provider,
-        model=ai_model,
-        force=True,
-    )
-    await db.commit()
+        await schedule_document_analysis(
+            document_id=str(doc.id),
+            tenant_id=current_user.tenant_id,
+            owner_id=current_user.user_id,
+            provider=ai_provider,
+            model=ai_model,
+            force=True,
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        await storage_service.delete_file(storage_key)
+        raise
 
     return {
         'success': True,
@@ -482,14 +503,10 @@ async def download_file(
     """Get signed download URL for a file"""
     await _resolve_upload_tenant_id(current_user, db)
 
-    doc = await file_service.get_document(db, UUID(document_id))
+    tenant_uuid = UUID(current_user.tenant_id)
+    doc = await file_service.get_document(db, UUID(document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
-
-    from ...core.lite_scope import user_owns_row
-
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(doc, current_user.user_id):
-        raise HTTPException(status_code=403, detail='Access denied')
 
     assert_tenant_storage_key(
         doc.storage_key, current_user.tenant_id, owner_id=current_user.user_id
@@ -503,7 +520,7 @@ async def download_file(
     if not signed_result.get('success'):
         raise HTTPException(status_code=500, detail='Failed to generate download URL')
 
-    await file_service.track_access(db, UUID(document_id))
+    await file_service.track_access(db, UUID(document_id), tenant_id=tenant_uuid)
 
     return FileDownloadResponse(
         success=True,
@@ -564,14 +581,10 @@ async def get_file(
     """Get file metadata"""
     await _resolve_upload_tenant_id(current_user, db)
 
-    doc = await file_service.get_document(db, UUID(document_id))
+    tenant_uuid = UUID(current_user.tenant_id)
+    doc = await file_service.get_document(db, UUID(document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
-
-    from ...core.lite_scope import user_owns_row
-
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(doc, current_user.user_id):
-        raise HTTPException(status_code=403, detail='Access denied')
 
     return {'success': True, 'document': _doc_to_response(doc)}
 
@@ -585,15 +598,11 @@ async def delete_file(
 ):
     """Delete a file"""
     await _resolve_upload_tenant_id(current_user, db)
+    tenant_uuid = UUID(current_user.tenant_id)
 
-    doc = await file_service.get_document(db, UUID(document_id))
+    doc = await file_service.get_document(db, UUID(document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
-
-    from ...core.lite_scope import user_owns_row
-
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(doc, current_user.user_id):
-        raise HTTPException(status_code=403, detail='Access denied')
 
     from ...core.row_access import can_modify_tenant_resource, resource_owner_id_from_metadata
 
@@ -616,12 +625,13 @@ async def delete_file(
     )
         result = await storage_service.delete_file(doc.storage_key)
         storage_deleted = result.get('success', False)
-        await file_service.permanent_delete_document(db, UUID(document_id))
+        await file_service.permanent_delete_document(db, UUID(document_id), tenant_id=tenant_uuid)
     else:
         await file_service.soft_delete_document(
             db,
             UUID(document_id),
             deleted_by_id=UUID(current_user.user_id),
+            tenant_id=tenant_uuid,
         )
 
     return FileDeleteResponse(
@@ -641,14 +651,10 @@ async def generate_signed_url(
     """Generate a signed URL for upload or download"""
     await _resolve_upload_tenant_id(current_user, db)
 
-    doc = await file_service.get_document(db, UUID(data.document_id))
+    tenant_uuid = UUID(current_user.tenant_id)
+    doc = await file_service.get_document(db, UUID(data.document_id), tenant_id=tenant_uuid)
     if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
-
-    from ...core.lite_scope import user_owns_row
-
-    if str(doc.tenant_id) != current_user.tenant_id and not user_owns_row(doc, current_user.user_id):
-        raise HTTPException(status_code=403, detail='Access denied')
 
     expires = data.expires_seconds or settings.STORAGE_SIGNED_URL_EXPIRE_SECONDS
 
@@ -733,20 +739,19 @@ async def batch_delete_files(
     """Batch delete multiple files"""
     await _resolve_upload_tenant_id(current_user, db)
 
+    tenant_uuid = UUID(current_user.tenant_id)
     uuids = [UUID(did) for did in document_ids]
-    docs = []
     storage_keys = []
 
     for doc_id in uuids:
-        doc = await file_service.get_document(db, doc_id)
-        if doc and str(doc.tenant_id) == current_user.tenant_id:
-            docs.append(doc)
+        doc = await file_service.get_document(db, doc_id, tenant_id=tenant_uuid)
+        if doc:
             storage_keys.append(doc.storage_key)
 
     if permanently and storage_keys:
         await storage_service.delete_files_batch(storage_keys)
 
-    success, fail = await file_service.batch_delete(db, uuids)
+    success, fail = await file_service.batch_delete(db, uuids, tenant_id=tenant_uuid)
 
     return {
         'success': True,

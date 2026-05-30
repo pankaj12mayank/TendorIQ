@@ -11,9 +11,11 @@ import { cn } from '@/lib/utils';
 interface FinancialSectionProps {
   data: FinancialData;
   isEditing?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
 }
 
-export function FinancialSection({ data, isEditing = false }: FinancialSectionProps) {
+export function FinancialSection({ data, isEditing = false, onEdit, onSave }: FinancialSectionProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -23,7 +25,7 @@ export function FinancialSection({ data, isEditing = false }: FinancialSectionPr
     }).format(amount);
   };
 
-  const totalCost = data.breakdown.reduce((sum, item) => sum + item.total, 0);
+  const totalCost = data.breakdown.reduce((sum, item) => sum + item.total, 0) || 1;
 
   return (
     <div className="space-y-6">
@@ -38,7 +40,7 @@ export function FinancialSection({ data, isEditing = false }: FinancialSectionPr
           </div>
         </div>
         {!isEditing && (
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit
           </Button>
@@ -160,11 +162,11 @@ export function FinancialSection({ data, isEditing = false }: FinancialSectionPr
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline">
+          <Button variant="outline" onClick={onSave}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button>
+          <Button onClick={onSave}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

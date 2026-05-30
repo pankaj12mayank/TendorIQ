@@ -34,6 +34,11 @@ FE_PLAN_TO_API = {
 }
 
 QUOTA_LABELS = {
+    'documents_per_month': 'Documents',
+    'ai_analyses_per_month': 'AI Analyses',
+    'proposals_per_month': 'Proposals',
+    'exports_per_month': 'Exports',
+    'ai_tokens_per_month': 'AI Tokens',
     'users': 'Team Members',
     'documents': 'Documents',
     'tenders': 'Tenders',
@@ -48,11 +53,11 @@ def normalize_plan_id(plan_id: str) -> str:
 
 
 def normalize_billing_cycle(interval: str) -> str:
-    return 'monthly'
+    return 'yearly' if interval in ('yearly', 'annual') else 'monthly'
 
 
 def fe_billing_interval(cycle: str) -> str:
-    return 'monthly'
+    return 'yearly' if cycle in ('yearly', 'annual') else 'monthly'
 
 
 async def get_ai_token_usage(db: AsyncSession, tenant_id: UUID) -> int:
@@ -90,13 +95,20 @@ def _quota_entry(feature_key: str, current: int, maximum: int) -> dict[str, Any]
 
 
 async def build_quota_list(db: AsyncSession, tenant_id: UUID) -> list[dict[str, Any]]:
-    tenant_uuid = tenant_id
-    sub = await BillingService.get_subscription(db, tenant_uuid)
-    limits = sub['limits']
+    from .lite_usage import build_demo_status
+
+    status = await build_demo_status(db, tenant_id)
+    usage_map = {row['featureKey']: row for row in status.get('usage', [])}
+
     quotas = []
-    for key in ('users', 'documents', 'tenders', 'ai_tokens'):
-        bucket = limits.get(key, {})
-        quotas.append(_quota_entry(key, int(bucket.get('current', 0)), int(bucket.get('max', 0))))
+    for key in ('documents_per_month', 'ai_analyses_per_month', 'proposals_per_month', 'ai_tokens_per_month'):
+        row = usage_map.get(key)
+        if row:
+            quotas.append(_quota_entry(
+                key,
+                int(row['used']),
+                -1 if row['limit'] is None else int(row['limit']),
+            ))
     return quotas
 
 
@@ -190,7 +202,7 @@ async def build_subscription_view(db: AsyncSession, tenant_id: UUID) -> dict[str
             'features': [],
         },
         'status': fe_status,
-        'billingInterval': 'monthly',
+        'billingInterval': fe_billing_interval(cycle),
         'currentPeriodStart': period_start,
         'currentPeriodEnd': period_end,
         'cancelAtPeriodEnd': raw_status in ('canceled', 'cancelled'),
@@ -221,6 +233,12 @@ def build_plans_from_pricing(pricing: Optional[dict[str, Any]] = None) -> list[d
             if monthly_usd is None:
                 monthly_usd = row.get('monthly_inr')
             monthly_usd = int(monthly_usd or 0)
+            yearly_usd = row.get('yearly_usd')
+            if yearly_usd is None:
+                yearly_usd = row.get('yearly_inr')
+            if yearly_usd is None:
+                yearly_usd = monthly_usd * 10
+            yearly_usd = int(yearly_usd or monthly_usd * 10)
             limits = PlanLimits.get_limits(api_id)
             lite_limits = LITE_DEMO_LIMITS.get(api_id, limits)
             built.append(
@@ -230,9 +248,9 @@ def build_plans_from_pricing(pricing: Optional[dict[str, Any]] = None) -> list[d
                     'displayName': str(row.get('name') or meta['displayName']),
                     'description': str(row.get('description') or f'{meta["displayName"]} subscription'),
                     'priceMonthly': monthly_usd * 100,
-                    'priceAnnual': monthly_usd * 100,
+                    'priceAnnual': yearly_usd * 100,
                     'priceMonthlyUsd': monthly_usd,
-                    'priceAnnualUsd': monthly_usd,
+                    'priceAnnualUsd': yearly_usd,
                     'currency': str((pricing or {}).get('currency') or 'USD'),
                     'isDemo': False,
                     'trialDays': 0,
@@ -269,15 +287,16 @@ def build_plans_for_fe() -> list[dict[str, Any]]:
         from .lite_usage import LITE_DEMO_LIMITS
 
         lite_limits = LITE_DEMO_LIMITS.get(api_id, limits)
+        annual_usd = meta.get('priceAnnual', price_usd * 100) // 100 or price_usd * 10
         plans.append({
             'id': meta['id'],
             'name': meta['name'],
             'displayName': meta['displayName'],
             'description': f'{meta["displayName"]} subscription',
             'priceMonthly': price_usd * 100,
-            'priceAnnual': price_usd * 100,
+            'priceAnnual': annual_usd * 100,
             'priceMonthlyUsd': price_usd,
-            'priceAnnualUsd': price_usd,
+            'priceAnnualUsd': annual_usd,
             'currency': 'USD',
             'isDemo': False,
             'trialDays': 0,

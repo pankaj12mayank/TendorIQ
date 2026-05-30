@@ -64,6 +64,15 @@ async def lifespan(app: FastAPI):
     if settings.STORAGE_PROVIDER == 'local':
         logger.info('Local storage root: %s', root)
 
+    try:
+        from .core.processing.tasks import recover_stuck_documents
+
+        recovered = await recover_stuck_documents()
+        if recovered:
+            logger.info('Recovered %d stuck document(s) on startup', recovered)
+    except Exception as exc:
+        logger.warning('Document recovery skipped: %s', exc)
+
     yield
 
     await close_db()

@@ -31,16 +31,33 @@ def test_free_plan_requires_purchase():
     assert access['upgrade_required'] is True
 
 
-def test_paid_plan_expired_by_period_end(monkeypatch):
+def test_paid_plan_expired_grace_period(monkeypatch):
     monkeypatch.setattr(
         'src.core.billing.subscription_access.subscription_expiry_enforced',
         lambda: True,
     )
-    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    past_1d = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     tenant = _tenant(
         plan='starter',
         subscription_status='active',
-        settings={'plan_period_end': past},
+        settings={'plan_period_end': past_1d},
+    )
+    access = evaluate_tenant_access(tenant)
+    assert access['can_use_system'] is True
+    assert access['is_expired'] is False
+    assert access['status'] == 'grace_period'
+
+
+def test_paid_plan_expired_beyond_grace_period(monkeypatch):
+    monkeypatch.setattr(
+        'src.core.billing.subscription_access.subscription_expiry_enforced',
+        lambda: True,
+    )
+    past_5d = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+    tenant = _tenant(
+        plan='starter',
+        subscription_status='active',
+        settings={'plan_period_end': past_5d},
     )
     access = evaluate_tenant_access(tenant)
     assert access['can_use_system'] is False

@@ -92,8 +92,6 @@ async def razorpay_create_order(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    if body.billing_interval != 'monthly':
-        raise HTTPException(status_code=400, detail='Monthly billing only')
     await _resolve_customer_tenant(current_user, db)
     cfg = await load_gateway_config(db)
     if not razorpay_enabled(cfg):
@@ -143,8 +141,6 @@ async def razorpay_plan_preview(
 
     pricing = await get_setting(db, 'pricing')
     try:
-        if billing_interval != 'monthly':
-            raise ValueError('Monthly billing only')
         amount = plan_amount_paise(plan_id, billing_interval, pricing=pricing)
         return create_response(
             {
@@ -165,8 +161,6 @@ async def razorpay_verify_payment(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    if body.billing_interval != 'monthly':
-        raise HTTPException(status_code=400, detail='Monthly billing only')
     await _resolve_customer_tenant(current_user, db)
     cfg = await load_gateway_config(db)
     if not razorpay_enabled(cfg):
@@ -266,8 +260,6 @@ async def stripe_create_checkout(
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
-    if body.billing_interval != 'monthly':
-        raise HTTPException(status_code=400, detail='Monthly billing only')
     await _resolve_customer_tenant(current_user, db)
     cfg = await load_gateway_config(db)
     secret = str(cfg.get('stripe_secret_key') or '').strip()

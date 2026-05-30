@@ -11,7 +11,10 @@ interface StatusBadgeProps {
 
 const statusConfig: Record<DocumentStatus, { label: string; className: string; icon: string }> = {
   uploaded: { label: 'Uploaded', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300', icon: '↑' },
+  queued: { label: 'Queued', className: 'bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-300', icon: '○' },
+  extracting: { label: 'Extracting', className: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-300', icon: '◎' },
   processing: { label: 'Processing', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300', icon: '↻' },
+  validating: { label: 'Validating', className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300', icon: '◇' },
   retrying: { label: 'Retrying', className: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300', icon: '↻' },
   completed: { label: 'Completed', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300', icon: '✓' },
   failed: { label: 'Failed', className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300', icon: '✗' },
@@ -40,7 +43,10 @@ export function StatusDot({ status, className }: { status: DocumentStatus; class
   const config = statusConfig[status] || statusConfig.uploaded;
   const colorMap: Record<string, string> = {
     'bg-blue-100 text-blue-800': 'bg-blue-500',
+    'bg-slate-100 text-slate-800': 'bg-slate-500',
+    'bg-cyan-100 text-cyan-800': 'bg-cyan-500',
     'bg-yellow-100 text-yellow-800': 'bg-yellow-500',
+    'bg-indigo-100 text-indigo-800': 'bg-indigo-500',
     'bg-orange-100 text-orange-800': 'bg-orange-500',
     'bg-green-100 text-green-800': 'bg-green-500',
     'bg-red-100 text-red-800': 'bg-red-500',

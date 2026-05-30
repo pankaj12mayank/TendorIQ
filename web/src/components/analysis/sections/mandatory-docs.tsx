@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 interface MandatoryDocsSectionProps {
   data: MandatoryDocsData;
   isEditing?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
 }
 
 const STATUS_ICONS = {
@@ -27,7 +29,7 @@ const STATUS_COLORS = {
   missing: 'text-red-600 bg-red-100',
 };
 
-export function MandatoryDocsSection({ data, isEditing = false }: MandatoryDocsSectionProps) {
+export function MandatoryDocsSection({ data, isEditing = false, onEdit, onSave }: MandatoryDocsSectionProps) {
   const submittedCount = data.documents.filter(d => d.isSubmitted === true).length;
   const pendingCount = data.documents.filter(d => d.isSubmitted === null).length;
   const missingCount = data.documents.filter(d => d.isSubmitted === false).length;
@@ -51,7 +53,7 @@ export function MandatoryDocsSection({ data, isEditing = false }: MandatoryDocsS
           </div>
         </div>
         {!isEditing && (
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit
           </Button>
@@ -197,11 +199,11 @@ export function MandatoryDocsSection({ data, isEditing = false }: MandatoryDocsS
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline">
+          <Button variant="outline" onClick={onSave}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button>
+          <Button onClick={onSave}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

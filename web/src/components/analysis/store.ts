@@ -54,15 +54,15 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
     set({ isSaving: true });
 
-    const updatedAnalysis = { ...analysis };
     const sectionKey = editState.section as string;
-    const section = (updatedAnalysis as Record<string, unknown>)[sectionKey] as Record<string, unknown>;
-    if (section) {
-      section[editState.fieldId] = editState.newValue;
-    }
+    const section = (analysis as unknown as Record<string, unknown>)[sectionKey] as Record<string, unknown> ?? {};
+    const updatedAnalysis = {
+      ...analysis,
+      [sectionKey]: { ...section, [editState.fieldId]: editState.newValue },
+    };
     
     set({
-      analysis: updatedAnalysis,
+      analysis: updatedAnalysis as typeof analysis,
       editState: null,
       isSaving: false,
       hasUnsavedChanges: false

@@ -13,9 +13,11 @@ import { cn } from '@/lib/utils';
 interface EligibilitySectionProps {
   data: EligibilityData;
   isEditing?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
 }
 
-export function EligibilitySection({ data, isEditing = false }: EligibilitySectionProps) {
+export function EligibilitySection({ data, isEditing = false, onEdit, onSave }: EligibilitySectionProps) {
   const metCount = data.criteria.filter(c => c.isMet === true).length;
   const notMetCount = data.criteria.filter(c => c.isMet === false).length;
   const unknownCount = data.criteria.filter(c => c.isMet === null).length;
@@ -28,7 +30,7 @@ export function EligibilitySection({ data, isEditing = false }: EligibilitySecti
           <p className="text-muted-foreground">Assessment of compliance with tender requirements</p>
         </div>
         {!isEditing && (
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit
           </Button>
@@ -133,11 +135,11 @@ export function EligibilitySection({ data, isEditing = false }: EligibilitySecti
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline">
+          <Button variant="outline" onClick={onSave}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button>
+          <Button onClick={onSave}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

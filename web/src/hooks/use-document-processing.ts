@@ -99,7 +99,7 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
 
   useEffect(() => {
     if (!status) return;
-    const done = ['completed', 'failed'].includes(status.processing_status);
+    const done = ['completed', 'failed', 'needs_review'].includes(status.processing_status);
     if (done && timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;

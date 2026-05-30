@@ -16,7 +16,7 @@ import {
   Save,
   X
 } from 'lucide-react';
-import { SummaryData } from './types';
+import { SummaryData } from '../types';
 import { useAnalysisStore, getConfidenceColor } from '../store';
 import { cn } from '@/lib/utils';
 
@@ -24,9 +24,10 @@ interface SummarySectionProps {
   data: SummaryData;
   isEditing?: boolean;
   onEdit?: () => void;
+  onSave?: () => void;
 }
 
-export function SummarySection({ data, isEditing = false, onEdit }: SummarySectionProps) {
+export function SummarySection({ data, isEditing = false, onEdit, onSave }: SummarySectionProps) {
   const { editState, startEdit, updateEditValue, saveEdit, cancelEdit } = useAnalysisStore();
 
   const handleFieldEdit = (field: string, value: unknown) => {
@@ -163,11 +164,11 @@ export function SummarySection({ data, isEditing = false, onEdit }: SummarySecti
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={cancelEdit}>
+          <Button variant="outline" onClick={() => { cancelEdit(); onSave?.(); }}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button onClick={saveEdit}>
+          <Button onClick={() => { saveEdit(); onSave?.(); }}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

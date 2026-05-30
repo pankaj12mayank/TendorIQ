@@ -333,7 +333,7 @@ class Document(Base, TenantMixin, OwnerMixin, TimestampMixin, SoftDeleteMixin):
         Index('idx_document_status', 'processing_status'),
         Index('idx_document_tenant_status', 'tenant_id', 'processing_status'),
         Index('idx_document_folder', 'folder'),
-        CheckConstraint("processing_status IN ('uploaded', 'processing', 'retrying', 'completed', 'failed', 'needs_review', 'deleted')", name='valid_processing_status'),
+        CheckConstraint("processing_status IN ('uploaded', 'queued', 'extracting', 'processing', 'validating', 'completed', 'failed', 'retrying', 'needs_review', 'deleted')", name='valid_processing_status'),
     )
 
     tenant = relationship('Tenant', back_populates='documents')
@@ -403,7 +403,7 @@ class AnalysisResult(Base, TenantMixin, OwnerMixin, TimestampMixin):
 
     __table_args__ = (
         Index('idx_analysis_tender', 'tender_id', 'analysis_type'),
-        CheckConstraint("analysis_type IN ('tender_summary', 'bid_review', 'risk_assessment', 'compliance', 'scoring')", name='valid_analysis_type'),
+        CheckConstraint("analysis_type IN ('tender_summary', 'bid_review', 'risk_assessment', 'compliance', 'scoring', 'tender_dashboard')", name='valid_analysis_type'),
     )
 
     tender = relationship('Tender', back_populates='analysis_results')
@@ -703,6 +703,19 @@ class PaymentTransaction(Base, TenantMixin, TimestampMixin):
         Index('idx_payments_tenant_provider_created', 'tenant_id', 'provider', 'created_at'),
         CheckConstraint("provider IN ('razorpay', 'stripe')", name='valid_payment_provider'),
         CheckConstraint("status IN ('created', 'paid', 'failed', 'refunded')", name='valid_payment_status'),
+    )
+
+
+class RevokedToken(Base, TimestampMixin):
+    """DB-backed JWT revocation (durable alternative to in-memory set)."""
+
+    __tablename__ = 'revoked_tokens'
+
+    id = Column(UuidCol, primary_key=True, default=generate_uuid)
+    jti = Column(String(64), nullable=False, unique=True, index=True)
+
+    __table_args__ = (
+        Index('idx_revoked_jti', 'jti'),
     )
 
 

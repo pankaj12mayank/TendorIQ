@@ -13,9 +13,11 @@ import { cn } from '@/lib/utils';
 interface RisksSectionProps {
   data: RisksData;
   isEditing?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
 }
 
-export function RisksSection({ data, isEditing = false }: RisksSectionProps) {
+export function RisksSection({ data, isEditing = false, onEdit, onSave }: RisksSectionProps) {
   const severityCounts = {
     critical: data.risks.filter(r => r.severity === 'critical').length,
     high: data.risks.filter(r => r.severity === 'high').length,
@@ -47,7 +49,7 @@ export function RisksSection({ data, isEditing = false }: RisksSectionProps) {
           </div>
         </div>
         {!isEditing && (
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onEdit}>
             <Edit3 className="w-4 h-4 mr-2" />
             Edit
           </Button>
@@ -170,11 +172,11 @@ export function RisksSection({ data, isEditing = false }: RisksSectionProps) {
 
       {isEditing && (
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline">
+          <Button variant="outline" onClick={onSave}>
             <X className="w-4 h-4 mr-2" />
             Cancel
           </Button>
-          <Button>
+          <Button onClick={onSave}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
           </Button>

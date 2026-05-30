@@ -7,7 +7,7 @@ from typing import Any, Optional
 from uuid import UUID
 
 from ..config import settings
-from .fe_responses import FE_PLAN_TO_API, normalize_plan_id
+from .fe_responses import normalize_plan_id
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +19,14 @@ except ImportError:
     razorpay = None  # type: ignore
     RAZORPAY_AVAILABLE = False
 
-# Amounts in minor units (USD cents).
+# Amounts in minor units (USD cents). Keep in sync with PLAN_DISPLAY in fe_responses.py.
 PLAN_AMOUNT_PAISE: dict[tuple[str, str], int] = {
-    ('starter', 'monthly'): 99900,
-    ('starter', 'yearly'): 999000,
-    ('professional', 'monthly'): 299900,
-    ('professional', 'yearly'): 2999000,
-    ('enterprise', 'monthly'): 999900,
-    ('enterprise', 'yearly'): 9999000,
+    ('starter', 'monthly'): 2900,
+    ('starter', 'yearly'): 29000,
+    ('professional', 'monthly'): 9900,
+    ('professional', 'yearly'): 99000,
+    ('enterprise', 'monthly'): 29900,
+    ('enterprise', 'yearly'): 299000,
 }
 
 

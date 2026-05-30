@@ -66,19 +66,20 @@ class FileService:
             metadata_json=metadata or {},
         )
         db.add(doc)
-        await db.commit()
+        await db.flush()
         await db.refresh(doc)
         logger.info(f'Document created: {doc.id}', tenant_id=str(tenant_id), file_name=file_name)
         return doc
 
     @staticmethod
-    async def get_document(db: AsyncSession, document_id: UUID) -> Optional[Document]:
-        result = await db.execute(
-            select(Document).where(
-                Document.id == document_id,
-                Document.deleted_at.is_(None),
-            )
+    async def get_document(db: AsyncSession, document_id: UUID, tenant_id: Optional[UUID] = None) -> Optional[Document]:
+        query = select(Document).where(
+            Document.id == document_id,
+            Document.deleted_at.is_(None),
         )
+        if tenant_id is not None:
+            query = query.where(Document.tenant_id == tenant_id)
+        result = await db.execute(query)
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -141,9 +142,10 @@ class FileService:
     async def update_document(
         db: AsyncSession,
         document_id: UUID,
+        tenant_id: Optional[UUID] = None,
         **updates,
     ) -> Optional[Document]:
-        doc = await FileService.get_document(db, document_id)
+        doc = await FileService.get_document(db, document_id, tenant_id=tenant_id)
         if not doc:
             return None
 
@@ -151,7 +153,7 @@ class FileService:
             if hasattr(doc, key):
                 setattr(doc, key, value)
 
-        await db.commit()
+        await db.flush()
         await db.refresh(doc)
         logger.info(f'Document updated: {document_id}')
         return doc
@@ -161,14 +163,15 @@ class FileService:
         db: AsyncSession,
         document_id: UUID,
         deleted_by_id: Optional[UUID] = None,
+        tenant_id: Optional[UUID] = None,
     ) -> bool:
-        doc = await FileService.get_document(db, document_id)
+        doc = await FileService.get_document(db, document_id, tenant_id=tenant_id)
         if not doc:
             return False
 
         doc.deleted_at = datetime.now(timezone.utc)
         doc.deleted_by_id = deleted_by_id
-        await db.commit()
+        await db.flush()
         logger.info(f'Document soft-deleted: {document_id}')
         return True
 
@@ -176,11 +179,13 @@ class FileService:
     async def permanent_delete_document(
         db: AsyncSession,
         document_id: UUID,
+        tenant_id: Optional[UUID] = None,
     ) -> bool:
-        result = await db.execute(
-            delete(Document).where(Document.id == document_id)
-        )
-        await db.commit()
+        query = delete(Document).where(Document.id == document_id)
+        if tenant_id is not None:
+            query = query.where(Document.tenant_id == tenant_id)
+        result = await db.execute(query)
+        await db.flush()
         logger.info(f'Document permanently deleted: {document_id}')
         return result.rowcount > 0
 
@@ -188,20 +193,22 @@ class FileService:
     async def batch_delete(
         db: AsyncSession,
         document_ids: list[UUID],
+        tenant_id: Optional[UUID] = None,
     ) -> tuple[int, int]:
         success_count = 0
         fail_count = 0
 
         for doc_id in document_ids:
-            result = await db.execute(
-                delete(Document).where(Document.id == doc_id)
-            )
+            query = delete(Document).where(Document.id == doc_id)
+            if tenant_id is not None:
+                query = query.where(Document.tenant_id == tenant_id)
+            result = await db.execute(query)
             if result.rowcount > 0:
                 success_count += 1
             else:
                 fail_count += 1
 
-        await db.commit()
+        await db.flush()
         return success_count, fail_count
 
     @staticmethod
@@ -215,7 +222,7 @@ class FileService:
             .where(Document.id.in_(document_ids))
             .values(is_archived=True, archived_at=now)
         )
-        await db.commit()
+        await db.flush()
         logger.info(f'Documents archived: {len(document_ids)}')
         return result.rowcount
 
@@ -223,12 +230,13 @@ class FileService:
     async def track_access(
         db: AsyncSession,
         document_id: UUID,
+        tenant_id: Optional[UUID] = None,
     ) -> None:
-        doc = await FileService.get_document(db, document_id)
+        doc = await FileService.get_document(db, document_id, tenant_id=tenant_id)
         if doc:
             doc.access_count += 1
             doc.last_accessed_at = datetime.now(timezone.utc)
-            await db.commit()
+            await db.flush()
 
     @staticmethod
     async def get_storage_stats(
@@ -244,7 +252,7 @@ class FileService:
             .where(
                 Document.tenant_id == tenant_id,
                 Document.deleted_at.is_(None),
-                Document.is_archived == False,
+                not Document.is_archived,
             )
             .group_by(Document.file_type)
         )
