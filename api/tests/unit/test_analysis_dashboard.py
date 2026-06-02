@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.api.router.analysis_mapper import (
+from src.core.analysis_mapper import (
     analysis_row_to_dashboard,
     empty_dashboard_analysis,
 )

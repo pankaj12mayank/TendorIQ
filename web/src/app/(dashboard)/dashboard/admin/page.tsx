@@ -166,7 +166,7 @@ export default function AdminDashboardPage() {
     (async () => {
       try {
         const [usersRes, usageRes, ownerRes, paymentCfg] = await Promise.all([
-          loadUsers({ page: 1, limit: 25, include_deleted: true }),
+          loadUsers({ page: 1, limit: 25, include_deleted: 'true' }),
           authenticatedJson<{ data: UsageSummary }>('/api/v1/admin/platform/analytics/summary'),
           loadOwnerProfile(),
           loadPaymentSettings(),
@@ -211,11 +211,11 @@ export default function AdminDashboardPage() {
   }, [loadUploads, uploadSearch, uploadStatus, uploadUserFilter]);
 
   const fetchUsers = useCallback(async () => {
-    const params: Record<string, string | number | boolean> = {
+    const params: Record<string, string | number | undefined> = {
       search: userSearch,
       page: usersPage,
       limit: usersMeta.limit,
-      include_deleted: true,
+      include_deleted: 'true',
     };
     if (userStatusFilter === 'active' || userStatusFilter === 'inactive') {
       params.status = userStatusFilter;
@@ -240,7 +240,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     if (tab === 'uploads') void loadUploadList();
-  }, [tab, loadUploadList]);
+  }, [tab, loadUploadList, uploadSearch, uploadStatus, uploadUserFilter]);
 
   useEffect(() => {
     setUsersPage(1);
@@ -402,7 +402,7 @@ export default function AdminDashboardPage() {
                     />
                     {Boolean(ownerProfile?.[`${kind}_url`]) && (
                       <img
-                        src={String(ownerProfile[`${kind}_url`])}
+                        src={ownerProfile?.[`${kind}_url`] as string}
                         alt={kind}
                         className="h-10 w-10 rounded object-cover"
                       />
@@ -1017,92 +1017,117 @@ export default function AdminDashboardPage() {
         )}
 
         {!loading && tab === 'analytics' && (
-          <Card id="admin-panel-analytics" role="tabpanel" aria-labelledby="admin-tab-analytics">
-            <CardHeader>
-              <CardTitle>User analytics search</CardTitle>
-              <CardDescription>
-                Search any user and view uploads, tenders, proposals, payments, activity counts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <Card>
-                  <CardContent className="pt-4 text-sm">
-                    <p className="text-muted-foreground">Uploads</p>
-                    <p className="text-xl font-semibold">{usage?.uploads_total ?? 0}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-sm">
-                    <p className="text-muted-foreground">Users (active/total)</p>
-                    <p className="text-xl font-semibold">
-                      {usage?.active_users ?? 0}/{usage?.total_users ?? 0}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-sm">
-                    <p className="text-muted-foreground">Revenue</p>
-                    <p className="text-xl font-semibold">${Number(usage?.revenue ?? 0).toLocaleString('en-US')}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-sm">
-                    <p className="text-muted-foreground">AI jobs</p>
-                    <p className="text-xl font-semibold">{usage?.ai_jobs_total ?? 0}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-4 text-sm">
-                    <p className="text-muted-foreground">Failed AI jobs</p>
-                    <p className="text-xl font-semibold">{usage?.failed_ai_jobs ?? 0}</p>
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Search by email or name"
-                  value={analyticsQuery}
-                  onChange={(e) => setAnalyticsQuery(e.target.value)}
-                />
-                <Button
-                  onClick={async () => {
-                    if (!analyticsQuery.trim()) {
-                      setAnalyticsRows([]);
-                      appToast.error('Enter a user name or email to search.');
-                      return;
-                    }
-                    const res = (await searchAnalyticsUser(analyticsQuery)) as {
-                      data?: Record<string, unknown>[];
-                    };
-                    setAnalyticsRows(res.data ?? []);
-                  }}
-                >
-                  Search
-                </Button>
-              </div>
-              <pre className="max-h-[320px] overflow-auto rounded-md border p-3 text-xs scroll-premium">
-                {JSON.stringify(analyticsRows, null, 2)}
-              </pre>
-              {analyticsRows.length > 0 && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {analyticsRows.map((r, idx) => (
-                    <Card key={`${String(r.user_id ?? idx)}`}>
-                      <CardContent className="pt-4 text-xs space-y-1">
-                        <p className="font-medium">{String(r.name ?? '—')} · {String(r.email ?? '—')}</p>
-                        <p className="text-muted-foreground">
-                          Uploads: {Number(r.uploads ?? 0)} · Tenders: {Number(r.tenders ?? 0)} · Proposals: {Number(r.proposals ?? 0)}
-                        </p>
-                        <p className="text-muted-foreground">
-                          Payments: {Number(r.payments ?? 0)} · Activity: {Number(r.activity ?? 0)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))}
+          <div className="space-y-6" id="admin-panel-analytics" role="tabpanel" aria-labelledby="admin-tab-analytics">
+            <Card>
+              <CardHeader>
+                <CardTitle>Platform overview</CardTitle>
+                <CardDescription>Aggregate usage metrics across all tenants.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <Card>
+                    <CardContent className="pt-4 text-sm">
+                      <p className="text-muted-foreground">Uploads</p>
+                      <p className="text-xl font-semibold">{usage?.uploads_total ?? 0}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 text-sm">
+                      <p className="text-muted-foreground">Users (active/total)</p>
+                      <p className="text-xl font-semibold">
+                        {usage?.active_users ?? 0}/{usage?.total_users ?? 0}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 text-sm">
+                      <p className="text-muted-foreground">Revenue</p>
+                      <p className="text-xl font-semibold">${Number(usage?.revenue ?? 0).toLocaleString('en-US')}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 text-sm">
+                      <p className="text-muted-foreground">AI jobs</p>
+                      <p className="text-xl font-semibold">{usage?.ai_jobs_total ?? 0}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-4 text-sm">
+                      <p className="text-muted-foreground">Failed AI jobs</p>
+                      <p className="text-xl font-semibold">{usage?.failed_ai_jobs ?? 0}</p>
+                    </CardContent>
+                  </Card>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>User analytics search</CardTitle>
+                <CardDescription>
+                  Search any user and view uploads, tenders, proposals, payments, activity counts.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search by email or name"
+                    value={analyticsQuery}
+                    onChange={(e) => setAnalyticsQuery(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Enter' && analyticsQuery.trim()) {
+                        const res = (await searchAnalyticsUser(analyticsQuery)) as {
+                          data?: Record<string, unknown>[];
+                        };
+                        setAnalyticsRows(res.data ?? []);
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!analyticsQuery.trim()) {
+                        setAnalyticsRows([]);
+                        appToast.error('Enter a user name or email to search.');
+                        return;
+                      }
+                      const res = (await searchAnalyticsUser(analyticsQuery)) as {
+                        data?: Record<string, unknown>[];
+                      };
+                      setAnalyticsRows(res.data ?? []);
+                    }}
+                  >
+                    Search
+                  </Button>
+                </div>
+                {analyticsRows.length === 0 && !analyticsQuery.trim() && (
+                  <p className="text-sm text-muted-foreground">
+                    Search for a user by name or email to see their activity breakdown.
+                  </p>
+                )}
+                {analyticsRows.length === 0 && analyticsQuery.trim() && (
+                  <p className="text-sm text-muted-foreground">
+                    No users found matching &ldquo;{analyticsQuery}&rdquo;.
+                  </p>
+                )}
+                {analyticsRows.length > 0 && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {analyticsRows.map((r, idx) => (
+                      <Card key={`${String(r.user_id ?? idx)}`}>
+                        <CardContent className="pt-4 text-xs space-y-1">
+                          <p className="font-medium">{String(r.name ?? '—')} · {String(r.email ?? '—')}</p>
+                          <p className="text-muted-foreground">
+                            Uploads: {Number(r.uploads ?? 0)} · Tenders: {Number(r.tenders ?? 0)} · Proposals: {Number(r.proposals ?? 0)}
+                          </p>
+                          <p className="text-muted-foreground">
+                            Payments: {Number(r.payments ?? 0)} · Activity: {Number(r.activity ?? 0)}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         )}
 
       </div>

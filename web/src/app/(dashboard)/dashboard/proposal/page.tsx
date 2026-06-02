@@ -8,6 +8,8 @@ import { appToast } from '@/lib/app-toast';
 
 import { SubscriptionGate } from '@/components/billing/subscription-gate';
 import { PageHeader } from '@/components/design-system/page-header';
+import { PremiumErrorState } from '@/components/design-system/empty-state';
+import { LoadingState } from '@/components/ui/loading-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -55,13 +57,14 @@ function SectionCard({
 export default function ProposalPage() {
   const searchParams = useSearchParams();
   const tenderId = searchParams.get('tenderId') ?? undefined;
-  const { data: proposal, isLoading } = useTenderProposal(tenderId);
+  const { data: proposal, isLoading, isError, error, refetch } = useTenderProposal(tenderId);
   const generate = useGenerateProposal(tenderId);
   const [exporting, setExporting] = useState(false);
   const [draftSections, setDraftSections] = useState<ProposalSection[]>([]);
   const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlightSave = useRef(false);
+  const pendingAfterSave = useRef(false);
   const sectionsRef = useRef(draftSections);
   const proposalRef = useRef(proposal);
 
@@ -90,35 +93,49 @@ export default function ProposalPage() {
     };
   }, [autosaveState]);
 
+  const doAutosave = useCallback(async () => {
+    const p = proposalRef.current;
+    if (!p?.id) return;
+    if (inFlightSave.current) {
+      pendingAfterSave.current = true;
+      return;
+    }
+    inFlightSave.current = true;
+    try {
+      await autosaveProposal(p.id, { title: p.title, sections: sectionsRef.current });
+      setAutosaveState('saved');
+    } catch (err) {
+      setAutosaveState('error');
+      appToast.error(err instanceof Error ? err.message : 'Autosave failed');
+    } finally {
+      inFlightSave.current = false;
+      if (pendingAfterSave.current) {
+        pendingAfterSave.current = false;
+        doAutosave();
+      }
+    }
+  }, []);
+
+  const scheduleAutosave = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setAutosaveState('saving');
+    saveTimer.current = setTimeout(doAutosave, 1200);
+  }, [doAutosave]);
+
   const patchSection = useCallback(
-    async (sectionId: string, content: string) => {
+    (sectionId: string, content: string) => {
       setDraftSections((prev) => {
         const next = prev.map((s) => (s.section_id === sectionId ? { ...s, content } : s));
         sectionsRef.current = next;
-
-        const p = proposalRef.current;
-        if (!p?.id) return next;
-
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-        setAutosaveState('saving');
-        saveTimer.current = setTimeout(async () => {
-          if (inFlightSave.current) return;
-          inFlightSave.current = true;
-          try {
-            await autosaveProposal(p.id, { title: p.title, sections: sectionsRef.current });
-            setAutosaveState('saved');
-          } catch (err) {
-            setAutosaveState('error');
-            appToast.error(err instanceof Error ? err.message : 'Autosave failed');
-          } finally {
-            inFlightSave.current = false;
-          }
-        }, 1200);
-
         return next;
       });
+
+      const p = proposalRef.current;
+      if (!p?.id) return;
+
+      scheduleAutosave();
     },
-    []
+    [scheduleAutosave]
   );
 
   const handleGenerate = async () => {
@@ -185,7 +202,15 @@ export default function ProposalPage() {
         }
       />
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading proposal…</p>}
+      {isLoading && <LoadingState message="Loading proposal..." />}
+
+      {isError && !isLoading && (
+        <PremiumErrorState
+          title="Failed to load proposal"
+          description={error instanceof Error ? error.message : 'Could not load proposal data'}
+          onRetry={() => refetch()}
+        />
+      )}
 
       {proposal && (
         <div className="space-y-4">

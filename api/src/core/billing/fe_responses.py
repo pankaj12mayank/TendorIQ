@@ -53,11 +53,11 @@ def normalize_plan_id(plan_id: str) -> str:
 
 
 def normalize_billing_cycle(interval: str) -> str:
-    return 'yearly' if interval in ('yearly', 'annual') else 'monthly'
+    return 'monthly'
 
 
 def fe_billing_interval(cycle: str) -> str:
-    return 'yearly' if cycle in ('yearly', 'annual') else 'monthly'
+    return 'monthly'
 
 
 async def get_ai_token_usage(db: AsyncSession, tenant_id: UUID) -> int:
@@ -233,12 +233,6 @@ def build_plans_from_pricing(pricing: Optional[dict[str, Any]] = None) -> list[d
             if monthly_usd is None:
                 monthly_usd = row.get('monthly_inr')
             monthly_usd = int(monthly_usd or 0)
-            yearly_usd = row.get('yearly_usd')
-            if yearly_usd is None:
-                yearly_usd = row.get('yearly_inr')
-            if yearly_usd is None:
-                yearly_usd = monthly_usd * 10
-            yearly_usd = int(yearly_usd or monthly_usd * 10)
             limits = PlanLimits.get_limits(api_id)
             lite_limits = LITE_DEMO_LIMITS.get(api_id, limits)
             built.append(
@@ -248,9 +242,6 @@ def build_plans_from_pricing(pricing: Optional[dict[str, Any]] = None) -> list[d
                     'displayName': str(row.get('name') or meta['displayName']),
                     'description': str(row.get('description') or f'{meta["displayName"]} subscription'),
                     'priceMonthly': monthly_usd * 100,
-                    'priceAnnual': yearly_usd * 100,
-                    'priceMonthlyUsd': monthly_usd,
-                    'priceAnnualUsd': yearly_usd,
                     'currency': str((pricing or {}).get('currency') or 'USD'),
                     'isDemo': False,
                     'trialDays': 0,
@@ -287,16 +278,13 @@ def build_plans_for_fe() -> list[dict[str, Any]]:
         from .lite_usage import LITE_DEMO_LIMITS
 
         lite_limits = LITE_DEMO_LIMITS.get(api_id, limits)
-        annual_usd = meta.get('priceAnnual', price_usd * 100) // 100 or price_usd * 10
         plans.append({
             'id': meta['id'],
             'name': meta['name'],
             'displayName': meta['displayName'],
             'description': f'{meta["displayName"]} subscription',
             'priceMonthly': price_usd * 100,
-            'priceAnnual': annual_usd * 100,
             'priceMonthlyUsd': price_usd,
-            'priceAnnualUsd': annual_usd,
             'currency': 'USD',
             'isDemo': False,
             'trialDays': 0,

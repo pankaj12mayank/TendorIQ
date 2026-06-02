@@ -10,3 +10,4 @@ export * from './sections/financial';
 export * from './sections/risks';
 export * from './sections/deadlines';
 export * from './sections/mandatory-docs';
+export * from './sections/important-clauses';

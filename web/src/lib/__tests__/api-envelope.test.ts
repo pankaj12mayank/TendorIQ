@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ApiEnvelope } from '../api-envelope';
 import {
   mapTenderFromApi,
   parseApiErrorCode,
@@ -44,7 +45,7 @@ describe('api-envelope', () => {
       total: 42,
       page: 2,
       limit: 10,
-    });
+    } as ApiEnvelope<{ id: string }[]> & { total?: number; page?: number; limit?: number });
     expect(page.meta.total).toBe(42);
     expect(page.meta.page).toBe(2);
     expect(page.meta.limit).toBe(10);

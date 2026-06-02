@@ -49,11 +49,24 @@ export function useAnalysisApi(tenderId?: string): UseAnalysisApiReturn {
     }
   }, [tenderId, refetch]);
 
+  useEffect(() => {
+    if (!tenderId) return;
+    const onFocus = () => {
+      const state = useAnalysisStore.getState();
+      if (state.analysis?.status === 'pending' || state.analysis?.status === 'in_progress') {
+        void refetch();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [tenderId, refetch]);
+
   const updateField = useCallback(async (
     section: AnalysisSection, 
     fieldId: string, 
     value: unknown
   ) => {
+    if (!tenderId) return;
     try {
       await patchTenderAnalysisField(tenderId, {
         section,
@@ -78,9 +91,15 @@ export function useAnalysisApi(tenderId?: string): UseAnalysisApiReturn {
     });
   }, []);
 
+  const SECTION_KEY_MAP: Record<string, string> = {
+    important_clauses: 'importantClauses',
+    mandatory_docs: 'mandatoryDocs',
+  };
+
   const getSectionData = useCallback((section: AnalysisSection): unknown => {
     if (!analysis) return null;
-    return (analysis as unknown as Record<string, unknown>)[section as string];
+    const key = SECTION_KEY_MAP[section as string] ?? (section as string);
+    return (analysis as unknown as Record<string, unknown>)[key];
   }, [analysis]);
 
   return {

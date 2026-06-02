@@ -7,6 +7,6 @@ export const ANALYSIS_SECTIONS = [
   'financial',
   'risks',
   'deadlines',
-  'importantClauses',
-  'mandatoryDocs',
+  'important_clauses',
+  'mandatory_docs',
 ] as const;

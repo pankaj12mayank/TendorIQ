@@ -1,4 +1,3 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -9,17 +8,21 @@ import {
   ROUTES,
 } from '@/lib/routes';
 
-const isPublicRoute = createRouteMatcher([
+const PUBLIC_ROUTES = [
   '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/forgot-password(.*)',
-  '/reset-password(.*)',
-  '/api/webhooks(.*)',
-  '/_next(.*)',
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/api/webhooks',
+  '/_next',
   '/favicon.ico',
   '/api/health',
-]);
+];
+
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '/'));
+}
 
 const clerkEnabled = isClerkPublishableKeyConfigured();
 
@@ -35,21 +38,35 @@ function applyLiteRouteRules(request: NextRequest): NextResponse | null {
   return null;
 }
 
-const clerkProtected = clerkMiddleware(async (auth, request) => {
-  const redirected = applyLiteRouteRules(request);
-  if (redirected) return redirected;
+async function clerkProtected(request: NextRequest): Promise<NextResponse<unknown>> {
+  const { clerkMiddleware: cm } = await import('@clerk/nextjs/server');
+  const handler: (req: NextRequest) => NextResponse<unknown> = cm(
+    (auth, req) => {
+      const redirected = applyLiteRouteRules(req);
+      if (redirected) return redirected;
 
-  if (!isPublicRoute(request)) {
-    const hasLocalSession = Boolean(request.cookies.get('__session')?.value);
-    if (!hasLocalSession) {
-      await auth.protect();
+      if (!isPublicRoute(req.nextUrl.pathname)) {
+        const hasLocalSession = Boolean(req.cookies.get('__session')?.value);
+        if (!hasLocalSession) {
+          return Response.redirect(new URL('/sign-in', req.url));
+        }
+      }
+      return NextResponse.next();
     }
-  }
-});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any;
+  return handler(request);
+}
 
 function localPassthrough(request: NextRequest) {
   const redirected = applyLiteRouteRules(request);
   if (redirected) return redirected;
+  if (!isPublicRoute(request.nextUrl.pathname)) {
+    const hasLocalSession = Boolean(request.cookies.get('__session')?.value);
+    if (!hasLocalSession) {
+      return Response.redirect(new URL('/sign-in', request.url));
+    }
+  }
   return NextResponse.next();
 }
 

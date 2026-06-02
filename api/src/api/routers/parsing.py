@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 
-from ..dependencies.auth import CurrentUser
+from ..dependencies.access import TenantUser
 from ..services.document_service import document_service
 from ...core.parsers import parser_service, ChunkingStrategy
 from ...core.storage import storage_service
@@ -26,7 +26,7 @@ logger = get_logger('parsing_api')
 @router.post('/document/{document_id}')
 async def parse_document(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
     chunk: bool = Query(True),
     strategy: str = Query('hybrid'),
@@ -148,7 +148,7 @@ async def parse_document(
 @router.get('/status/{document_id}')
 async def get_parsing_status(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
     """Get document parsing status"""
@@ -189,7 +189,7 @@ async def get_parsing_status(
 @router.get('/result/{document_id}')
 async def get_parsed_result(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
     include_chunks: bool = Query(False),
 ):
@@ -254,7 +254,7 @@ async def get_parsed_result(
 @router.get('/preview/{document_id}')
 async def preview_parsing(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
     max_chars: int = Query(5000, ge=100, le=50000),
 ):
@@ -291,7 +291,7 @@ async def preview_parsing(
 @router.delete('/result/{document_id}')
 async def delete_parsing_result(
     document_id: str,
-    current_user: CurrentUser,
+    current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
     """Delete parsing result and chunks"""

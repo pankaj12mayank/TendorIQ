@@ -7,6 +7,15 @@ import {
   ConfidenceScore 
 } from './types';
 
+const SECTION_KEY_MAP: Record<string, string> = {
+  important_clauses: 'importantClauses',
+  mandatory_docs: 'mandatoryDocs',
+};
+
+function resolveSectionKey(section: string): string {
+  return SECTION_KEY_MAP[section] ?? section;
+}
+
 
 interface AnalysisState {
   analysis: TenderAnalysis | null;
@@ -54,7 +63,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
     set({ isSaving: true });
 
-    const sectionKey = editState.section as string;
+    const sectionKey = resolveSectionKey(editState.section as string);
     const section = (analysis as unknown as Record<string, unknown>)[sectionKey] as Record<string, unknown> ?? {};
     const updatedAnalysis = {
       ...analysis,
@@ -75,7 +84,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     const { analysis } = get();
     if (!analysis) return;
 
-    const sectionKey = section as string;
+    const sectionKey = resolveSectionKey(section as string);
     const currentSection = (analysis as unknown as Record<string, unknown>)[sectionKey] as Record<string, unknown> ?? {};
     
     set({ 

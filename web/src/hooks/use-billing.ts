@@ -207,7 +207,7 @@ export function useBillingApi(): UseBillingApiReturn {
           await fetchSubscription();
         }
         await fetchQuotaStatus();
-        return { success: true, ...res };
+        return { ...res, success: true };
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to change plan';
         setError(message);

@@ -19,9 +19,6 @@
     "db:current": "alembic current",
     "clean": "node -e \"['dist','.pytest_cache','.ruff_cache','coverage.xml'].forEach(d=>require('fs').rmSync(d,{recursive:true,force:true}))\""
   },
-  "dependencies": {
-    "@tendoriq/shared": "workspace:*"
-  },
   "devDependencies": {
     "turbo": "^2.3.3"
   }

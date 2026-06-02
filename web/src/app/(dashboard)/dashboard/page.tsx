@@ -39,7 +39,7 @@ import { useCurrentUser } from '@/hooks/use-auth';
 import { useDeleteTender, useTenders } from '@/hooks/use-api';
 import { TableRowSkeleton } from '@/components/design-system/skeleton';
 import { PremiumErrorState } from '@/components/design-system/empty-state';
-import { ROUTES } from '@/lib/routes';
+import { ROUTES, settingsTabHref } from '@/lib/routes';
 import { isSuperAdmin } from '@/lib/permissions';
 import { api } from '@/lib/api-client';
 import { mapQuotaFromUsageApi } from '@/lib/billing-api';
@@ -240,7 +240,7 @@ function MemberDashboard() {
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={ROUTES.billing}>
+            <Link href={settingsTabHref('billing')}>
               <CreditCard className="h-4 w-4" />
               Payment History
             </Link>
@@ -255,6 +255,8 @@ function MemberDashboard() {
           <CardContent className="space-y-2">
             {recentUploadsQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading uploads...</p>
+            ) : (recentUploadsQuery.data ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No uploads yet. Upload a tender to get started.</p>
             ) : (
               (recentUploadsQuery.data ?? []).slice(0, 5).map((row: any) => (
                 <div
@@ -275,6 +277,8 @@ function MemberDashboard() {
           <CardContent className="space-y-2">
             {recentAnalysesQuery.isLoading ? (
               <p className="text-sm text-muted-foreground">Loading analyses...</p>
+            ) : (recentAnalysesQuery.data ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No analyses yet. Upload a tender first.</p>
             ) : (
               (recentAnalysesQuery.data ?? []).slice(0, 5).map((row: any) => (
                 <div

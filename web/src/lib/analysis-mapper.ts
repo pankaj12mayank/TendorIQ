@@ -9,7 +9,7 @@ import type {
   EligibilityData,
   TechnicalData,
   FinancialData,
-  RisksData,
+  RisksData, RiskItem,
   DeadlinesData,
   MandatoryDocsData,
   ImportantClausesData,
@@ -50,11 +50,12 @@ function mapEligibility(section: Record<string, unknown> | undefined): Eligibili
   const rawCriteria = Array.isArray(s.criteria) ? s.criteria : [];
   const criteria = rawCriteria.map((row, idx) => {
     const c = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
-    const status = String(c.status ?? '').toLowerCase();
+    const rawStatus = String(c.status ?? '').toLowerCase();
+    const met = c.met;
     const isMet =
-      c.isMet === true || status === 'met' || status === 'pass'
+      met === true || rawStatus === 'met' || rawStatus === 'pass'
         ? true
-        : c.isMet === false || status === 'not_met' || status === 'fail'
+        : met === false || rawStatus === 'not_met' || rawStatus === 'fail'
           ? false
           : null;
     return {
@@ -80,17 +81,21 @@ function mapTechnical(section: Record<string, unknown> | undefined): TechnicalDa
   const rawReqs = Array.isArray(s.requirements) ? s.requirements : [];
   const requirements = rawReqs.map((row, idx) => {
     const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
-    const status = String(r.status ?? '').toLowerCase();
+    const rawStatus = String(r.status ?? '').toLowerCase();
     const isCompliant =
-      r.isCompliant === true || status === 'compliant' || status === 'met'
+      rawStatus === 'compliant' || rawStatus === 'met'
         ? true
-        : r.isCompliant === false || status === 'non_compliant'
+        : rawStatus === 'missing' || rawStatus === 'non_compliant' || rawStatus === 'partial'
           ? false
-          : null;
+          : r.isCompliant === true
+            ? true
+            : r.isCompliant === false
+              ? false
+              : null;
     return {
       id: String(r.id ?? idx + 1),
-      name: String(r.name ?? `Requirement ${idx + 1}`),
-      specification: String(r.specification ?? r.details ?? ''),
+      name: String(r.title ?? r.name ?? `Requirement ${idx + 1}`),
+      specification: String(r.detail ?? r.specification ?? ''),
       isCompliant,
       weight: Number(r.weight ?? 0),
       notes: r.notes ? String(r.notes) : undefined,
@@ -121,7 +126,7 @@ function mapFinancial(section: Record<string, unknown> | undefined): FinancialDa
     breakdown: items.map((row) => {
       const i = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
       return {
-        item: String(i.item ?? i.name ?? 'Item'),
+        item: String(i.label ?? i.item ?? i.name ?? 'Item'),
         amount: Number(i.amount ?? 0),
         unit: String(i.unit ?? ''),
         quantity: Number(i.quantity ?? 1),
@@ -147,7 +152,7 @@ function mapRisks(section: Record<string, unknown> | undefined): RisksData {
       id: String(r.id ?? idx + 1),
       title: String(r.title ?? `Risk ${idx + 1}`),
       description: String(r.description ?? ''),
-      severity,
+      severity: severity as RiskItem['severity'],
       probability: Number(r.probability ?? 0),
       impact: String(r.impact ?? ''),
       mitigation: String(r.mitigation ?? ''),
@@ -171,7 +176,7 @@ function mapDeadlines(section: Record<string, unknown> | undefined): DeadlinesDa
     const date = String(d.date ?? d.dueDate ?? '');
     return {
       id: String(d.id ?? idx + 1),
-      name: String(d.name ?? d.title ?? `Deadline ${idx + 1}`),
+      name: String(d.label ?? d.name ?? d.title ?? `Deadline ${idx + 1}`),
       date,
       type: (d.type as DeadlinesData['deadlines'][0]['type']) ?? 'other',
       isMet: d.isMet === true ? true : d.isMet === false ? false : null,
@@ -211,18 +216,22 @@ function mapMandatoryDocs(section: Record<string, unknown> | undefined): Mandato
   const rawDocs = Array.isArray(s.documents) ? s.documents : [];
   const documents = rawDocs.map((row, idx) => {
     const d = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>;
-    const status = String(d.status ?? '').toLowerCase();
+    const rawStatus = String(d.status ?? '').toLowerCase();
     const isSubmitted =
-      d.isSubmitted === true || status === 'submitted' || status === 'complete'
+      rawStatus === 'present' || rawStatus === 'submitted' || rawStatus === 'complete'
         ? true
-        : d.isSubmitted === false
+        : rawStatus === 'missing' || rawStatus === 'unknown'
           ? false
-          : null;
+          : d.isSubmitted === true
+            ? true
+            : d.isSubmitted === false
+              ? false
+              : null;
     return {
       id: String(d.id ?? idx + 1),
       name: String(d.name ?? `Document ${idx + 1}`),
       description: String(d.description ?? ''),
-      isRequired: d.isRequired !== false,
+      isRequired: d.required !== false && d.isRequired !== false,
       isSubmitted,
       submittedDate: d.submittedDate ? String(d.submittedDate) : undefined,
       documentType: String(d.documentType ?? 'other'),

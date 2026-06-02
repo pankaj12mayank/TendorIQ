@@ -1,4 +1,4 @@
-import { parsePaginated, unwrapData } from './api-envelope';
+import { parsePaginated, unwrapData, type ApiEnvelope } from './api-envelope';
 
 export interface OrganizationRow {
   id: string;
@@ -10,14 +10,14 @@ export interface OrganizationRow {
 }
 
 export function parseOrganizationsList(payload: unknown): OrganizationRow[] {
-  const page = parsePaginated<OrganizationRow>(payload as { data?: OrganizationRow[] });
+  const page = parsePaginated<OrganizationRow>(payload as ApiEnvelope<OrganizationRow[]>);
   if (page.data.length) return page.data;
-  const rows = unwrapData<OrganizationRow[]>(payload);
+  const rows = unwrapData<OrganizationRow[]>(payload as ApiEnvelope<OrganizationRow[]>);
   return Array.isArray(rows) ? rows : [];
 }
 
 export function parseOrganization(payload: unknown): OrganizationRow | null {
-  const row = unwrapData<OrganizationRow>(payload);
+  const row = unwrapData<OrganizationRow>(payload as ApiEnvelope<OrganizationRow>);
   if (row && typeof row === 'object' && 'id' in row) return row;
   return null;
 }

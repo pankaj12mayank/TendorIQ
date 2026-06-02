@@ -10,70 +10,27 @@ import { ROUTES } from '@/lib/routes';
 
 const plans = [
   {
-    id: 'starter',
-    name: 'Starter',
-    monthlyPrice: 29,
-    description: 'Perfect for small teams getting started',
-    icon: Sparkles,
-    color: 'from-blue-500 to-cyan-500',
-    features: [
-      '5 Team Members',
-      '100 Documents/month',
-      'Basic AI Analysis',
-      'Email Support',
-      'Standard Analytics',
-    ],
-    notIncluded: ['Advanced Risk Detection', 'Proposal Generator', 'API Access'],
-    cta: 'Get Started',
-    popular: false,
-  },
-  {
     id: 'professional',
     name: 'Professional',
     monthlyPrice: 99,
-    description: 'For growing teams with advanced needs',
+    description: 'Complete workflow for tender analysis and proposal generation',
     icon: Sparkles,
-    color: 'from-purple-500 to-pink-500',
+    color: 'from-primary to-purple-500',
     features: [
-      '20 Team Members',
-      '500 Documents/month',
-      'Advanced AI Analysis',
-      'Risk Detection',
-      'Proposal Generator',
-      'Priority Support',
-      'Advanced Analytics',
-      'API Access',
+      '500 documents per cycle',
+      'AI analysis and risk detection',
+      'Proposal generator and PDF export',
+      'Priority support',
     ],
     notIncluded: [],
     cta: 'Get Started',
     popular: true,
   },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    monthlyPrice: null,
-    description: 'For large organizations with custom needs',
-    icon: Building2,
-    color: 'from-orange-500 to-red-500',
-    features: [
-      'Unlimited Team Members',
-      'Unlimited Documents',
-      'Full AI Suite',
-      'Custom Integrations',
-      'Dedicated Support',
-      'Custom Training',
-      'SLA Guarantee',
-      'On-premise Option',
-    ],
-    notIncluded: [],
-    cta: 'Contact Sales',
-    popular: false,
-  },
 ];
 
 function getPlanDisplayPrice(
   monthlyPrice: number | null,
-  opts?: { yearlyPrice?: number | null; currencyInr?: boolean }
+  opts?: { currencyInr?: boolean }
 ): { price: string; period: string; sublabel?: string } {
   const sym = opts?.currencyInr ? '₹' : '$';
   if (monthlyPrice === null) {
@@ -81,8 +38,7 @@ function getPlanDisplayPrice(
   }
   return {
     price: `${sym}${monthlyPrice}`,
-    period: '/month',
-    sublabel: `${sym}${monthlyPrice} billed monthly`,
+    period: '/mo',
   };
 }
 
@@ -91,9 +47,7 @@ type AdminPlan = {
   name: string;
   description?: string;
   monthly_usd?: number | null;
-  yearly_usd?: number | null;
   monthly_inr?: number | null;
-  yearly_inr?: number | null;
   popular?: boolean;
   contact_sales?: boolean;
   features?: string[];
@@ -105,7 +59,6 @@ function adminPlansToCards(adminPlans: AdminPlan[]) {
     id: p.id,
     name: p.name,
     monthlyPrice: p.monthly_usd ?? p.monthly_inr ?? null,
-    yearlyPrice: p.yearly_usd ?? p.yearly_inr ?? null,
     description: p.description ?? '',
     icon: p.id === 'enterprise' ? Building2 : Sparkles,
     color: 'from-primary to-purple-500',
@@ -205,9 +158,6 @@ export function PricingSection({
                       <span className="text-4xl font-bold">{display.price}</span>
                       <span className="text-muted-foreground">{display.period}</span>
                     </div>
-                    {display.sublabel && (
-                      <p className="text-xs text-green-500">{display.sublabel}</p>
-                    )}
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
                 </div>

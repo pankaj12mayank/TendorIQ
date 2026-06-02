@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from ...core.platform.lite_settings import build_public_site
 from ...core.user_preferences import normalize_preferences
 
 router = APIRouter(prefix='/public', tags=['Public'])
-PUBLIC_SITE_CACHE_TTL_SECONDS = 30
+PUBLIC_SITE_CACHE_TTL_SECONDS = 5
 _PUBLIC_SITE_CACHE: dict[str, object] = {
     'expires_at': datetime.fromtimestamp(0, tz=timezone.utc),
     'stamp': '',
@@ -42,8 +42,9 @@ async def _platform_data_stamp(db: AsyncSession) -> str:
 
 
 @router.get('/site')
-async def public_site(db: AsyncSession = Depends(get_db)):
+async def public_site(response: Response, db: AsyncSession = Depends(get_db)):
     """Landing page content and pricing cards (no auth)."""
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     now = datetime.now(timezone.utc)
     stamp = await _platform_data_stamp(db)
     cached_payload = _PUBLIC_SITE_CACHE.get('payload')

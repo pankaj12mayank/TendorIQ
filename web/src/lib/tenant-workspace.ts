@@ -5,5 +5,5 @@ export const TENANT_WORKSPACE_REQUIRED =
   'Sign in to use this feature.';
 
 export function hasTenantWorkspace(user?: AuthUser | null): boolean {
-  return Boolean(user?.id || user?.userId);
+  return Boolean(user?.id);
 }

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import AnalysisResult, Tender
 from ..personal_workspace import get_company_profile_dict
-from ...api.router.analysis_mapper import analysis_row_to_dashboard
+from ..analysis_mapper import analysis_row_to_dashboard
 from .section_format import format_dashboard_section, organization_line
 
 

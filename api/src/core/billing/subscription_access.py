@@ -58,7 +58,7 @@ def compute_period_end(
     from datetime import timedelta
 
     base = start or datetime.now(timezone.utc)
-    default_days = 365 if billing_cycle in ('yearly', 'annual') else 30
+    default_days = 30
     days = max(1, int(period_days or default_days))
     return base + timedelta(days=days)
 
@@ -146,12 +146,12 @@ def evaluate_tenant_access(tenant: Optional[Tenant]) -> dict[str, Any]:
 
     if plan == FREE_PLAN:
         return {
-            'can_use_system': False,
-            'is_expired': True,
+            'can_use_system': True,
+            'is_expired': False,
             'plan': plan,
-            'status': status or 'inactive',
-            'reason': 'Choose a plan on Billing to use uploads, analysis, and proposals.',
-            'upgrade_required': True,
+            'status': status or 'active',
+            'reason': '',
+            'upgrade_required': False,
             'period_end': period_end.isoformat() if period_end else None,
         }
 

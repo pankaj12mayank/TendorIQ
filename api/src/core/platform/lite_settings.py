@@ -34,7 +34,6 @@ DEFAULT_PRICING: dict[str, Any] = {
             'name': 'Professional',
             'description': 'Complete workflow for tender analysis and proposal generation',
             'monthly_usd': 99,
-            'yearly_usd': None,
             'popular': True,
             'active': True,
             'upload_limit': 500,

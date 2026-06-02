@@ -117,7 +117,7 @@ class ApiClient {
           response.status,
           message,
           parseApiErrorCode(errorData) || 'UNKNOWN_ERROR',
-          details
+          (details ?? {}) as Record<string, unknown>
         );
       }
 

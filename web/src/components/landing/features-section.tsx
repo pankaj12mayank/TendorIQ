@@ -12,8 +12,6 @@ import {
   ArrowRight,
   Zap,
   Brain,
-  Database,
-  Lock
 } from 'lucide-react';
 
 const features = [
@@ -143,53 +141,7 @@ export function FeaturesSection({ items }: { items?: FeatureItem[] }) {
           ))}
         </div>
 
-        {/* Feature Highlight Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.4 }}
-          className="grid md:grid-cols-3 gap-6 mt-16"
-        >
-          {[
-            {
-              icon: Brain,
-              title: 'Neural Processing',
-              desc: 'Advanced ML models trained on millions of tenders',
-              stat: '99.7%',
-            },
-            {
-              icon: Database,
-              title: 'Smart Storage',
-              desc: 'Secure document management with version control',
-              stat: '∞',
-            },
-            {
-              icon: Lock,
-              title: 'Enterprise Security',
-              desc: 'SOC 2 compliant with end-to-end encryption',
-              stat: '256-bit',
-            },
-          ].map((item, index) => (
-            <motion.div
-              key={item.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.5 + index * 0.1 }}
-              className="flex items-center gap-4 p-6 bg-muted/30 rounded-xl"
-            >
-              <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <item.icon className="w-6 h-6 text-primary" />
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold">{item.title}</div>
-                <div className="text-sm text-muted-foreground">{item.desc}</div>
-              </div>
-              <div className="text-2xl font-bold text-primary">{item.stat}</div>
-            </motion.div>
-          ))}
-        </motion.div>
+
       </div>
     </section>
   );

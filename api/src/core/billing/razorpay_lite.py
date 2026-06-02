@@ -19,14 +19,11 @@ except ImportError:
     razorpay = None  # type: ignore
     RAZORPAY_AVAILABLE = False
 
-# Amounts in minor units (USD cents). Keep in sync with PLAN_DISPLAY in fe_responses.py.
+# Amounts in minor units (USD cents). Monthly only.
 PLAN_AMOUNT_PAISE: dict[tuple[str, str], int] = {
     ('starter', 'monthly'): 2900,
-    ('starter', 'yearly'): 29000,
     ('professional', 'monthly'): 9900,
-    ('professional', 'yearly'): 99000,
     ('enterprise', 'monthly'): 29900,
-    ('enterprise', 'yearly'): 299000,
 }
 
 
@@ -52,7 +49,7 @@ def plan_amount_paise(
     if raw in ('free', 'plan_free', 'demo'):
         raise ValueError('Free/demo plan does not require payment')
     api_plan = normalize_plan_id(plan_id)
-    cycle = 'yearly' if billing_interval in ('yearly', 'annual') else 'monthly'
+    cycle = 'monthly'
     from ..platform.lite_settings import pricing_amount_paise
 
     amount = pricing_amount_paise(plan_id, billing_interval, pricing)
@@ -82,7 +79,7 @@ def create_order(
         key_id = settings.RAZORPAY_KEY_ID
     api_plan = normalize_plan_id(plan_id)
     amount = plan_amount_paise(plan_id, billing_interval, pricing=pricing)
-    currency = (getattr(settings, 'RAZORPAY_CURRENCY', None) or 'USD').upper()
+    currency = (getattr(settings, 'RAZORPAY_CURRENCY', None) or 'INR').upper()
     receipt = f'tiq_{tenant_id[:8]}_{api_plan}'[:40]
 
     order = client.order.create(
@@ -169,7 +166,7 @@ async def activate_plan_after_payment(
     if not tenant:
         raise ValueError('Tenant not found')
 
-    cycle = 'yearly' if billing_interval in ('yearly', 'annual') else 'monthly'
+    cycle = 'monthly'
     tenant.plan = normalize_plan_id(plan)
     tenant.billing_cycle = cycle
     tenant.subscription_status = 'active'

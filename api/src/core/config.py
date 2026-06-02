@@ -232,7 +232,7 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ''
     RAZORPAY_KEY_ID: str = ''
     RAZORPAY_KEY_SECRET: str = ''
-    RAZORPAY_CURRENCY: str = 'USD'
+    RAZORPAY_CURRENCY: str = 'INR'
     # When false (default in development), only monthly quotas apply — not subscription expiry.
     BILLING_ENFORCE_SUBSCRIPTION_EXPIRY: bool = False
 

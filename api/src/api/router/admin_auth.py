@@ -222,6 +222,3 @@ async def get_tenant_subscription(
         ],
     }
 
-
-router_check = router
-

@@ -17,7 +17,7 @@ from ..ai.lite_ai import (
     resolve_default_model,
     resolve_default_provider,
 )
-from ...api.router.analysis_mapper import empty_dashboard_analysis
+from ..analysis_mapper import empty_dashboard_analysis
 from ..config import settings
 from ..models import AnalysisResult, Document, Tender
 from ..parsers.parser import parser_service

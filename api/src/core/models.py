@@ -64,7 +64,7 @@ class SoftDeleteMixin:
     """Mixin for soft delete support"""
 
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
-    deleted_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=True)
+    deleted_by_id = Column(UuidCol, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
 
     @property
     def is_deleted(self) -> bool:
@@ -75,10 +75,10 @@ class AuditMixin:
     """Mixin for audit trail"""
 
     created_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=False)
-    updated_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=True)
+    updated_by_id = Column(UuidCol, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
 
 
-class Tenant(Base):
+class Tenant(Base, OwnerMixin, TimestampMixin):
     """Organizations/Tenants table"""
 
     __tablename__ = 'tenants'
@@ -106,9 +106,6 @@ class Tenant(Base):
     used_users = Column(Integer, default=0)
 
     billing_cycle = Column(String(20), default='monthly')
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_tenant_status', 'status'),
@@ -217,7 +214,7 @@ class Membership(Base):
     role = Column(String(20), default='member')
     status = Column(String(20), default='active')
 
-    invited_by_id = Column(UuidCol, ForeignKey('users.id'), nullable=True)
+    invited_by_id = Column(UuidCol, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     joined_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -255,9 +252,6 @@ class Tender(Base, TenantMixin, OwnerMixin, TimestampMixin, SoftDeleteMixin, Aud
 
     tender_type = Column(String(50), default='open')
     evaluation_criteria = Column(JsonCol, default=[])
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_tender_owner_status', 'owner_id', 'status'),
@@ -320,9 +314,6 @@ class Document(Base, TenantMixin, OwnerMixin, TimestampMixin, SoftDeleteMixin):
     uploaded_at = Column(DateTime(timezone=True), nullable=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
     __table_args__ = (
         Index('idx_document_tender', 'tender_id'),
         Index('idx_document_owner_created', 'owner_id', 'created_at'),
@@ -367,8 +358,6 @@ class DocumentChunk(Base, TenantMixin, TimestampMixin):
 
     metadata_json = Column('metadata', JsonCol, default={})
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
     __table_args__ = (
         Index('idx_chunk_document', 'document_id'),
         Index('idx_chunk_parsed', 'parsed_document_id'),
@@ -398,8 +387,6 @@ class AnalysisResult(Base, TenantMixin, OwnerMixin, TimestampMixin):
     model_used = Column(String(100), nullable=True)
     tokens_used = Column(Integer, nullable=True)
     cost_usd = Column(Float, nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_analysis_tender', 'tender_id', 'analysis_type'),
@@ -434,9 +421,6 @@ class Proposal(Base, TenantMixin, OwnerMixin, TimestampMixin, AuditMixin):
 
     status = Column(String(20), default='draft')
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
     __table_args__ = (
         Index('idx_proposal_tender', 'tender_id', 'status'),
         Index('idx_proposal_bidder', 'bidder_id'),
@@ -469,8 +453,6 @@ class UsageLog(Base, TenantMixin, TimestampMixin):
 
     cost_usd = Column(Float, nullable=True)
     tokens_used = Column(Integer, nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_usage_tenant_created', 'tenant_id', 'created_at'),
@@ -510,9 +492,6 @@ class Subscription(Base, TenantMixin, TimestampMixin):
     cancelled_at = Column(DateTime(timezone=True), nullable=True)
     cancel_at_period_end = Column(Boolean, default=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
     __table_args__ = (
         Index('idx_sub_tenant_plan', 'tenant_id', 'plan'),
         Index('idx_sub_tenant_status', 'tenant_id', 'status'),
@@ -527,7 +506,7 @@ class Subscription(Base, TenantMixin, TimestampMixin):
 
 
 
-class OCRResult(Base, TenantMixin):
+class OCRResult(Base, TenantMixin, TimestampMixin):
     __tablename__ = 'ocr_results'
 
     id = Column(UuidCol, primary_key=True, default=generate_uuid)
@@ -555,9 +534,6 @@ class OCRResult(Base, TenantMixin):
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_ocr_document', 'document_id'),
@@ -588,9 +564,6 @@ class OCRJob(Base, TenantMixin, TimestampMixin):
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_ocrjob_document', 'document_id'),
@@ -629,9 +602,6 @@ class ParsedDocument(Base, TenantMixin, TimestampMixin):
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index('idx_parsed_document', 'document_id'),
@@ -689,7 +659,7 @@ class PaymentTransaction(Base, TenantMixin, TimestampMixin):
     payment_id = Column(String(128), nullable=True, index=True)
     external_customer_id = Column(String(128), nullable=True, index=True)
     amount = Column(Float, nullable=False, default=0.0)
-    currency = Column(String(8), nullable=False, default='USD')
+    currency = Column(String(8), nullable=False, default='INR')
     plan = Column(String(64), nullable=True, index=True)
     status = Column(String(32), nullable=False, default='created', index=True)
     failure_reason = Column(Text, nullable=True)

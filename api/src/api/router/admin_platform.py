@@ -1116,11 +1116,8 @@ async def patch_billing_pricing(
         seen_ids.add(pid)
         is_active = bool(p.get('active', True))
         monthly = p.get('monthly_usd')
-        yearly = p.get('yearly_usd')
         if monthly is None:
             monthly = p.get('monthly_inr')
-        if yearly is None:
-            yearly = p.get('yearly_inr')
         if is_active and monthly in (None, 0):
             raise HTTPException(status_code=400, detail='Active plans require monthly_usd')
         if is_active and monthly is not None:
@@ -1128,7 +1125,9 @@ async def patch_billing_pricing(
             if monthly in active_monthly_prices:
                 raise HTTPException(status_code=400, detail='Pricing conflict: duplicate monthly_usd')
             active_monthly_prices.add(monthly)
-        # Admin layer uses monthly-only pricing; yearly is blocked.
+        yearly = p.get('yearly_usd')
+        if yearly is None:
+            yearly = p.get('yearly_inr')
         if yearly not in (None, 0):
             raise HTTPException(status_code=400, detail='Admin billing management is monthly-only')
         if p.get('upload_limit') is not None and int(p.get('upload_limit') or 0) < 1:

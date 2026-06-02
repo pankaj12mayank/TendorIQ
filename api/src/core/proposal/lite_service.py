@@ -14,7 +14,7 @@ from ..ai.lite_ai import chat_completion, extract_json_object, resolve_default_m
 from ..models import AnalysisResult, CompanyProfile, Proposal, Tender
 from ..proposal.prompts import ProposalPrompts
 from ..proposal.schemas import SectionType
-from ...api.router.analysis_mapper import analysis_row_to_dashboard
+from ..analysis_mapper import analysis_row_to_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,10 @@ async def generate_proposal_for_tender(
     company_text = company_profile_to_text(company_profile)
     tender_text = await fetch_tender_analysis_text(db, tender_id, tenant_id)
     if len(tender_text) < 80:
-        tender_text = f"{tender.title}\n\n{tender.description or ''}"
+        raise ValueError(
+            'No analysis found for this tender. '
+            'Run document analysis first before generating a proposal.'
+        )
 
     sections_out: list[dict[str, Any]] = []
     total_words = 0

@@ -28,7 +28,7 @@ export function mapUserFromApi(data: Record<string, unknown>): AuthUser {
       perms.length > 0
         ? perms
         : getRolePermissions(
-            membershipRole && role !== 'super_admin' ? membershipRole : role
+            membershipRole && role !== 'super_admin' ? membershipRole : (role ?? 'user')
           ),
   };
 }

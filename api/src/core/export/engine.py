@@ -198,13 +198,13 @@ class TemplateManager:
     )
 
     def get_default(self) -> ExportTemplate:
-        return self.DEFAULT_TEMPLATE.copy(deep=True)
+        return self.DEFAULT_TEMPLATE.model_copy(deep=True)
 
     def get_branded(self) -> ExportTemplate:
-        return self.BRANDED_TEMPLATE.copy(deep=True)
+        return self.BRANDED_TEMPLATE.model_copy(deep=True)
 
     def get_confidential(self) -> ExportTemplate:
-        return self.CONFIDENTIAL_TEMPLATE.copy(deep=True)
+        return self.CONFIDENTIAL_TEMPLATE.model_copy(deep=True)
 
     def get_for_document_type(self, doc_type: ExportType) -> ExportTemplate:
         templates_map = {

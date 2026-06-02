@@ -2,12 +2,11 @@ import type {
   Plan,
   Subscription,
   QuotaStatus,
-  UsageSummary,
   Invoice,
   PaymentMethod,
 } from '@/components/billing/types';
 import type { QuotaStatus as UsageQuotaStatus, UsageSummary as TenantUsageSummary } from '@/components/usage/types';
-import { unwrapData } from '@/lib/api-envelope';
+import { unwrapData, type ApiEnvelope } from '@/lib/api-envelope';
 
 /** API plan prices are already in cents (matches formatCurrency). */
 export function mapPlansFromApi(raw: Plan[]): Plan[] {
@@ -16,7 +15,7 @@ export function mapPlansFromApi(raw: Plan[]): Plan[] {
 
 export function parsePlansResponse(payload: unknown): Plan[] {
   if (Array.isArray(payload)) return mapPlansFromApi(payload);
-  const unwrapped = unwrapData<Plan[] | { plans?: Plan[] }>(payload as { data?: unknown });
+  const unwrapped = unwrapData<Plan[] | { plans?: Plan[] }>(payload as ApiEnvelope<Plan[] | { plans?: Plan[] }>);
   if (Array.isArray(unwrapped)) return mapPlansFromApi(unwrapped);
   const body = payload as { plans?: Plan[] };
   return mapPlansFromApi(body.plans ?? (unwrapped as { plans?: Plan[] })?.plans ?? []);

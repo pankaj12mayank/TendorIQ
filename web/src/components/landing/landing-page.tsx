@@ -45,9 +45,7 @@ export function LandingPage({ initialSite }: { initialSite?: PublicSitePayload |
                 name: string;
                 description?: string;
                 monthly_usd?: number | null;
-                yearly_usd?: number | null;
                 monthly_inr?: number | null;
-                yearly_inr?: number | null;
                 popular?: boolean;
                 contact_sales?: boolean;
                 features?: string[];

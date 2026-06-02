@@ -276,7 +276,7 @@ export function useDocumentsApi() {
         const res = await api.get<{ success: boolean; document: { processing_status: string } }>(
           `/api/v1/documents/${documentId}`
         );
-        const status = unwrapDocumentPayload(res).processing_status;
+        const status = (res as { document: { processing_status: string } }).document.processing_status;
         store.updateDocument(documentId, { processing_status: status as never });
 
         if (status === 'completed' || status === 'failed' || status === 'needs_review') {

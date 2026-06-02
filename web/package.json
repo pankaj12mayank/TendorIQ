@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^15.1.6",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.6",
     "@types/react-dom": "^19.0.6",

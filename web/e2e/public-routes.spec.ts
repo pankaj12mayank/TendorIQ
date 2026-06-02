@@ -4,8 +4,8 @@ import { test, expect } from '@playwright/test';
  * Public route matrix — no auth required.
  */
 const PUBLIC_PATHS = [
-  { path: '/sign-in', heading: /sign in/i },
-  { path: '/landing', title: /TenderIQ/i },
+  { path: '/sign-in', heading: /TenderIQ/i },
+  { path: '/', title: /TenderIQ/ },
 ];
 
 for (const route of PUBLIC_PATHS) {

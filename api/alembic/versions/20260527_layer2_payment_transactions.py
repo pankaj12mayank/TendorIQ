@@ -47,6 +47,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('provider', 'payment_id', name='uq_payment_provider_payment_id'),
         sa.UniqueConstraint('provider', 'order_id', name='uq_payment_provider_order_id'),
+        sa.CheckConstraint("provider IN ('razorpay', 'stripe')", name='valid_payment_provider'),
+        sa.CheckConstraint("status IN ('created', 'paid', 'failed', 'refunded')", name='valid_payment_status'),
     )
     create_index_if_missing('ix_payment_transactions_tenant_id', 'payment_transactions', ['tenant_id'])
     create_index_if_missing('ix_payment_transactions_user_id', 'payment_transactions', ['user_id'])

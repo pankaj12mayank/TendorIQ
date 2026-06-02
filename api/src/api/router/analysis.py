@@ -1,10 +1,11 @@
 """Analysis Results API — user-scoped CRUD."""
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,7 @@ from ...core.database import get_db
 from ...core.lite_scope import apply_user_scope, parse_user_uuid, user_owns_row
 from ...core.billing.subscription_access import assert_can_use_system
 from ...core.tenant_utils import parse_tenant_uuid
-from .analysis_mapper import analysis_row_to_dashboard
+from ...core.analysis_mapper import analysis_row_to_dashboard
 from ..dependencies.access import TenantUser, require_tenant_member
 from ..schemas.base import create_paginated_response, create_response
 
@@ -143,10 +144,16 @@ async def get_tender_dashboard_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class PatchAnalysisBody(BaseModel):
+    section: Optional[str] = None
+    field_id: Optional[str] = None
+    value: Any = None
+
+
 @router.patch('/tender/{tender_id}')
 async def patch_tender_dashboard_analysis(
     tender_id: str,
-    body: dict,
+    body: PatchAnalysisBody,
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
@@ -154,9 +161,9 @@ async def patch_tender_dashboard_analysis(
         await assert_can_use_system(db, parse_tenant_uuid(current_user.tenant_id))
     tenant_uuid = parse_tenant_uuid(current_user.tenant_id)
     owner_uuid = parse_user_uuid(current_user.user_id)
-    section = body.get('section')
-    field_id = body.get('field_id')
-    value = body.get('value')
+    section = body.section
+    field_id = body.field_id
+    value = body.value
     try:
         q = (
             _scoped_select(current_user, tender_id)
@@ -196,9 +203,22 @@ async def patch_tender_dashboard_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CreateAnalysisBody(BaseModel):
+    tender_id: str = Field(..., min_length=1)
+    document_id: Optional[str] = None
+    analysis_type: str = 'tender_summary'
+    result: Optional[dict] = None
+    summary: Optional[str] = None
+    score: Optional[float] = None
+    confidence: Optional[float] = None
+    model_used: Optional[str] = None
+    tokens_used: Optional[int] = None
+    cost_usd: Optional[float] = None
+
+
 @router.post('/', status_code=201)
 async def create_analysis(
-    body: dict,
+    body: CreateAnalysisBody,
     current_user: TenantUser,
     db: AsyncSession = Depends(get_db),
 ):
@@ -209,16 +229,16 @@ async def create_analysis(
         obj = AnalysisResult(
             tenant_id=tenant_uuid,
             owner_id=parse_user_uuid(current_user.user_id),
-            tender_id=UUID(body.get('tender_id')) if body.get('tender_id') else None,
-            document_id=UUID(body.get('document_id')) if body.get('document_id') else None,
-            analysis_type=body.get('analysis_type', 'tender_summary'),
-            result=body.get('result', {}),
-            summary=body.get('summary'),
-            score=body.get('score'),
-            confidence=body.get('confidence'),
-            model_used=body.get('model_used'),
-            tokens_used=body.get('tokens_used'),
-            cost_usd=body.get('cost_usd'),
+            tender_id=UUID(body.tender_id) if body.tender_id else None,
+            document_id=UUID(body.document_id) if body.document_id else None,
+            analysis_type=body.analysis_type,
+            result=body.result or {},
+            summary=body.summary,
+            score=body.score,
+            confidence=body.confidence,
+            model_used=body.model_used,
+            tokens_used=body.tokens_used,
+            cost_usd=body.cost_usd,
         )
         db.add(obj)
         await db.commit()
