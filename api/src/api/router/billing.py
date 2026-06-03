@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Optional
 from datetime import datetime
@@ -32,6 +33,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.auth import AuthContext
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_meta(val: Any) -> dict:
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+    return {}
+
 
 router = APIRouter(
     prefix='/billing',
@@ -353,6 +366,7 @@ async def list_own_payments(
     )
     items = []
     for r in rows:
+        meta = _safe_meta(r.metadata_json)
         items.append(
             {
                 'id': str(r.id),
@@ -363,7 +377,7 @@ async def list_own_payments(
                 'provider': r.provider,
                 'invoice': f'INV-{str(r.id)[:8]}',
                 'plan': r.plan,
-                'expiry': r.metadata_json.get('plan_period_end') if isinstance(r.metadata_json, dict) else None,
+                'expiry': meta.get('plan_period_end'),
             }
         )
     return create_response(

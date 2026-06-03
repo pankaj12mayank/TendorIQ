@@ -37,14 +37,14 @@ def upgrade() -> None:
         with op.batch_alter_table('documents') as batch_op:
             batch_op.drop_constraint('valid_processing_status', type_='check')
             batch_op.create_check_constraint(
-                f'processing_status IN ({NEW_PROCESSING_STATUSES})',
                 'valid_processing_status',
+                f'processing_status IN ({NEW_PROCESSING_STATUSES})',
             )
         with op.batch_alter_table('analysis_results') as batch_op:
             batch_op.drop_constraint('valid_analysis_type', type_='check')
             batch_op.create_check_constraint(
-                f'analysis_type IN ({NEW_ANALYSIS_TYPES})',
                 'valid_analysis_type',
+                f'analysis_type IN ({NEW_ANALYSIS_TYPES})',
             )
     elif dialect == 'mysql':
         if table_exists('documents'):
@@ -82,14 +82,14 @@ def downgrade() -> None:
         with op.batch_alter_table('documents') as batch_op:
             batch_op.drop_constraint('valid_processing_status', type_='check')
             batch_op.create_check_constraint(
-                f'processing_status IN ({OLD_PROCESSING_STATUSES})',
                 'valid_processing_status',
+                f'processing_status IN ({OLD_PROCESSING_STATUSES})',
             )
         with op.batch_alter_table('analysis_results') as batch_op:
             batch_op.drop_constraint('valid_analysis_type', type_='check')
             batch_op.create_check_constraint(
-                f'analysis_type IN ({OLD_ANALYSIS_TYPES})',
                 'valid_analysis_type',
+                f'analysis_type IN ({OLD_ANALYSIS_TYPES})',
             )
     elif dialect == 'mysql':
         if table_exists('documents'):

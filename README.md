@@ -4,7 +4,7 @@ AI-assisted tender workflow for teams: upload RFP documents, run structured anal
 
 | Layer | Technology |
 |-------|------------|
-| API | Python 3.11+, FastAPI, SQLAlchemy, Alembic |
+| API | Python 3.12+, FastAPI, SQLAlchemy, Alembic |
 | Web | Node 20+, Next.js 15, React 19, Tailwind CSS |
 | Database (dev) | SQLite (file under `.tenderiq/data/`) |
 | Database (prod) | MySQL or PostgreSQL |
@@ -44,16 +44,18 @@ From the repository root:
 
 ```bat
 copy .env.example .env
-copy web\.env.local.example web\.env.local
 run.bat
 ```
+
+> `run.bat` automatically creates `web/.env.local` from root `.env` — no manual copy needed.
 
 On first start, `run.bat` will:
 
 1. Create or repair `api/venv` and install Python dependencies
 2. Install web dependencies when needed (`web/node_modules`)
-3. Initialize the SQLite database
-4. Start the API on **http://localhost:8000** and the web app on **http://localhost:3000**
+3. Apply database migrations (SQLite at `.tenderiq/data/tenderiq.db`)
+4. Seed system owner + demo user accounts
+5. Start the API on **http://localhost:8000** and the web app on **http://localhost:3000**
 
 Open **http://localhost:3000/sign-in**.
 
@@ -65,6 +67,16 @@ Login passwords are **not** stored in `.env`. Use one of:
 2. **Register** — http://localhost:3000/sign-up (password min. 8 characters).
 
 Supabase and Clerk are optional in this Lite stack. OpenAI/AI provider keys are optional for analysis features.
+
+### Troubleshooting login
+
+If login returns an HTML error — stop the servers, delete the dev database, and restart:
+
+```bat
+run.bat stop
+del /q .tenderiq\data\tenderiq.db 2>nul
+run.bat
+```
 
 ---
 

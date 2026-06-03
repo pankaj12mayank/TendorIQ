@@ -150,18 +150,25 @@ export function useBillingApi(): UseBillingApiReturn {
 
   const fetchPaymentHistory = useCallback(
     async (params?: { page?: number; limit?: number; status?: string; provider?: string }) => {
-      const qs = new URLSearchParams();
-      Object.entries(params ?? {}).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && String(v) !== '') qs.set(k, String(v));
-      });
-      const res = await api.get<{ items: any[]; pagination: any }>(
-        `/api/v1/billing/payments/history${qs.toString() ? `?${qs}` : ''}`
-      );
-      const data = (res as any)?.data ?? res;
-      return {
-        items: data.items ?? [],
-        pagination: data.pagination ?? { page: 1, limit: 20, total: 0, pages: 0 },
-      };
+      try {
+        const qs = new URLSearchParams();
+        Object.entries(params ?? {}).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && String(v) !== '') qs.set(k, String(v));
+        });
+        const res = await api.get<{ items: any[]; pagination: any }>(
+          `/api/v1/billing/payments/history${qs.toString() ? `?${qs}` : ''}`
+        );
+        const data = (res as any)?.data ?? res;
+        return {
+          items: data.items ?? [],
+          pagination: data.pagination ?? { page: 1, limit: 20, total: 0, pages: 0 },
+        };
+      } catch {
+        return {
+          items: [],
+          pagination: { page: 1, limit: 20, total: 0, pages: 0 },
+        };
+      }
     },
     []
   );

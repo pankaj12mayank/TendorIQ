@@ -18,6 +18,7 @@ const PUBLIC_ROUTES = [
   '/_next',
   '/favicon.ico',
   '/api/health',
+  '/api/v1',
 ];
 
 function isPublicRoute(pathname: string): boolean {
