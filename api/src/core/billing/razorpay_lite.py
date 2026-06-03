@@ -19,11 +19,13 @@ except ImportError:
     razorpay = None  # type: ignore
     RAZORPAY_AVAILABLE = False
 
-# Amounts in minor units (USD cents). Monthly only.
+# Amounts in minor units (USD cents). Monthly only. Derived from PLAN_DISPLAY.
+from .fe_responses import PLAN_DISPLAY
+
 PLAN_AMOUNT_PAISE: dict[tuple[str, str], int] = {
-    ('starter', 'monthly'): 2900,
-    ('professional', 'monthly'): 9900,
-    ('enterprise', 'monthly'): 29900,
+    (api_id, 'monthly'): info['priceMonthly']
+    for api_id, info in PLAN_DISPLAY.items()
+    if api_id != 'free' and info.get('priceMonthly')
 }
 
 

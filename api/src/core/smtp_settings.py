@@ -42,7 +42,9 @@ def _sanitize_out(data: dict[str, Any]) -> dict[str, Any]:
     out = dict(DEFAULT_SMTP)
     out.update({k: v for k, v in data.items() if v is not None})
     out['port'] = int(out.get('port') or 587)
-    out['app_password'] = _decrypt_secret(str(out.get('app_password') or ''))
+    raw = str(out.get('app_password') or '')
+    decrypted = _decrypt_secret(raw)
+    out['app_password'] = '****' if decrypted else ''
     return out
 
 
@@ -66,7 +68,10 @@ async def get_smtp_settings(db: AsyncSession) -> dict[str, Any]:
 async def update_smtp_settings(db: AsyncSession, patch: dict[str, Any]) -> dict[str, Any]:
     current = await get_setting(db, SMTP_SECTION)
     merged = dict(current)
-    merged.update(patch)
+    for k, v in patch.items():
+        if k == 'app_password' and (not v or v == '****'):
+            continue
+        merged[k] = v
     stored = _sanitize_store(merged)
     await patch_setting(db, SMTP_SECTION, stored)
     return _sanitize_out(stored)

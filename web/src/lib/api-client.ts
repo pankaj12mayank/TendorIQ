@@ -1,5 +1,3 @@
-import type { ZodSchema } from 'zod';
-
 import { notifyUnauthorized } from '@/lib/auth-unauthorized';
 import { attemptSessionRefresh } from '@/lib/auth-refresh';
 import { clearStoredSession, getAuthToken } from '@/lib/auth-session';
@@ -21,7 +19,6 @@ export class ApiError extends Error {
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
-  schema?: ZodSchema;
   /** Request timeout in ms (default 30s). Use {@link UPLOAD_API_TIMEOUT_MS} for large uploads. */
   timeout?: number;
   /** @internal single 401 refresh retry */
@@ -61,7 +58,7 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { params, schema, timeout = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options;
+    const { params, timeout = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -125,13 +122,7 @@ class ApiClient {
         return undefined as T;
       }
 
-      const data = await response.json();
-
-      if (schema) {
-        return schema.parse(data) as T;
-      }
-
-      return data as T;
+      return (await response.json()) as T;
     } catch (err) {
       clearTimeout(timeoutId);
       if (err instanceof DOMException && err.name === 'AbortError') {

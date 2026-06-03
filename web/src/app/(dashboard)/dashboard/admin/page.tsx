@@ -184,7 +184,7 @@ export default function AdminDashboardPage() {
           port: Number(smtpLoaded.port ?? 587),
           sender_email: String(smtpLoaded.sender_email ?? ''),
           sender_name: String(smtpLoaded.sender_name ?? 'TenderIQ'),
-          app_password: String(smtpLoaded.app_password ?? ''),
+          app_password: '',
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load admin data');
@@ -229,13 +229,7 @@ export default function AdminDashboardPage() {
       total: Number(pagination.total ?? 0),
       limit: Number(pagination.limit ?? prev.limit),
     }));
-    let rows = out.rows;
-    if (userStatusFilter === 'all') {
-      rows = rows;
-    } else {
-      rows = rows.filter((u) => u.status === userStatusFilter);
-    }
-    setUsers(rows);
+    setUsers(out.rows);
   }, [loadUsers, userSearch, userStatusFilter, usersPage, usersMeta.limit]);
 
   useEffect(() => {

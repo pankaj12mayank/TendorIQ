@@ -51,15 +51,13 @@ def period_end_from_tenant(tenant: Tenant) -> Optional[datetime]:
 
 def compute_period_end(
     *,
-    billing_cycle: str,
     start: Optional[datetime] = None,
     period_days: int = 30,
 ) -> datetime:
     from datetime import timedelta
 
     base = start or datetime.now(timezone.utc)
-    default_days = 30
-    days = max(1, int(period_days or default_days))
+    days = max(1, period_days or 30)
     return base + timedelta(days=days)
 
 
@@ -72,7 +70,7 @@ def apply_plan_period(
 ) -> tuple[datetime, datetime]:
     """Persist plan period on tenant.settings (used for expiry checks)."""
     begin = start or datetime.now(timezone.utc)
-    end = compute_period_end(billing_cycle=billing_cycle, start=begin, period_days=period_days)
+    end = compute_period_end(start=begin, period_days=period_days)
     settings = _tenant_settings(tenant)
     settings['plan_period_start'] = begin.isoformat()
     settings['plan_period_end'] = end.isoformat()

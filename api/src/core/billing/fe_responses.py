@@ -272,18 +272,20 @@ def build_plans_from_pricing(pricing: Optional[dict[str, Any]] = None) -> list[d
 
 def build_plans_for_fe() -> list[dict[str, Any]]:
     plans = []
-    for api_id, price_usd in (('starter', 29), ('professional', 99), ('enterprise', 299)):
-        meta = PLAN_DISPLAY.get(api_id, PLAN_DISPLAY['starter'])
+    for api_id, meta in PLAN_DISPLAY.items():
+        if api_id == 'free':
+            continue
         limits = PlanLimits.get_limits(api_id)
         from .lite_usage import LITE_DEMO_LIMITS
 
         lite_limits = LITE_DEMO_LIMITS.get(api_id, limits)
+        price_usd = meta['priceMonthly'] // 100
         plans.append({
             'id': meta['id'],
             'name': meta['name'],
             'displayName': meta['displayName'],
             'description': f'{meta["displayName"]} subscription',
-            'priceMonthly': price_usd * 100,
+            'priceMonthly': meta['priceMonthly'],
             'priceMonthlyUsd': price_usd,
             'currency': 'USD',
             'isDemo': False,

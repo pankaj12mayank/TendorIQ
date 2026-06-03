@@ -55,21 +55,21 @@ export function SubscriptionGate({ children, allowWhenExpired = false }: Subscri
   const { data: access, isLoading, isError } = useSubscriptionAccess();
   const isOwner = canAccessAdminConsole(user?.role);
 
-  if (isOwner) {
-    return <>{children}</>;
-  }
-
-  if (allowWhenExpired) {
-    return <>{children}</>;
-  }
-
-  if (isLoading) {
+  if (isLoading || !user) {
     return (
       <div className="flex min-h-[32vh] items-center justify-center gap-2 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span className="text-sm">Checking subscription…</span>
       </div>
     );
+  }
+
+  if (isOwner) {
+    return <>{children}</>;
+  }
+
+  if (allowWhenExpired) {
+    return <>{children}</>;
   }
 
   if (isError || !access) {

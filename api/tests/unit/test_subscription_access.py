@@ -104,12 +104,19 @@ def test_canceled_status_blocks_usage(monkeypatch):
 
 def test_apply_plan_period_sets_settings():
     tenant = _tenant(plan='starter', settings={})
-    start, end = apply_plan_period(tenant, billing_cycle='monthly')
+    start, end = apply_plan_period(tenant, billing_cycle='monthly', period_days=30)
     assert end > start
     assert tenant.settings['plan_period_end']
 
 
-def test_yearly_cycle_maps_to_monthly_window():
-    monthly = compute_period_end(billing_cycle='monthly')
-    yearly = compute_period_end(billing_cycle='yearly')
-    assert abs((yearly - monthly).total_seconds()) < 2
+def test_compute_period_end_default():
+    end = compute_period_end()
+    now = datetime.now(timezone.utc)
+    assert end > now
+    assert end < now + timedelta(days=31)
+
+def test_compute_period_end_custom_days():
+    end = compute_period_end(period_days=60)
+    now = datetime.now(timezone.utc)
+    assert end > now + timedelta(days=59)
+    assert end < now + timedelta(days=61)

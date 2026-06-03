@@ -28,8 +28,6 @@ from .api.routers.files import public_storage_router, router as files_router
 from .api.routers.documents import router as documents_router
 from .api.routers.ocr import router as ocr_router
 from .api.routers.parsing import router as parsing_router
-from .api.router.proposal import router as proposal_router
-from .api.router.export import router as export_router
 from .api.router.analysis import router as analysis_router
 from .api.routers.ai_processing import router as ai_processing_router
 from .api.routers.lite_proposals import router as lite_proposals_router
@@ -210,8 +208,6 @@ app.include_router(parsing_router, prefix='/api/v1')
 app.include_router(analysis_router, prefix='/api/v1')
 app.include_router(ai_processing_router, prefix='/api/v1')
 app.include_router(lite_proposals_router, prefix='/api/v1')
-app.include_router(proposal_router, prefix='/api/v1')
-app.include_router(export_router, prefix='/api/v1')
 app.include_router(lite_exports_router, prefix='/api/v1')
 app.include_router(billing_router, prefix='/api/v1')
 app.include_router(payments_lite_router, prefix='/api/v1')

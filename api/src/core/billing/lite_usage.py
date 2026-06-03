@@ -143,19 +143,12 @@ async def check_quota_allowed(
     operation: str,
     *,
     tokens_to_add: int = 0,
+    tenant: Optional[Tenant] = None,
 ) -> tuple[bool, str]:
-    from .subscription_access import evaluate_tenant_access
-
-    tenant = await db.get(Tenant, pk_str(tenant_id))
+    if tenant is None:
+        tenant = await db.get(Tenant, pk_str(tenant_id))
     if not tenant:
         return False, 'Workspace not found'
-
-    from .subscription_access import subscription_expiry_enforced
-
-    if subscription_expiry_enforced():
-        access = evaluate_tenant_access(tenant)
-        if not access['can_use_system']:
-            return False, access['reason']
 
     plan = tenant.plan or 'free'
     limits = await resolve_plan_limits(db, plan)
@@ -191,25 +184,29 @@ async def enforce_quota(
 ) -> None:
     from .subscription_access import evaluate_tenant_access
 
-    allowed, message = await check_quota_allowed(
-        db, tenant_id, operation, tokens_to_add=tokens_to_add
-    )
-    if allowed:
-        return
-
     tenant = await db.get(Tenant, pk_str(tenant_id))
+    if not tenant:
+        raise HTTPException(status_code=404, detail='Workspace not found')
+
     access = evaluate_tenant_access(tenant)
     if not access['can_use_system']:
         raise HTTPException(
             status_code=402,
             detail={
                 'code': 'SUBSCRIPTION_EXPIRED',
-                'message': access['reason'] or message,
+                'message': access['reason'],
                 'plan': access['plan'],
                 'status': access['status'],
                 'upgrade_required': True,
             },
         )
+
+    allowed, message = await check_quota_allowed(
+        db, tenant_id, operation, tokens_to_add=tokens_to_add, tenant=tenant
+    )
+    if allowed:
+        return
+
     raise HTTPException(
         status_code=402,
         detail={
