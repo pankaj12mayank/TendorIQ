@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import copy
 from uuid import UUID
 from datetime import datetime, timezone
 from typing import Optional
@@ -29,11 +28,9 @@ from ...core.models import (
 )
 from ...core.platform.lite_settings import (
     SETTING_KEYS,
-    DEFAULT_LANDING_MODULES,
     get_all_settings,
     get_setting,
     patch_setting,
-    validate_landing_cms_modules,
 )
 from ...core.smtp_settings import get_smtp_settings, update_smtp_settings
 from ...core.mailer import send_smtp_email
@@ -71,11 +68,6 @@ class UserStatusPatch(BaseModel):
 class PlatformSettingsPatch(BaseModel):
     section: str
     data: dict
-
-
-class CMSDraftPatch(BaseModel):
-    modules: dict
-    expected_version: Optional[int] = None
 
 
 class SMTPSettingsBody(BaseModel):
@@ -456,12 +448,11 @@ async def get_owner_profile(admin: SuperAdmin, db=Depends(get_db)):
     user = await db.get(User, admin.user_id)
     if not user:
         raise HTTPException(status_code=404, detail='Owner profile not found')
-    cms = await get_setting(db, 'landing_cms')
-    branding = cms.get('draft') if isinstance(cms.get('draft'), dict) else {}
-    images = branding.get('images') if isinstance(branding.get('images'), dict) else {}
+    landing = await get_setting(db, 'landing')
+    branding = landing.get('branding') if isinstance(landing.get('branding'), dict) else {}
     avatar_url = await _asset_url_from_value(user.avatar_url)
-    logo_url = await _asset_url_from_value(images.get('logo_url'))
-    favicon_url = await _asset_url_from_value(images.get('favicon_url'))
+    logo_url = await _asset_url_from_value(branding.get('logo_url'))
+    favicon_url = await _asset_url_from_value(branding.get('favicon_url'))
     return {
         'success': True,
         'data': {
@@ -509,11 +500,10 @@ async def upload_owner_profile_asset(
         raise HTTPException(status_code=404, detail='Owner profile not found')
 
     old_avatar = user.avatar_url
-    cms = await get_setting(db, 'landing_cms')
-    landing_draft = cms.get('draft') if isinstance(cms.get('draft'), dict) else copy.deepcopy(DEFAULT_LANDING_MODULES)
-    images = landing_draft.get('images') if isinstance(landing_draft.get('images'), dict) else {}
-    old_logo = images.get('logo_url')
-    old_favicon = images.get('favicon_url')
+    landing = await get_setting(db, 'landing')
+    branding = landing.get('branding') if isinstance(landing.get('branding'), dict) else {}
+    old_logo = branding.get('logo_url')
+    old_favicon = branding.get('favicon_url')
     ext = (file.filename or 'image.png').split('.')[-1].lower()
     key = f"platform-assets/{kind}/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{admin.user_id}.{ext}"
     up = await storage_service.upload_file(
@@ -529,138 +519,21 @@ async def upload_owner_profile_asset(
         if kind == 'avatar':
             user.avatar_url = url
         elif kind == 'logo':
-            images['logo_url'] = url
-            landing_draft['images'] = images
-            await patch_setting(db, 'landing_cms', {'draft': landing_draft, 'updated_at': datetime.now(timezone.utc).isoformat()})
+            branding['logo_url'] = url
+            await patch_setting(db, 'landing', {'branding': branding})
         else:
-            images['favicon_url'] = url
-            landing_draft['images'] = images
-            await patch_setting(db, 'landing_cms', {'draft': landing_draft, 'updated_at': datetime.now(timezone.utc).isoformat()})
+            branding['favicon_url'] = url
+            await patch_setting(db, 'landing', {'branding': branding})
         await db.commit()
     except Exception:
-        # rollback uploaded file when DB update fails
         await storage_service.delete_file(key)
         user.avatar_url = old_avatar
-        images['logo_url'] = old_logo
-        images['favicon_url'] = old_favicon
+        branding['logo_url'] = old_logo
+        branding['favicon_url'] = old_favicon
         await db.rollback()
         raise
     signed = await _asset_url_from_value(url)
     return {'success': True, 'data': {'kind': kind, 'url': signed}}
-
-
-@router.post('/cms/assets/upload')
-async def upload_cms_asset(
-    admin: SuperAdmin,
-    file: UploadFile = File(...),
-):
-    content = await _read_valid_image(file)
-    ext = (file.filename or 'image.png').split('.')[-1].lower()
-    key = f"platform-assets/cms/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{admin.user_id}.{ext}"
-    up = await storage_service.upload_file(
-        file_content=content,
-        storage_key=key,
-        content_type=file.content_type or 'application/octet-stream',
-        metadata={'asset_kind': 'cms_image', 'uploaded_by': admin.user_id},
-    )
-    if not up.get('success'):
-        raise HTTPException(status_code=500, detail='Upload failed')
-    signed = await _asset_url_from_value(key)
-    return {'success': True, 'data': {'url': signed or key, 'storage_key': key}}
-
-
-def _cms_revision_id() -> str:
-    return datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')
-
-
-@router.get('/cms')
-async def get_landing_cms(_admin: SuperAdmin, db=Depends(get_db)):
-    cms = await get_setting(db, 'landing_cms')
-    draft = cms.get('draft') if isinstance(cms.get('draft'), dict) else copy.deepcopy(DEFAULT_LANDING_MODULES)
-    published = cms.get('published') if isinstance(cms.get('published'), dict) else copy.deepcopy(DEFAULT_LANDING_MODULES)
-    return {
-        'success': True,
-        'data': {
-            'version': int(cms.get('version') or 1),
-            'status': str(cms.get('status') or 'draft'),
-            'draft': draft,
-            'published': published,
-            'history': cms.get('history') if isinstance(cms.get('history'), list) else [],
-            'published_at': cms.get('published_at'),
-            'updated_at': cms.get('updated_at'),
-        },
-    }
-
-
-@router.patch('/cms/draft')
-async def patch_landing_cms_draft(body: CMSDraftPatch, _admin: SuperAdmin, db=Depends(get_db)):
-    cms = await get_setting(db, 'landing_cms')
-    current_version = int(cms.get('version') or 1)
-    if body.expected_version is not None and int(body.expected_version) != current_version:
-        raise HTTPException(
-            status_code=409,
-            detail='CMS changed by another session. Refresh and retry.',
-        )
-    draft = cms.get('draft') if isinstance(cms.get('draft'), dict) else copy.deepcopy(DEFAULT_LANDING_MODULES)
-    draft = {**draft, **body.modules}
-    validate_landing_cms_modules(draft)
-
-    revision = {
-        'id': _cms_revision_id(),
-        'created_at': datetime.now(timezone.utc).isoformat(),
-        'version': current_version,
-        'snapshot': cms.get('draft') if isinstance(cms.get('draft'), dict) else copy.deepcopy(DEFAULT_LANDING_MODULES),
-    }
-    history = cms.get('history') if isinstance(cms.get('history'), list) else []
-    history = [revision] + history
-    history = history[:20]
-    next_state = {
-        **cms,
-        'status': 'draft',
-        'version': current_version + 1,
-        'draft': draft,
-        'history': history,
-        'updated_at': datetime.now(timezone.utc).isoformat(),
-    }
-    merged = await patch_setting(db, 'landing_cms', next_state)
-    return {'success': True, 'data': merged}
-
-
-@router.post('/cms/publish')
-async def publish_landing_cms(_admin: SuperAdmin, db=Depends(get_db)):
-    cms = await get_setting(db, 'landing_cms')
-    draft = cms.get('draft') if isinstance(cms.get('draft'), dict) else copy.deepcopy(DEFAULT_LANDING_MODULES)
-    validate_landing_cms_modules(draft)
-    now = datetime.now(timezone.utc).isoformat()
-    next_state = {
-        **cms,
-        'status': 'published',
-        'published': draft,
-        'published_at': now,
-        'updated_at': now,
-    }
-    merged = await patch_setting(db, 'landing_cms', next_state)
-    return {'success': True, 'data': merged}
-
-
-@router.post('/cms/rollback/{revision_id}')
-async def rollback_landing_cms(revision_id: str, _admin: SuperAdmin, db=Depends(get_db)):
-    cms = await get_setting(db, 'landing_cms')
-    history = cms.get('history') if isinstance(cms.get('history'), list) else []
-    target = next((r for r in history if str(r.get('id')) == revision_id), None)
-    if not target or not isinstance(target.get('snapshot'), dict):
-        raise HTTPException(status_code=404, detail='Revision not found')
-    snapshot = target['snapshot']
-    validate_landing_cms_modules(snapshot)
-    next_state = {
-        **cms,
-        'status': 'draft',
-        'version': int(cms.get('version') or 1) + 1,
-        'draft': snapshot,
-        'updated_at': datetime.now(timezone.utc).isoformat(),
-    }
-    merged = await patch_setting(db, 'landing_cms', next_state)
-    return {'success': True, 'data': merged}
 
 
 @router.get('/settings')
@@ -1101,44 +974,39 @@ async def patch_billing_pricing(
     _admin: SuperAdmin,
     db=Depends(get_db),
 ):
-    plans = body.get('plans')
-    if not isinstance(plans, list) or not plans:
-        raise HTTPException(status_code=400, detail='plans must be a non-empty array')
-    seen_ids = set()
-    active_monthly_prices = set()
-    active_count = 0
-    for p in plans:
-        if not isinstance(p, dict):
-            raise HTTPException(status_code=400, detail='Invalid plan payload')
-        pid = str(p.get('id') or '').strip().lower()
-        if not pid or pid in seen_ids:
-            raise HTTPException(status_code=400, detail='Duplicate or missing plan id')
-        seen_ids.add(pid)
-        is_active = bool(p.get('active', True))
-        monthly = p.get('monthly_usd')
-        if monthly is None:
-            monthly = p.get('monthly_inr')
-        if is_active and monthly in (None, 0):
-            raise HTTPException(status_code=400, detail='Active plans require monthly_usd')
-        if is_active and monthly is not None:
-            active_count += 1
-            if monthly in active_monthly_prices:
-                raise HTTPException(status_code=400, detail='Pricing conflict: duplicate monthly_usd')
-            active_monthly_prices.add(monthly)
-        yearly = p.get('yearly_usd')
-        if yearly is None:
-            yearly = p.get('yearly_inr')
-        if yearly not in (None, 0):
-            raise HTTPException(status_code=400, detail='Admin billing management is monthly-only')
-        if p.get('upload_limit') is not None and int(p.get('upload_limit') or 0) < 1:
-            raise HTTPException(status_code=400, detail='upload_limit must be >= 1')
-        if p.get('expiry_period_days') is not None and int(p.get('expiry_period_days') or 0) < 30:
-            raise HTTPException(status_code=400, detail='expiry_period_days must be >= 30')
-    if active_count != 1:
-        raise HTTPException(status_code=400, detail='Exactly one active plan is required')
-    body['currency'] = 'USD'
-    pricing = await patch_setting(db, 'pricing', body)
-    return {'success': True, 'data': pricing}
+    plan = body.get('plan')
+    if not isinstance(plan, dict):
+        raise HTTPException(status_code=400, detail='plan must be an object')
+    name = str(plan.get('name') or '').strip()
+    if not name:
+        raise HTTPException(status_code=400, detail='plan.name is required')
+    monthly = plan.get('monthly_usd')
+    if monthly is None or not isinstance(monthly, (int, float)) or monthly <= 0:
+        raise HTTPException(status_code=400, detail='plan.monthly_usd must be a positive number')
+    upload_limit = plan.get('upload_limit')
+    if upload_limit is not None and (not isinstance(upload_limit, int) or upload_limit < 1):
+        raise HTTPException(status_code=400, detail='plan.upload_limit must be >= 1')
+    features = plan.get('features')
+    if not isinstance(features, list):
+        raise HTTPException(status_code=400, detail='plan.features must be an array')
+    pricing = {
+        'currency': 'USD',
+        'plans': [
+            {
+                'id': 'professional',
+                'name': name,
+                'description': str(plan.get('description') or ''),
+                'monthly_usd': int(monthly),
+                'popular': bool(plan.get('popular', True)),
+                'active': bool(plan.get('active', True)),
+                'upload_limit': int(upload_limit or 500),
+                'expiry_period_days': int(plan.get('expiry_period_days') or 30),
+                'features': [str(f) for f in features if f],
+            }
+        ],
+    }
+    merged = await patch_setting(db, 'pricing', pricing)
+    return {'success': True, 'data': merged}
 
 
 @router.get('/analytics/user-search')

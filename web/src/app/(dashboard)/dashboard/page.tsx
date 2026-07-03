@@ -39,7 +39,7 @@ import { useCurrentUser } from '@/hooks/use-auth';
 import { useDeleteTender, useTenders } from '@/hooks/use-api';
 import { TableRowSkeleton } from '@/components/design-system/skeleton';
 import { PremiumErrorState } from '@/components/design-system/empty-state';
-import { ROUTES, settingsTabHref } from '@/lib/routes';
+import { ROUTES } from '@/lib/routes';
 import { isSuperAdmin } from '@/lib/permissions';
 import { api } from '@/lib/api-client';
 import { mapQuotaFromUsageApi } from '@/lib/billing-api';
@@ -240,7 +240,7 @@ function MemberDashboard() {
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={settingsTabHref('billing')}>
+            <Link href={ROUTES.billing}>
               <CreditCard className="h-4 w-4" />
               Payment History
             </Link>

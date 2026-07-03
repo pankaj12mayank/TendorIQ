@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/hooks/use-auth';
 import { useSubscriptionAccess } from '@/hooks/use-subscription-access';
 import { canAccessAdminConsole } from '@/lib/permissions';
-import { settingsTabHref } from '@/lib/routes';
+import { ROUTES } from '@/lib/routes';
 
 export function SubscriptionExpiredBanner() {
   const user = useCurrentUser();
@@ -39,7 +39,7 @@ export function SubscriptionExpiredBanner() {
         </div>
       </div>
       <Button asChild variant="destructive" size="sm" className="shrink-0">
-        <Link href={settingsTabHref('billing')}>View plans</Link>
+        <Link href={ROUTES.billing}>View plans</Link>
       </Button>
     </div>
   );
@@ -77,7 +77,7 @@ export function SubscriptionGate({ children, allowWhenExpired = false }: Subscri
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed p-8 text-center">
         <p className="text-sm text-muted-foreground">Could not verify subscription. Try again.</p>
         <Button asChild variant="outline" size="sm">
-          <Link href={settingsTabHref('billing')}>Open Billing</Link>
+          <Link href={ROUTES.billing}>Open Billing</Link>
         </Button>
       </div>
     );
@@ -95,7 +95,7 @@ export function SubscriptionGate({ children, allowWhenExpired = false }: Subscri
             'Upload, analysis, proposals, and exports need an active monthly plan.'}
         </p>
         <Button asChild>
-          <Link href={settingsTabHref('billing')}>View plans</Link>
+        <Link href={ROUTES.billing}>View plans</Link>
         </Button>
       </div>
     );

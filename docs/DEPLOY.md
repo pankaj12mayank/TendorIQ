@@ -71,7 +71,7 @@ See [R2_SETUP.md](./R2_SETUP.md) for bucket CORS.
 
 ## 2. Database migrations
 
-On every API deploy (container start runs this automatically):
+On every API deploy run:
 
 ```bash
 cd api
@@ -82,31 +82,18 @@ Head includes Phase 10 cleanup (`20260525_phase10_cleanup`) on MySQL/Postgres on
 
 ---
 
-## 3. Docker Compose (single host)
-
-```bash
-cp .env.example .env
-# edit .env — JWT_SECRET, DATABASE_URL, etc.
-docker compose up --build -d
-```
-
-- Web: http://localhost:3000  
-- API: http://localhost:8000  
-- Health: `GET /health` and `GET /health/ready` (DB check)
-
----
-
-## 4. Split deploy (recommended)
+## 3. Split deploy
 
 ### API — Railway / Render / Fly
 
 1. Root directory: `api/`
-2. Dockerfile: `api/Dockerfile`
-3. Set env from section 1; attach persistent volume for `SQLITE_PATH` / `STORAGE_LOCAL_PATH` if using SQLite.
-4. For MySQL, use host’s managed DB URL via `DATABASE_DRIVER=mysql`.
-5. Health check path: `/health/ready`
+2. Build command: `pip install -r requirements.txt`
+3. Start command: `uvicorn src.main:app --host 0.0.0.0 --port $PORT`
+4. Set env from section 1; attach persistent volume for `SQLITE_PATH` / `STORAGE_LOCAL_PATH` if using SQLite.
+5. For MySQL, use host's managed DB URL via `DATABASE_DRIVER=mysql`.
+6. Health check path: `/health/ready`
 
-### Web — Vercel
+### Web — Vercel / any Node host
 
 1. Root directory: `web/`
 2. Framework: Next.js
@@ -116,13 +103,12 @@ docker compose up --build -d
 
 ---
 
-## 5. Pre-deploy checklist
+## 4. Pre-deploy checklist
 
 Run locally:
 
-```bat
-run.bat check
-run.bat deploy-check
+```powershell
+pnpm test:api
 ```
 
 | Check | Command / URL |
@@ -136,7 +122,7 @@ run.bat deploy-check
 
 ---
 
-## 6. Post-deploy smoke test
+## 5. Post-deploy smoke test
 
 1. Sign up / sign in  
 2. Upload PDF → Analysis  

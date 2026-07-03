@@ -45,7 +45,7 @@ export function BillingPanel() {
   const [paymentStatus, setPaymentStatus] = useState('all');
   const [paymentPagination, setPaymentPagination] = useState({ page: 1, limit: 8, total: 0, pages: 0 });
 
-  const billingBase = '/dashboard/settings?tab=billing';
+  const billingBase = '/dashboard/billing';
 
   useEffect(() => {
     void initialize();
@@ -179,8 +179,7 @@ export function BillingPanel() {
         <p className="text-sm text-muted-foreground">No plans available yet.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {planList.map((plan) => {
-            if (plan.isDemo) return null;
+          {planList.filter((p) => !p.isDemo).map((plan) => {
             const price = plan.priceMonthlyUsd ?? plan.priceMonthlyInr ?? 0;
             const isCurrent =
               currentSubscription?.plan?.name === (plan.name ?? plan.displayName) ||
@@ -197,10 +196,10 @@ export function BillingPanel() {
                     <span className="text-sm font-normal text-muted-foreground">/mo</span>
                   </p>
                   <ul className="text-sm space-y-1 text-muted-foreground">
-                    {(plan.features ?? []).slice(0, 6).map((f) => (
-                      <li key={f.name} className="flex items-start gap-2">
+                    {(plan.features ?? []).slice(0, 6).map((f: any) => (
+                      <li key={typeof f === 'string' ? f : f.name} className="flex items-start gap-2">
                         <Check className="h-4 w-4 shrink-0 text-primary" />
-                        {f.name}
+                        {typeof f === 'string' ? f : f.name}
                       </li>
                     ))}
                   </ul>

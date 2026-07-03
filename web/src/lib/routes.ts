@@ -70,6 +70,8 @@ export const LITE_DASHBOARD_PATHS = [
 
   ROUTES.settings,
 
+  ROUTES.billing,
+
   ROUTES.admin,
 
 ] as const;
@@ -80,7 +82,7 @@ export const LITE_DASHBOARD_PATHS = [
 
 export const LEGACY_DASHBOARD_REDIRECTS: Record<string, string> = {
 
-  '/dashboard/billing': `${ROUTES.settings}?tab=billing`,
+  '/dashboard/billing/old': ROUTES.billing,
 
   '/dashboard/settings/profile': `${ROUTES.settings}?tab=account`,
 
@@ -184,9 +186,9 @@ export function isDeadDashboardPath(pathname: string): boolean {
 
 
 
-export type SettingsTab = 'account' | 'billing';
+export type SettingsTab = 'account' | 'ai';
 
-export const SETTINGS_TABS: SettingsTab[] = ['account', 'billing'];
+export const SETTINGS_TABS: SettingsTab[] = ['account', 'ai'];
 
 
 

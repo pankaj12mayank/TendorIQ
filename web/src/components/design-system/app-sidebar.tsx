@@ -100,7 +100,9 @@ export function AppSidebar() {
                     searchParams.get('module') === moduleParam
                   : baseHref === '/dashboard'
                     ? pathname === '/dashboard'
-                    : pathname === baseHref || pathname.startsWith(`${baseHref}/`);
+                    : baseHref === '/dashboard/admin'
+                      ? pathname === '/dashboard/admin'
+                      : pathname === baseHref || pathname.startsWith(`${baseHref}/`);
                 const Icon = item.icon;
                 return (
                   <li key={item.href}>

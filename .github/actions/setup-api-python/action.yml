@@ -1,5 +1,5 @@
 ﻿name: Setup API Python
-description: Create api/venv and install requirements-dev.txt (same graph as run.bat)
+description: Create api/venv and install requirements.txt
 
 runs:
   using: composite
@@ -13,7 +13,7 @@ runs:
       run: |
         python -m venv api/venv
         api/venv/bin/pip install --upgrade pip
-        api/venv/bin/pip install -r api/requirements-dev.txt
+        api/venv/bin/pip install -r api/requirements.txt
 
     - name: Expose venv Python on PATH
       shell: bash

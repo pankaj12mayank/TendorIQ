@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Upload, ExternalLink } from 'lucide-react';
-import { PageHeader } from '@/components/design-system/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SubscriptionGate } from '@/components/billing/subscription-gate';
 import { FileUploader } from '@/components/upload/file-uploader';
@@ -85,12 +84,7 @@ export default function UploadPage() {
 
   return (
     <SubscriptionGate>
-    <div className="space-y-8">
-      <PageHeader
-        title="Upload documents"
-        description="Upload tender PDFs or Word files. AI analysis starts automatically after upload."
-      />
-
+    <div className="w-full space-y-6">
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
           <Card className="border-border/80 shadow-sm">

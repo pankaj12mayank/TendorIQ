@@ -1,51 +1,43 @@
 # Local setup
 
-## System owner (tum — ek hi)
+## System owner account
 
 | | |
 |--|--|
 | **Email (default)** | `admin@tendoriq.com` |
 | **Password (default)** | `Owner@ChangeMe123` |
-| **Kahan milega** | `d:\Py_Projects\tendoriq\.tenderiq\owner-account.txt` |
+| **File location** | `.tenderiq/owner-account.txt` (after first `pnpm setup`) |
 
-`run.bat` ke baad ye file kholo — wahi email/password likha hoga.
+Open `.tenderiq/owner-account.txt` after running `pnpm setup` for the actual credentials.
 
-**Password change:** Sign in → **Dashboard → Settings → Profile** → *Change password*  
-Naya password database mein save hota hai; purana default kaam nahi karega.
+**Password change:** Sign in → **Dashboard → Settings → Profile** → *Change password*
 
-Optional: `.env` mein override (sirf pehli seed ke liye):
+Optional: `.env` override (first seed only):
 
 ```env
 SYSTEM_OWNER_EMAIL=admin@tendoriq.com
 SYSTEM_OWNER_DEFAULT_PASSWORD=Owner@ChangeMe123
 ```
 
-Login hamesha **database** se hota hai — `.env` se direct login nahi.
+Login always uses the **database** — `.env` is not used for direct login.
 
-Paid/test users sign up from `/sign-up` or are created by the system owner in the admin panel.
-
-## Owner control center quick check
+## Owner control center
 
 After login with owner account:
 
 1. Open `/dashboard/admin`
 2. Verify tabs: CMS Control, Users, Payments, Uploads, Analytics, Pricing
-3. Users tab:
-   - Suspend / Activate works
-   - Delete is **soft delete**
-   - Deleted user can be restored from the same tab
 
 ## Start
 
-```bat
-copy .env.example .env
-copy web\.env.local.example web\.env.local
-run.bat
+```bash
+pnpm setup
+pnpm dev
 ```
 
 http://localhost:3000/sign-in
 
-## Naya user
+## New user signup
 
 http://localhost:3000/sign-up
 

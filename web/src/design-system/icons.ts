@@ -2,16 +2,22 @@ import type { LucideIcon } from 'lucide-react';
 import {
   AlertTriangle,
   Archive,
+  BarChart3,
   CheckCircle2,
+  CreditCard,
+  DollarSign,
   FileSearch,
   FileText,
   Inbox,
   LayoutDashboard,
   Loader2,
+  Mail,
   RefreshCw,
   Settings,
   Shield,
   Upload,
+  UserCog,
+  Users,
 } from 'lucide-react';
 
 import type { AppRole, StatusType } from './tokens';
@@ -52,7 +58,16 @@ const workspaceNavGroup = {
 
 const platformAdminGroup = {
   label: 'Platform',
-  items: [{ name: 'Admin', href: '/dashboard/admin', icon: Shield }],
+  items: [
+    { name: 'Overview', href: '/dashboard/admin', icon: LayoutDashboard },
+    { name: 'Owner', href: '/dashboard/admin/owner', icon: UserCog },
+    { name: 'Users', href: '/dashboard/admin/users', icon: Users },
+    { name: 'Payments', href: '/dashboard/admin/payments', icon: CreditCard },
+    { name: 'Pricing', href: '/dashboard/admin/pricing', icon: DollarSign },
+    { name: 'SMTP', href: '/dashboard/admin/smtp', icon: Mail },
+    { name: 'Uploads', href: '/dashboard/admin/uploads', icon: Upload },
+    { name: 'Analytics', href: '/dashboard/admin/analytics', icon: BarChart3 },
+  ],
 };
 
 const customerTestGroup = {
@@ -61,8 +76,8 @@ const customerTestGroup = {
     { name: 'Upload', href: '/dashboard/upload', icon: Upload },
     { name: 'Analysis', href: '/dashboard/analysis', icon: FileSearch },
     { name: 'Proposal', href: '/dashboard/proposal', icon: FileText },
-    { name: 'Settings', href: '/dashboard/settings?tab=account', icon: Settings },
-    { name: 'Billing test', href: '/dashboard/settings?tab=billing', icon: Settings },
+    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+    { name: 'Billing', href: '/dashboard/billing', icon: Settings },
   ],
 };
 

@@ -1,7 +1,11 @@
-import { redirect } from 'next/navigation';
+'use client';
 
-import { ROUTES } from '@/lib/routes';
+import { BillingPanel } from '@/components/settings/billing-panel';
 
-export default function LegacyBillingPage() {
-  redirect(`${ROUTES.settings}?tab=billing`);
+export default function BillingPage() {
+  return (
+    <div className="w-full">
+      <BillingPanel />
+    </div>
+  );
 }

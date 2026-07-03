@@ -19,9 +19,9 @@ import { canAccessAdminConsole } from '@/lib/permissions';
 function ExpiredPlanBanner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isBillingTab =
-    pathname === ROUTES.settings && searchParams.get('tab') === 'billing';
-  if (isBillingTab) return null;
+  const isBillingPage =
+    pathname === ROUTES.billing || (pathname === ROUTES.settings && searchParams.get('tab') === 'billing');
+  if (isBillingPage) return null;
   return <SubscriptionExpiredBanner />;
 }
 
@@ -60,15 +60,10 @@ export default function DashboardLayout({
       return;
     }
 
-    if (pathname === ROUTES.admin || pathname.startsWith(`${ROUTES.admin}/`)) {
-      router.replace(ROUTES.dashboard);
-      return;
-    }
-
     if (pathname === ROUTES.settings) {
       const tab = searchParams.get('tab');
-      if (tab === 'ai') {
-        router.replace(`${ROUTES.settings}?tab=account`, { scroll: false });
+      if (tab && tab !== 'account' && tab !== 'ai') {
+        router.replace(ROUTES.settings, { scroll: false });
       }
     }
   }, [isLoaded, userId, user?.role, pathname, searchParams, router]);

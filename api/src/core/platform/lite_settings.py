@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 SETTING_KEYS = (
     'pricing',
-    'ai_defaults',
     'landing',
-    'landing_cms',
     'demo_limits',
     'smtp',
     'payment_gateways',
@@ -229,9 +227,7 @@ DEFAULT_PAYMENT_GATEWAYS: dict[str, Any] = {
 
 DEFAULTS: dict[str, dict[str, Any]] = {
     'pricing': DEFAULT_PRICING,
-    'ai_defaults': DEFAULT_AI_DEFAULTS,
     'landing': DEFAULT_LANDING,
-    'landing_cms': DEFAULT_LANDING_CMS,
     'demo_limits': DEFAULT_DEMO_LIMITS,
     'smtp': DEFAULT_SMTP,
     'payment_gateways': DEFAULT_PAYMENT_GATEWAYS,
@@ -371,17 +367,6 @@ def pricing_amount_paise(plan_id: str, billing_interval: str, pricing: Optional[
 
 async def build_public_site(db: AsyncSession) -> dict[str, Any]:
     pricing = await get_setting(db, 'pricing')
-    landing_cms = await get_setting(db, 'landing_cms')
-    landing = landing_cms.get('published') or await get_setting(db, 'landing')
-    validate_landing_cms_modules(landing if isinstance(landing, dict) else {})
-    row = await db.get(PlatformSetting, 'landing_cms')
     return {
         'pricing': pricing,
-        'landing': landing,
-        'cms_state': {
-            'version': int(landing_cms.get('version') or 1),
-            'status': str(landing_cms.get('status') or 'draft'),
-            'published_at': landing_cms.get('published_at'),
-        },
-        'updated_at': row.updated_at.isoformat() if row and row.updated_at else None,
     }

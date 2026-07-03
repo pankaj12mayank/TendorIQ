@@ -25,14 +25,20 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
 
   const fetchStatus = useCallback(async () => {
     if (!documentId) return null;
-    const res = await authenticatedFetch(`/api/v1/processing/documents/${documentId}`);
-    if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      throw new Error(parseApiErrorMessage(err) || 'Failed to fetch processing status');
+    try {
+      const res = await authenticatedFetch(`/api/v1/processing/documents/${documentId}`);
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const msg = parseApiErrorMessage(err) || 'Failed to fetch processing status';
+        console.warn('Processing status poll failed:', msg);
+        return null;
+      }
+      const data = unwrapData(await res.json()) as ProcessingStatus;
+      setStatus(data);
+      return data;
+    } catch {
+      return null;
     }
-    const data = unwrapData(await res.json()) as ProcessingStatus;
-    setStatus(data);
-    return data;
   }, [documentId]);
 
   const startAnalysis = useCallback(
@@ -68,20 +74,25 @@ export function useDocumentProcessing(documentId?: string, pollMs = 3000) {
   const retryAnalysis = useCallback(
     async (provider?: string, model?: string) => {
       if (!documentId) throw new Error('No document id');
-      const params = new URLSearchParams();
-      if (provider) params.set('provider', provider);
-      if (model) params.set('model', model);
-      const q = params.toString() ? `?${params}` : '';
-      const res = await authenticatedFetch(
-        `/api/v1/processing/documents/${documentId}/retry${q}`,
-        { method: 'POST' }
-      );
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        throw new Error(parseApiErrorMessage(err) || 'Retry failed');
+      try {
+        const params = new URLSearchParams();
+        if (provider) params.set('provider', provider);
+        if (model) params.set('model', model);
+        const q = params.toString() ? `?${params}` : '';
+        const res = await authenticatedFetch(
+          `/api/v1/processing/documents/${documentId}/retry${q}`,
+          { method: 'POST' }
+        );
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+          throw new Error(parseApiErrorMessage(err) || 'Retry failed');
+        }
+        await fetchStatus();
+        return unwrapData(await res.json());
+      } catch (e) {
+        console.warn('Retry failed:', e);
+        throw e;
       }
-      await fetchStatus();
-      return unwrapData(await res.json());
     },
     [documentId, fetchStatus]
   );

@@ -499,8 +499,7 @@ class CompanyProfileUpdate(BaseModel):
 class AiPreferencesUpdate(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
-    style: Optional[str] = None
-    tone: Optional[str] = None
+    api_key: Optional[str] = None
 
 
 @router.get('/me/company-profile')
@@ -549,10 +548,8 @@ async def get_ai_preferences(
     prefs = await get_ai_preferences_dict(db, current_user.user_id)
     return {
         'provider': prefs.get('provider') or resolve_default_provider(),
-        'model': prefs.get('model') or resolve_default_model(resolve_default_provider()),
-        'style': prefs.get('style') or 'professional',
-        'tone': prefs.get('tone') or 'formal',
-        **prefs,
+        'model': prefs.get('model') or '',
+        'api_key': bool(prefs.get('api_key')),
     }
 
 

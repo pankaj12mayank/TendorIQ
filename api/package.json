@@ -1,25 +1,16 @@
 {
   "name": "@tendoriq/api",
   "version": "1.0.0",
-  "description": "FastAPI backend. Python deps: requirements-dev.txt (venv) — same as CI setup-api-python action.",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "fastapi dev src/main.py --reload",
-    "dev:debug": "fastapi dev src/main.py --reload --log-level debug",
-    "start": "fastapi run src/main.py",
+    "dev": "uvicorn src.main:app --reload --port 8000",
+    "start": "uvicorn src.main:app --port 8000",
     "lint": "ruff check src/",
-    "lint:fix": "ruff check src/ --fix",
     "format": "ruff format src/",
     "typecheck": "mypy src/",
     "test": "pytest",
     "test:unit": "pytest tests/unit tests/integration -q",
-    "test:cov": "pytest --cov=src --cov-report=term-missing",
-    "db:migrate": "alembic upgrade head",
-    "db:current": "alembic current",
-    "clean": "node -e \"['dist','.pytest_cache','.ruff_cache','coverage.xml'].forEach(d=>require('fs').rmSync(d,{recursive:true,force:true}))\""
+    "db:migrate": "alembic upgrade head"
   },
-  "devDependencies": {
-    "turbo": "^2.3.3"
-  }
+  "devDependencies": {}
 }

@@ -7,7 +7,6 @@ import { FileDown, Loader2, Sparkles } from 'lucide-react';
 import { appToast } from '@/lib/app-toast';
 
 import { SubscriptionGate } from '@/components/billing/subscription-gate';
-import { PageHeader } from '@/components/design-system/page-header';
 import { PremiumErrorState } from '@/components/design-system/empty-state';
 import { LoadingState } from '@/components/ui/loading-state';
 import { Button } from '@/components/ui/button';
@@ -170,16 +169,14 @@ export default function ProposalPage() {
 
   return (
     <SubscriptionGate>
-    <div className="space-y-8">
-      <PageHeader
-        title="Proposal"
-        description={
-          tenderId
-            ? 'AI draft from tender analysis and your company profile.'
-            : 'Add ?tenderId from Analysis or after upload to generate a proposal.'
-        }
-        actions={
-          <div className="flex gap-2">
+    <div className="w-full space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        {tenderId ? (
+          <p className="text-sm text-muted-foreground">AI draft from tender analysis and your company profile.</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">Add ?tenderId from Analysis or after upload to generate a proposal.</p>
+        )}
+        <div className="flex gap-2">
           {proposal?.id && (
             <Button variant="outline" onClick={handlePdf} disabled={exporting}>
               {exporting ? (
@@ -199,8 +196,7 @@ export default function ProposalPage() {
             {proposal ? 'Regenerate' : 'Generate'} proposal
           </Button>
         </div>
-        }
-      />
+      </div>
 
       {isLoading && <LoadingState message="Loading proposal..." />}
 

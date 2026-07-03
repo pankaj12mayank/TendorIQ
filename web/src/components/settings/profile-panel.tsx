@@ -87,7 +87,7 @@ export function ProfilePanel() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full max-w-4xl">
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>

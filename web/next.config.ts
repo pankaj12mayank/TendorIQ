@@ -7,7 +7,7 @@ const apiBackend =
 
 const nextConfig: NextConfig = {
   output: 'standalone',
-  reactStrictMode: true,
+  reactStrictMode: process.env.NODE_ENV === 'production',
   typedRoutes: true,
   async rewrites() {
     return [
@@ -16,11 +16,6 @@ const nextConfig: NextConfig = {
         destination: `${apiBackend.replace(/\/$/, '')}/api/v1/:path*`,
       },
     ];
-  },
-  logging: {
-    fetches: {
-      fullUrl: true,
-    },
   },
   eslint: {
     ignoreDuringBuilds: true,

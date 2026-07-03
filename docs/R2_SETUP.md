@@ -36,7 +36,7 @@ In R2 bucket → Settings → CORS policy:
 
 ## 4. Verify
 
-1. `run.bat` → sign in → `/dashboard/upload`
+1. `pnpm dev` → sign in → `/dashboard/upload`
 2. Upload a PDF &lt; 25MB
 3. Network tab: `POST .../upload/initiate` → `PUT` to `*.r2.cloudflarestorage.com` → `POST .../upload/complete`
 
